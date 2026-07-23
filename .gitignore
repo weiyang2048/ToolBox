@@ -216,3 +216,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Generated denoised audio from notebook demos
+cleaned_audio_file.wav
