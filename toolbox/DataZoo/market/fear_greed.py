@@ -11,7 +11,9 @@ Both history methods return series shaped for plotting (see :meth:`FearGreed.cnn
 from __future__ import annotations
 
 import datetime
+from typing import Literal, overload
 
+import pandas as pd
 import requests
 
 #: Timeout (seconds) for outbound HTTP requests.
@@ -49,15 +51,22 @@ class FearGreed:
     failure it returns an empty result rather than raising.
     """
 
-    @staticmethod
-    def _cnn_graphdata() -> dict:
-        """Fetch and return the raw CNN Fear & Greed graph data JSON."""
-        response = requests.get(_CNN_URL, headers=_BROWSER_HEADERS, timeout=_REQUEST_TIMEOUT)
-        response.raise_for_status()
-        return response.json()
+    @overload
+    def cnn_history(self, return_df: Literal[False] = False) -> list[dict]: ...
 
-    def cnn_history(self) -> list[dict]:
+    @overload
+    def cnn_history(self, return_df: Literal[True]) -> pd.DataFrame: ...
+
+    def cnn_history(self, return_df: bool = False) -> list[dict] | pd.DataFrame:
         """Full CNN Fear & Greed history: the index plus all sub-indicators.
+
+        At most one observation is kept per UTC calendar day (the last if CNN
+        emits an intraday update).
+
+        Args:
+            return_df: If ``True``, return a :class:`~pandas.DataFrame` indexed by
+                ``YYYY-MM-DD`` UTC day strings with one column per series key. If
+                ``False`` (default), return the list-of-dicts shape described below.
 
         Returns:
             A list of series (ordered per :data:`CNN_SERIES_LABELS`), each a dict::
@@ -71,30 +80,49 @@ class FearGreed:
                     "rating": str,                  # current classification
                 }
 
-            Components without a historical ``data`` array are skipped. Returns an
-            empty list on failure.
+            Or, when ``return_df`` is ``True``, a DataFrame indexed by UTC calendar
+            day strings (``YYYY-MM-DD``) with one column per series key. Components
+            without a historical ``data`` array are skipped. Returns an empty list
+            / empty DataFrame on failure.
         """
         try:
-            graph = self._cnn_graphdata()
+            response = requests.get(_CNN_URL, headers=_BROWSER_HEADERS, timeout=_REQUEST_TIMEOUT)
+            response.raise_for_status()
+            graph = response.json()
         except Exception:
-            return []
+            return pd.DataFrame() if return_df else []
         history = []
         for key, label in CNN_SERIES_LABELS.items():
             block = graph.get(key)
             if not block or not block.get("data"):
                 continue
-            points = block["data"]
+            # Keep the last observation per UTC calendar day (dict overwrites,
+            # points arrive oldest-first).
+            by_day = {}
+            for pt in block["data"]:
+                day = datetime.datetime.fromtimestamp(pt["x"] / 1000, tz=datetime.timezone.utc).date()
+                by_day[day] = pt["y"]
             history.append(
                 {
                     "key": key,
                     "label": label,
-                    "x": [datetime.datetime.fromtimestamp(pt["x"] / 1000, tz=datetime.timezone.utc) for pt in points],
-                    "y": [pt["y"] for pt in points],
+                    "x": [datetime.datetime.combine(d, datetime.time(), datetime.timezone.utc) for d in by_day],
+                    "y": list(by_day.values()),
                     "score": block.get("score"),
                     "rating": block.get("rating"),
                 }
             )
-        return history
+        if not return_df:
+            return history
+        if not history:
+            return pd.DataFrame()
+        series = {
+            s["key"]: pd.Series(s["y"], index=pd.DatetimeIndex(s["x"], name="time"))
+            for s in history
+        }
+        df = pd.DataFrame(series).sort_index()
+        df.index = pd.Index(df.index.strftime("%Y-%m-%d"), name="time")
+        return df
 
     def crypto_history(self, limit: int = 365) -> dict:
         """Historical crypto Fear & Greed index (0-100) from alternative.me.
@@ -120,3 +148,30 @@ class FearGreed:
             }
         except Exception:
             return {}
+
+    def fear_greed_history(self, limit: int = 365) -> pd.DataFrame:
+        """Combine CNN and crypto Fear & Greed histories by UTC calendar day.
+
+        Args:
+            limit: Number of recent crypto daily values to fetch.
+
+        Returns:
+            A DataFrame indexed by ``YYYY-MM-DD`` strings containing all CNN
+            series and a ``crypto_fear_and_greed`` column.
+        """
+        cnn = self.cnn_history(return_df=True)
+        crypto = self.crypto_history(limit=limit)
+        if not crypto:
+            return cnn
+
+        crypto_by_day = {
+            timestamp.strftime("%Y-%m-%d"): value
+            for timestamp, value in zip(crypto["x"], crypto["y"])
+        }
+        crypto_df = pd.DataFrame.from_dict(
+            crypto_by_day,
+            orient="index",
+            columns=[crypto["key"]],
+        )
+        crypto_df.index.name = "time"
+        return cnn.join(crypto_df, how="outer").sort_index().dropna()
