@@ -133,31 +133,32 @@ _INDICES: dict[str, dict] = {
 }
 
 
+#: Prefer these Wikipedia columns for company / security names.
+_NAME_COLUMNS = ("Security", "Company", "Name", "Company name")
+
+
 class StockIndices:
     """Fetch stock-index constituents from Wikipedia.
 
-    ``available`` lists supported index names. Use :meth:`get` to pull tickers.
+    ``available`` lists supported index names. Use :meth:`get` to pull tickers,
+    or ``get(name, as_frame=True)`` for tickers + company names in one fetch.
 
     Example::
 
         si = StockIndices()
-        si.available          # ('sp500', 'dow', ...)
-        si.get("sp500")       # ['MMM', 'AOS', ...]
+        si.available                      # ('sp500', 'dow', ...)
+        si.get("sp500")                   # ['MMM', 'AOS', ...]
+        si.get("sp500", as_frame=True)    # DataFrame: ticker, name
     """
 
     available: tuple[str, ...] = tuple(_INDICES)
 
-    def get(self, name: str) -> list[str]:
-        """Return current constituent tickers for ``name``.
-
-        Names are keys in :attr:`available`. Dots in symbols are replaced with
-        hyphens for yfinance (e.g. ``BRK.B`` → ``BRK-B``). Returns an empty
-        list on unknown name or fetch failure.
-        """
+    def _table(self, name: str) -> pd.DataFrame | None:
+        """Download and select the constituent table for ``name``."""
         key = name.strip().lower()
         meta = _INDICES.get(key)
         if meta is None:
-            return []
+            return None
         try:
             response = requests.get(
                 meta["url"], headers=_BROWSER_HEADERS, timeout=_REQUEST_TIMEOUT
@@ -166,18 +167,45 @@ class StockIndices:
             tables = pd.read_html(StringIO(response.text))
             column = meta["column"]
             min_rows = meta["min_rows"]
-            table = next(
+            return next(
                 t for t in tables if column in t.columns and len(t) >= min_rows
             )
-            return (
-                table[column]
-                .astype(str)
-                .str.replace(".", "-", regex=False)
-                .str.strip()
-                .tolist()
-            )
         except Exception:
-            return []
+            return None
+
+    def get(self, name: str, *, as_frame: bool = False) -> list[str] | pd.DataFrame:
+        """Return constituent tickers, or a ``ticker``/``name`` frame.
+
+        One Wikipedia fetch either way. Dots in symbols become hyphens for
+        yfinance (e.g. ``BRK.B`` → ``BRK-B``). Returns ``[]`` / empty frame
+        on unknown name or fetch failure.
+        """
+        key = name.strip().lower()
+        meta = _INDICES.get(key)
+        if meta is None:
+            return pd.DataFrame(columns=["ticker", "name"]) if as_frame else []
+
+        table = self._table(key)
+        if table is None or table.empty:
+            return pd.DataFrame(columns=["ticker", "name"]) if as_frame else []
+
+        ticker_col = meta["column"]
+        tickers = (
+            table[ticker_col]
+            .astype(str)
+            .str.replace(".", "-", regex=False)
+            .str.strip()
+        )
+        if not as_frame:
+            return tickers.tolist()
+
+        name_col = next((c for c in _NAME_COLUMNS if c in table.columns), None)
+        names = (
+            table[name_col].astype(str).str.strip()
+            if name_col is not None
+            else tickers.copy()
+        )
+        return pd.DataFrame({"ticker": tickers.to_numpy(), "name": names.to_numpy()})
 
     def label(self, name: str) -> str:
         """Human-readable label for an index name, or ``name`` if unknown."""
