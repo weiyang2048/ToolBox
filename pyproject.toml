@@ -37,6 +37,7 @@ dependencies = [
     "pandas>=2.0.0",
     "requests>=2.28.0",
     "lxml>=5.0.0",
+    "yfinance>=0.2.66",
 ]
 
 [project.optional-dependencies]
