@@ -9,9 +9,6 @@ from __future__ import annotations
 
 import pandas as pd
 
-#: MON-USD prints before this date are blank (bad Yahoo history).
-_MON_USD_CUTOFF = pd.Timestamp("2025-11-23")
-
 
 def normalize_close_prices(prices: pd.DataFrame) -> pd.DataFrame:
     """Divide each column by its first valid price. Empty frames pass through."""
@@ -42,7 +39,6 @@ def download_close_prices(
 
     prices = _close_frame(_history(symbols, period))
     prices = _strip_timezone(prices)
-    prices = _blank_mon_usd(prices)
     if normalize and not prices.empty:
         prices = normalize_close_prices(prices)
     return prices
@@ -70,12 +66,4 @@ def _strip_timezone(prices: pd.DataFrame) -> pd.DataFrame:
     if hasattr(index, "tz") and index.tz is not None:
         prices = prices.copy()
         prices.index = index.tz_convert(None)
-    return prices
-
-
-def _blank_mon_usd(prices: pd.DataFrame) -> pd.DataFrame:
-    if "MON-USD" not in prices.columns:
-        return prices
-    prices = prices.copy()
-    prices.loc[prices.index < _MON_USD_CUTOFF, "MON-USD"] = pd.NA
     return prices
