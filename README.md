@@ -53,6 +53,16 @@ toolbox/
     audio.py    # FFT coefficient compression
     images.py   # 2D frequency-domain filters
     noise.py    # notch filter, spectral subtraction, SNR
+  vision/       # torch image classification (requires the `vision` extra)
+    data/               # folder scanning + ImageLoader Dataset
+    models/             # EfficientNet wrapper (timm, b0-b7)
+    transformations/    # train/test image transforms
+```
+
+With the vision pipeline:
+
+```bash
+pip install -e ".[vision]"
 ```
 
 ## Notebook
