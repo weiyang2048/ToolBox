@@ -57,12 +57,23 @@ toolbox/
     data/               # folder scanning + ImageLoader Dataset
     models/             # EfficientNet wrapper (timm, b0-b7)
     transformations/    # train/test image transforms
+  automation/   # browser/file automation bots (requires the `automation` extra)
+    LinkedInHelper/     # saved-jobs scraper + CLI (Selenium)
+    ArXivSearcher.py    # arXiv search + PDF downloads
+    SeleniumInitializer.py  # Selenium login helper
+    random_folder_opener.py # random folder opener + Click CLI (cli.py)
 ```
 
 With the vision pipeline:
 
 ```bash
 pip install -e ".[vision]"
+```
+
+With the automation bots:
+
+```bash
+pip install -e ".[automation]"
 ```
 
 ## Notebook
