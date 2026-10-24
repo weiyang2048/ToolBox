@@ -76,6 +76,15 @@ With the automation bots:
 pip install -e ".[automation]"
 ```
 
+## Energy market optimization (salvaged from the Optimization repo)
+
+```
+energy_optimization_challenge/  # day-ahead vs real-time bidding optimizer for wind assets
+  tests/                        # unittest suite + run_tests.py
+```
+
+Requires numpy, pandas, scipy, matplotlib, seaborn, pyomo, pulp and scikit-learn.
+
 ## Notebook
 
 Open `Fourier_Transform_Introduction.ipynb` after installing with the `notebook` extra.
