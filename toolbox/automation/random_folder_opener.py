@@ -12,7 +12,6 @@ import random
 import sys
 import subprocess
 import platform
-from pathlib import Path
 
 
 def get_all_subfolders(root_path):

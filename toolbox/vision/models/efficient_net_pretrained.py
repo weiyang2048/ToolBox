@@ -3,7 +3,7 @@ from torch import nn, optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import torch
-from typing import Optional, Union, List
+from typing import Optional, List
 
 
 class EfficientNetModel:

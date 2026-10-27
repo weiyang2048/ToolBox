@@ -13,9 +13,8 @@ The output is a numpy array of shape (num_samples, num_hours, num_targets).
 
 import numpy as np
 import pandas as pd
-from datetime import datetime, timedelta
 import os
-from typing import Tuple, Dict, List, Optional, Union, Any
+from typing import Tuple, List
 
 
 def generate_sample_data(
@@ -192,19 +191,19 @@ def save_sample_data(
     avg_wind_da_corr = np.mean(all_wind_da_corrs)
     avg_wind_rt_corr = np.mean(all_wind_rt_corrs)
     
-    print(f"\nPrice statistics:")
+    print("\nPrice statistics:")
     print(f"Average DA price: ${avg_da:.2f}")
     print(f"Average RT price: ${avg_rt:.2f}")
     print(f"DA/RT ratio: {avg_da/avg_rt:.2f}")
     
-    print(f"\nAverage correlation statistics:")
+    print("\nAverage correlation statistics:")
     print(f"Avg Wind-DA Price Correlation: {avg_wind_da_corr:.4f}")
     print(f"Avg Wind-RT Price Correlation: {avg_wind_rt_corr:.4f}")
     print(f"RT has {abs(avg_wind_rt_corr)/abs(avg_wind_da_corr):.2f}x stronger correlation with wind than DA")
-    print(f"\nNegative price statistics:")
+    print("\nNegative price statistics:")
     print(f"DA negative prices: {da_neg_prices} ({da_neg_prices/total_prices*100:.2f}% of all hours)")
     print(f"RT negative prices: {rt_neg_prices} ({rt_neg_prices/total_prices*100:.2f}% of all hours)")
-    print(f"\nExtreme price statistics:")
+    print("\nExtreme price statistics:")
     print(f"RT prices > $1000: {rt_extreme_prices} ({rt_extreme_prices/total_prices*100:.2f}% of all hours)")
 
 

@@ -4,9 +4,6 @@ Objective functions for energy market optimization.
 This module provides functions to calculate revenues and define objective functions.
 """
 
-import numpy as np
-import pyomo.environ as pe
-
 
 def calculate_scenario_revenue(model, i, da_prices, rt_prices, wind_power):
     """

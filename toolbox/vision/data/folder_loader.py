@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 def get_image_paths_and_labels(base_dir):

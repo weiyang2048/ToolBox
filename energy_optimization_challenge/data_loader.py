@@ -16,7 +16,6 @@ from energy_optimization_challenge.sample_data_generator import (
     generate_sample_data,
     save_sample_data,
     load_sample_data,
-    display_sample,
 )
 
 

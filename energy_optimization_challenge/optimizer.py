@@ -8,7 +8,6 @@ import numpy as np
 import pandas as pd
 from typing import Dict, Any
 import pyomo.environ as pe
-from pyomo.environ import value
 
 from energy_optimization_challenge.variable_definitions import (
     create_price_quantity_variables,

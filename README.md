@@ -87,7 +87,7 @@ Requires numpy, pandas, scipy, matplotlib, seaborn, pyomo, pulp and scikit-learn
 
 ## Notebook
 
-Open `Fourier_Transform_Introduction.ipynb` after installing with the `notebook` extra.
+Open `notebooks/Stock_Indices_Walkthrough.ipynb` after installing with the `notebook` extra.
 
 ## Tests
 

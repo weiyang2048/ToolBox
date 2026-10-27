@@ -146,7 +146,7 @@ def plot_bid_offer_results(
     if not os.path.exists(results_dir):
         os.makedirs(results_dir)
 
-    file_path = os.path.join(results_dir, f"bid_offer_plot.png")
+    file_path = os.path.join(results_dir, "bid_offer_plot.png")
     plt.savefig(file_path, dpi=300)
 
     print(f"📊 Bid/offer plot saved to {file_path}")
@@ -210,7 +210,7 @@ def plot_revenue_components(results: pd.DataFrame, risk_aversion: float = 0.25) 
     if not os.path.exists(results_dir):
         os.makedirs(results_dir)
 
-    file_path = os.path.join(results_dir, f"revenue_components.png")
+    file_path = os.path.join(results_dir, "revenue_components.png")
     plt.savefig(file_path, dpi=300)
 
     print(f"💰 Revenue components plot saved to {file_path}")
