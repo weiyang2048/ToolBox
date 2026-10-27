@@ -23,11 +23,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y glpk-utils
-      # pyomo is imported by the energy_optimization_challenge suite but is
-      # not yet declared in pyproject.toml, so it is installed explicitly
+      # the energy_optimization_challenge suite's dependencies (pyomo, pulp,
+      # seaborn, scikit-learn) are declared in the `energy` extra
       - name: Install package and test dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]" pyomo
+          pip install -e ".[dev,energy]"
       - name: Run tests
-        run: python -m pytest energy_optimization_challenge/tests -q
+        run: python -m pytest -q

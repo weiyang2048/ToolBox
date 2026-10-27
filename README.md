@@ -62,6 +62,9 @@ toolbox/
     ArXivSearcher.py    # arXiv search + PDF downloads
     SeleniumInitializer.py  # Selenium login helper
     random_folder_opener.py # random folder opener + Click CLI (cli.py)
+  DataZoo/      # sample and synthetic datasets for demos and tests
+    market/             # FearGreed, StockIndices, Yahoo prices, Zillow data
+    image/              # synthetic image data
 ```
 
 With the vision pipeline:
@@ -83,7 +86,8 @@ energy_optimization_challenge/  # day-ahead vs real-time bidding optimizer for w
   tests/                        # unittest suite + run_tests.py
 ```
 
-Requires numpy, pandas, scipy, matplotlib, seaborn, pyomo, pulp and scikit-learn.
+Requires numpy, pandas, scipy, matplotlib, seaborn, pyomo, pulp and scikit-learn
+(the last four are declared in the `energy` extra: `pip install -e ".[energy]"`).
 
 ## Notebook
 
