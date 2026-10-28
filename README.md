@@ -65,6 +65,8 @@ toolbox/
   DataZoo/      # sample and synthetic datasets for demos and tests
     market/             # FearGreed, StockIndices, Yahoo prices, Zillow data
     image/              # synthetic image data
+  net/          # networking helpers (stdlib only)
+    ssh_proxy_connect.py  # HTTP CONNECT ProxyCommand tunnel for ssh/git
 ```
 
 With the vision pipeline:
