@@ -89,6 +89,15 @@ energy_optimization_challenge/  # day-ahead vs real-time bidding optimizer for w
 Requires numpy, pandas, scipy, matplotlib, seaborn, pyomo, pulp and scikit-learn
 (the last four are declared in the `energy` extra: `pip install -e ".[energy]"`).
 
+The package itself is declared in `pyproject.toml`, so it is installed
+alongside `toolbox` (not just importable from a repo checkout).
+
+Test coverage note: the suite covers market clearing, objective functions,
+the optimizer, risk management and variable definitions. `data_loader` has
+no test coverage — its test module (`tests/test_data_loader.py`) was never
+salvaged: the source no longer exists upstream (only a compiled `.pyc`
+survived in the deleted Optimization repo).
+
 ## Notebook
 
 Open `notebooks/Stock_Indices_Walkthrough.ipynb` after installing with the `notebook` extra.

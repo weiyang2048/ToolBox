@@ -76,7 +76,7 @@ Repository = "https://github.com/weiyang2048/ToolBox"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["toolbox*"]
+include = ["toolbox*", "energy_optimization_challenge*"]
 
 [tool.pytest.ini_options]
 testpaths = ["energy_optimization_challenge/tests"]

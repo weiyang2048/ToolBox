@@ -99,7 +99,7 @@ class PriceGenData:
         volume_q90 = np.quantile(volumes, 0.9, axis=0)
 
         # Create figure explicitly first
-        fig = plt.figure(figsize=(12, 10))
+        plt.figure(figsize=(12, 10))
         axs = [plt.subplot(2, 1, 1), plt.subplot(2, 1, 2)]
 
         # Price spread subplot (top)
