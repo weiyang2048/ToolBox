@@ -79,7 +79,7 @@ where = ["."]
 include = ["toolbox*", "energy_optimization_challenge*"]
 
 [tool.pytest.ini_options]
-testpaths = ["energy_optimization_challenge/tests"]
+testpaths = ["tests", "energy_optimization_challenge/tests"]
 
 [tool.ruff]
 line-length = 88
