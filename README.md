@@ -111,11 +111,12 @@ uv run pytest
 ```
 
 `pyproject.toml`'s `testpaths` covers two suites: `tests/` (core `toolbox`
-packages — currently `fourier`, pure numpy/scipy) and
+packages — currently `fourier`, pure numpy/scipy, and `DataZoo`, whose
+network sources are all mocked so the suite runs offline) and
 `energy_optimization_challenge/tests/` (needs the `energy` extra and the
 GLPK solver for the risk-management tests). CI
 (`.github/workflows/tests.yml`) runs both on Python 3.10–3.12.
-`toolbox/DataZoo`, `toolbox/vision` and `toolbox/automation` have no test
+`toolbox/vision` and `toolbox/automation` have no test
 suites yet; they are covered locally by import smoke tests under their
 optional extras (`pip install -e ".[vision]"` / `".[automation]"`, then
 import the submodules).
