@@ -24,7 +24,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y glpk-utils
       # pytest runs both suites named in pyproject testpaths: tests/ (core
-      # toolbox packages, currently fourier — core deps only) and
+      # toolbox packages — core deps only) and
       # energy_optimization_challenge/tests. The energy suite's dependencies
       # (pyomo, pulp, seaborn, scikit-learn) are declared in the `energy` extra
       - name: Install package and test dependencies

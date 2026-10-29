@@ -67,6 +67,9 @@ toolbox/
     image/              # synthetic image data
   net/          # networking helpers (stdlib only)
     ssh_proxy_connect.py  # HTTP CONNECT ProxyCommand tunnel for ssh/git
+
+  notebooks/    # Jupyter notebook utilities
+    nb2pdf.py   # parameterized, import-safe notebook-to-LaTeX converter
 ```
 
 With the vision pipeline:
