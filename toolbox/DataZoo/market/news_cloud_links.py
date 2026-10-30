@@ -240,7 +240,6 @@ def linked_cloud_html(topics, edges, caption=None):
             "'DejaVu Serif',serif; }"
             ".nc-topbar { display:flex;"
             " justify-content:space-between; align-items:baseline;"
-            " border-bottom:2px solid #A67C00;"
             " padding:0 2px 6px; margin-bottom:10px; }"
             ".nc-topbar .t { font-size:15px; letter-spacing:2.6px;"
             " color:#1D4E89; font-variant:small-caps;"
