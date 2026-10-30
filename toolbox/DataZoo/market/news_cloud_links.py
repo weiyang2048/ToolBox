@@ -170,11 +170,15 @@ def _linked_layout(topics, edges, sizes):
 
 
 def linked_cloud_html(topics, edges, caption=None):
-    """The linked cloud as embeddable HTML: the fancy frame with
-    an SVG panel — words at computed positions, curved lines
-    between topics that share headlines. `edges` are (a, b,
-    shared) triples or build_cloud's edge dicts. The frame's
-    right footer line is set to the links explanation."""
+    """The linked cloud as embeddable HTML: an SVG panel of
+    words at computed positions, curved lines between topics
+    that share headlines, inside the fancy frame — with the
+    title and footer lines OUTSIDE the frame (user-approved
+    2026-10-30): the title above it as a small section head,
+    the caption below it as a quiet row, the frame itself
+    holding only the words. `edges` are (a, b, shared) triples
+    or dicts; the caption's right line is set to the links
+    explanation."""
     import html as html_mod
     triples = [(e["a"], e["b"], e["shared"]) if isinstance(e, dict)
                else tuple(e) for e in edges]
@@ -229,28 +233,41 @@ def linked_cloud_html(topics, edges, caption=None):
     caption = dict(caption or {})
     caption["right"] = ("Lines link topics that share headlines · "
                         "Size = distinct headlines mentioning the topic")
-    return ('<div class="nc-frame" style="width:100%%;">'
+    return ('<div style="width:100%%;font-family:Georgia,'
+            "'Times New Roman','DejaVu Serif',serif;\">"
             "<style>%s"
             "svg text { font-family:Georgia,'Times New Roman',"
             "'DejaVu Serif',serif; }"
-            # Compact frame text on phones (user-approved
-            # 2026-10-30): at desktop sizes the frame's title
-            # and footer are fine, but at phone width they
-            # wrapped into six-plus lines and crowded out the
-            # board below. Scoped to <=640px; desktop untouched.
+            ".nc-topbar { display:flex;"
+            " justify-content:space-between; align-items:baseline;"
+            " border-bottom:2px solid #A67C00;"
+            " padding:0 2px 6px; margin-bottom:10px; }"
+            ".nc-topbar .t { font-size:15px; letter-spacing:2.6px;"
+            " color:#1D4E89; font-variant:small-caps;"
+            " font-weight:700; }"
+            ".nc-topbar .w { font-size:12px; color:#6F6555;"
+            " font-style:italic; }"
+            ".nc-cap { display:flex;"
+            " justify-content:space-between; gap:16px;"
+            " padding:7px 2px 0; font-size:12px; color:#6F6555; }"
+            # Compact text on phones (user-approved 2026-10-30):
+            # smaller head/caption type and tighter frame
+            # padding at <=640px; desktop untouched.
             "@media (max-width: 640px) {"
-            " .nc-frame { padding:12px 14px 9px; border-radius:12px; }"
-            " .nc-head { padding-bottom:6px; flex-direction:column;"
-            " align-items:stretch; gap:1px; }"
-            " .nc-title { font-size:11.5px; letter-spacing:.13em; }"
-            " .nc-window { font-size:10px; text-align:right; }"
-            " .nc-foot { font-size:10.5px; line-height:1.5;"
-            " margin-top:6px; padding-top:6px; gap:6px; } }</style>"
-            '<div class="nc-head"><div class="nc-title">What the '
-            'market is talking about</div><div class="nc-window">'
+            " .nc-frame { padding:10px 12px 8px;"
+            " border-radius:12px; }"
+            " .nc-topbar .t { font-size:12px;"
+            " letter-spacing:.14em; }"
+            " .nc-topbar .w { font-size:10.5px; }"
+            " .nc-cap { font-size:10.5px; line-height:1.5; }"
+            " }</style>"
+            '<div class="nc-topbar"><div class="t">What the '
+            'market is talking about</div><div class="w">'
             'past 24 hours</div></div>'
-            '<div style="padding:6px 0 2px;">%s</div>'
-            '<div class="nc-foot"><div>%s</div><div>%s</div></div>'
+            '<div class="nc-frame" '
+            'style="width:100%%;padding:14px 18px;">'
+            '<div style="padding:2px 0;">%s</div></div>'
+            '<div class="nc-cap"><div>%s</div><div>%s</div></div>'
             "</div>"
             % (_FRAME_CSS, svg, caption.get("left", ""),
                caption.get("right", "")))
