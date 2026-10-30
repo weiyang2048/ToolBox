@@ -396,14 +396,13 @@ def extract_topics(headlines, max_topics=30, min_weight=2):
 # Rendering
 # ------------------------------------------------------------------
 def _sizes(topics, max_px=52):
-    """Font sizes on a POWER curve (exponent 1.8) between a 9px
-    floor and max_px. The sqrt curve compressed the range (a 9x
-    weight ratio rendered as ~2x in size); linear was better but
-    still not dramatic enough — both user calls on 2026-10-30.
-    The power curve lets the top handful of topics dominate the
-    panel while the tail recedes to the floor."""
+    """Font sizes on a POWER curve between a 9px floor and
+    max_px. Calibrated by the user's three calls on 2026-10-30:
+    sqrt (0.5) was too flat, linear (1.0) not dramatic enough,
+    exponent 1.8 too much — 1.35 is the settled middle: leaders
+    clearly dominate, the tail stays legible."""
     wmax = max(t["weight"] for t in topics)
-    return {t["term"]: round(9 + (max_px - 9) * (t["weight"] / wmax) ** 1.8)
+    return {t["term"]: round(9 + (max_px - 9) * (t["weight"] / wmax) ** 1.35)
             for t in topics}
 
 
