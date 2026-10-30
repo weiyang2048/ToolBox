@@ -84,6 +84,8 @@ def test_build_cloud_survives_renderer_failure(monkeypatch, tmp_path):
                              json_path=str(tmp_path / "c.json"))
     assert summary["renderer"] == "none"
     assert summary["topics"] and summary["caption"]["left"]
+    # The date and the counts carry the accent spans, unescaped.
+    assert 'class="nc-hl"' in summary["caption"]["left"]
 
 
 def test_sizes_spread_is_dramatic():

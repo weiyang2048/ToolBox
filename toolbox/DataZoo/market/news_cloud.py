@@ -452,6 +452,7 @@ _FRAME_CSS = """
 .nc-tilt { transform:rotate(-5deg); }
 .nc-foot { border-top:1px solid #D8CBB6; padding-top:8px; font-size:13.5px;
   color:#6F6555; display:flex; justify-content:space-between; gap:16px; }
+.nc-hl { color:#1D4E89; font-weight:700; }
 """
 
 
@@ -483,14 +484,16 @@ def _frame_html(topics, caption=None, max_px=60):
                            700 if t["weight"] >= 8 else 600,
                            light, deep, html_mod.escape(term)))
     caption = caption or {}
+    # Caption lines are trusted HTML (built by build_cloud from a
+    # format string and integer counts — the date and counts carry
+    # .nc-hl accent spans), so they are inserted unescaped.
     return ("<style>%s</style>"
             '<div class="nc-head"><div class="nc-title">What the market '
             'is talking about</div><div class="nc-window">past 24 hours'
             '</div></div><div class="nc-cloud">%s</div>'
             '<div class="nc-foot"><div>%s</div><div>%s</div></div>'
             % (_FRAME_CSS, "\n".join(spans),
-               html_mod.escape(caption.get("left", "")),
-               html_mod.escape(caption.get("right", ""))))
+               caption.get("left", ""), caption.get("right", "")))
 
 
 def cloud_html(topics, caption=None):
@@ -566,7 +569,9 @@ def build_cloud(png_path=DEFAULT_PNG, json_path=DEFAULT_JSON, hours=24):
     except Exception:
         asof = now.strftime("%Y-%m-%d %H:%M UTC")
     caption = {
-        "left": "As of %s · %d distinct headlines, %d sources"
+        "left": 'As of <span class="nc-hl">%s</span> · '
+                '<span class="nc-hl">%d</span> distinct headlines, '
+                '<span class="nc-hl">%d</span> sources'
                 % (asof, len(headlines), len(source_counts)),
         "right": "Size = distinct headlines mentioning the topic",
     }
