@@ -10,7 +10,7 @@ def test_board_layout():
     assert [g for g, _c, _k in groups] == [
         "US Equity",
         "International equity",
-        "Energy", "Crypto", "Metals", "Agriculture", "Rates", "FX",
+        "Commodities", "Crypto", "Rates", "FX",
     ]
     assert sum(len(c) for _g, c, _k in groups) == 48
     kinds = {k for _g, _c, k in groups}
@@ -85,9 +85,11 @@ def test_rows_sorted_by_year_within_group(monkeypatch):
     closes["SI=F"] = [400.0 - i for i in range(300)]      # year < 0
     closes["PL=F"] = [100.0] * 100                        # no year value
     rep = _fake_fetch_board(monkeypatch, closes)
-    labels = [r["label"] for r in rep["data"]["Metals"]]
-    assert labels == ["Gold (GC)", "Copper (HG)",
-                      "Silver (SI)", "Platinum (PL)"]
+    labels = [r["label"] for r in rep["data"]["Commodities"]]
+    assert labels == ["Gold (GC)", "WTI crude (CL)", "Brent (BZ)",
+                      "Natural gas (NG)", "RBOB gasoline (RB)",
+                      "Copper (HG)", "Corn (ZC)", "Soybeans (ZS)",
+                      "Wheat (ZW)", "Silver (SI)", "Platinum (PL)"]
 
 
 def test_board_scales():

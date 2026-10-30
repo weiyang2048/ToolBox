@@ -1,8 +1,8 @@
 """A futures + international cash-index board, with cell shading.
 
 :func:`fetch_board` pulls the latest quotes from Yahoo Finance (v8
-chart API) for 34 futures contracts in seven groups — US Equity,
-Energy, Crypto, Metals, Agriculture, Rates, FX — plus 14 cash indices
+chart API) for 34 futures contracts in five groups — US Equity,
+Commodities, Crypto, Rates, FX — plus 14 cash indices
 in a single International equity group (rendered immediately
 after US Equity: Yahoo serves no usable non-US equity futures, so
 the international lines are the cash markets themselves), and
@@ -76,26 +76,22 @@ GROUPS = [
         ("XAU=F", "Utilities (XAU)", 1),
         ("BIO=F", "Nasdaq biotech (BIO)", 1),
     ]),
-    ("Energy", [
+    ("Commodities", [
         ("CL=F", "WTI crude (CL)", 2),
         ("BZ=F", "Brent (BZ)", 2),
         ("NG=F", "Natural gas (NG)", 3),
         ("RB=F", "RBOB gasoline (RB)", 4),
-    ]),
-    ("Crypto", [
-        ("BTC=F", "Bitcoin CME (BTC)", 0),
-        ("ETH=F", "Ether CME (ETH)", 1),
-    ]),
-    ("Metals", [
         ("GC=F", "Gold (GC)", 2),
         ("SI=F", "Silver (SI)", 2),
         ("HG=F", "Copper (HG)", 4),
         ("PL=F", "Platinum (PL)", 2),
-    ]),
-    ("Agriculture", [
         ("ZC=F", "Corn (ZC)", 2),
         ("ZS=F", "Soybeans (ZS)", 2),
         ("ZW=F", "Wheat (ZW)", 2),
+    ]),
+    ("Crypto", [
+        ("BTC=F", "Bitcoin CME (BTC)", 0),
+        ("ETH=F", "Ether CME (ETH)", 1),
     ]),
     ("Rates", [
         ("ZN=F", "10Y note (ZN)", 3),
@@ -155,7 +151,7 @@ def all_groups():
     """Futures groups with the cash continent groups after US Equity.
 
     Returns [(group name, [(symbol, label, dec)], kind)] in board
-    order — 8 groups, 48 lines.
+    order — 6 groups, 48 lines.
     """
     out = []
     for gname, contracts in GROUPS:
