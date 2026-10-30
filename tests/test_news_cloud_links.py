@@ -38,3 +38,14 @@ def test_linked_cloud_html_renders_svg_network():
     assert "Midterms" in html and "Lines link topics" in html
     # Deterministic: same input, same picture.
     assert linked_cloud_html(topics, edges, {"left": "As of test"}) == html
+
+
+def test_linked_cloud_html_carries_compact_mobile_style():
+    from toolbox.DataZoo.market.news_cloud_links import linked_cloud_html
+    topics = [{"term": "Midterms", "weight": 18, "group": "macro",
+               "example_headline": "x"}]
+    html = linked_cloud_html(topics, [], {"left": "As of test"})
+    # The phone treatment rides in the frame's own style block,
+    # scoped to narrow viewports; the desktop rules stay as-is.
+    assert "@media (max-width: 640px)" in html
+    assert "font-size:11.5px" in html and "font-size:10.5px" in html

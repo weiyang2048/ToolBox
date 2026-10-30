@@ -232,7 +232,20 @@ def linked_cloud_html(topics, edges, caption=None):
     return ('<div class="nc-frame" style="width:100%%;">'
             "<style>%s"
             "svg text { font-family:Georgia,'Times New Roman',"
-            "'DejaVu Serif',serif; }</style>"
+            "'DejaVu Serif',serif; }"
+            # Compact frame text on phones (user-approved
+            # 2026-10-30): at desktop sizes the frame's title
+            # and footer are fine, but at phone width they
+            # wrapped into six-plus lines and crowded out the
+            # board below. Scoped to <=640px; desktop untouched.
+            "@media (max-width: 640px) {"
+            " .nc-frame { padding:12px 14px 9px; border-radius:12px; }"
+            " .nc-head { padding-bottom:6px; flex-direction:column;"
+            " align-items:stretch; gap:1px; }"
+            " .nc-title { font-size:11.5px; letter-spacing:.13em; }"
+            " .nc-window { font-size:10px; text-align:right; }"
+            " .nc-foot { font-size:10.5px; line-height:1.5;"
+            " margin-top:6px; padding-top:6px; gap:6px; } }</style>"
             '<div class="nc-head"><div class="nc-title">What the '
             'market is talking about</div><div class="nc-window">'
             'past 24 hours</div></div>'
