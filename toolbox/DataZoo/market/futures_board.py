@@ -1,14 +1,13 @@
 """A futures + international cash-index board, with cell shading.
 
 :func:`fetch_board` pulls the latest quotes from Yahoo Finance (v8
-chart API) for 35 futures contracts in five groups — US Equity,
-Commodities, Crypto, Rates, FX — plus 14 cash indices
-in a single International equity group (rendered immediately
-after US Equity: Yahoo serves no usable non-US equity futures, so
-the international lines are the cash markets themselves) and 9
-liquid US sector stand-ins inside US Equity (see US_STANDINS),
-and returns the board as plain
-data. This module is the single implementation shared by every
+chart API) for 25 futures contracts in five groups — US Equity,
+Commodities, Crypto, Rates, FX — plus two cash groups rendered
+immediately after US Equity: the 11 iShares global sector ETFs
+(Global sectors; see GLOBAL_SECTORS) and 14 cash indices in a
+single International equity group (Yahoo serves no usable non-US
+equity futures, so the international lines are the cash markets
+themselves), and returns the board as plain data. This module is the single implementation shared by every
 consumer (report generators and dashboards alike); renderers format
 the returned rows for their own medium and shade percentage cells
 with :func:`shade_zero` on the scales from :func:`board_scales`.
@@ -60,29 +59,11 @@ GROUPS = [
         ("NQ=F", "Nasdaq 100 (NQ)", 2),
         ("YM=F", "Dow (YM)", 2),
         ("RTY=F", "Russell 2000 (RTY)", 2),
-        # CME E-mini Select Sector futures (user request 2026-10-30):
-        # the sector lines Yahoo carries with a usable daily history.
-        # Deliberately absent — Yahoo has no usable series for them:
-        # Deliberately absent (probed 2026-10-30, retried the same
-        # day at the user's request): XAY=F — only ~31 non-null bars
-        # scattered across the decade, so its horizons would span
-        # multi-year gaps; XAR=F / SOX=F / RX=F and SXB/SXT/SXO=F —
-        # a live quote but zero history bars; SXI=F / SXR=F — one
-        # bar each. XAK=F joined the board on the retry: Yahoo had
-        # resolved it to an MSCI Norway contract in the morning and
-        # to the Technology future, with a clean 2016- history, by
-        # the afternoon. The nine unusable contracts are represented
-        # by liquid stand-ins instead — see US_STANDINS below.
-        ("XAZ=F", "Communication services (XAZ)", 1),
-        ("XAP=F", "Consumer staples (XAP)", 1),
-        ("XAE=F", "Energy sector (XAE)", 1),
-        ("XAF=F", "Financials (XAF)", 1),
-        ("XAV=F", "Health care (XAV)", 1),
-        ("XAI=F", "Industrials (XAI)", 1),
-        ("XAB=F", "Materials (XAB)", 1),
-        ("XAU=F", "Utilities (XAU)", 1),
-        ("XAK=F", "Technology (XAK)", 1),
-        ("BIO=F", "Nasdaq biotech (BIO)", 1),
+        # US Equity carries only the four broad indices (user
+        # direction 2026-10-30): the CME sector futures and US
+        # sector ETFs that sat here earlier the same day were
+        # removed; sector exposure moved to the Global sectors
+        # cash group below.
     ]),
     ("Commodities", [
         ("CL=F", "WTI crude (CL)", 2),
@@ -138,25 +119,23 @@ CASH_GROUPS = [
     ]),
 ]
 
-# Liquid stand-ins for the CME sector futures Yahoo cannot serve
-# (user-approved 2026-10-30): each line tracks the same underlying
-# index as the future it stands in for, with a full Yahoo daily
-# history — the SPDR/iShares sector funds for the S&P Select Sector
-# (XAY -> XLY, XAR -> XLRE), Dow Jones Real Estate (RX -> IYR) and
-# S&P Select Industry (SXB -> KRE, SXI -> KIE, SXT -> XBI, SXO ->
-# XOP, SXR -> XRT) futures, and the PHLX Semiconductor index itself
-# for SOX=F. They sit inside US Equity as kind "cash" (day change
-# vs their own prior close, like the international cash indices).
-US_STANDINS = [
-    ("XLY", "Consumer discretionary (XLY)", 2),
-    ("XLRE", "Real estate (XLRE)", 2),
-    ("IYR", "DJ real estate (IYR)", 2),
-    ("^SOX", "Semiconductors (SOX)", None),
-    ("KRE", "Regional banks (KRE)", 2),
-    ("KIE", "Insurance (KIE)", 2),
-    ("XBI", "S&P biotech (XBI)", 2),
-    ("XOP", "Oil & gas E&P (XOP)", 2),
-    ("XRT", "Retail (XRT)", 2),
+# The iShares global sector suite, one ETF per GICS sector (user
+# request 2026-10-30), kind "cash" (day change vs their own prior
+# close, like the international cash indices). All 11 verified
+# against Yahoo on 2026-10-30: a live quote and a full 12y daily
+# history (3,024 completed bars) each.
+GLOBAL_SECTORS = [
+    ("IXN", "Technology (IXN)", 2),
+    ("IXG", "Financials (IXG)", 2),
+    ("IXJ", "Health care (IXJ)", 2),
+    ("IXC", "Energy (IXC)", 2),
+    ("MXI", "Materials (MXI)", 2),
+    ("EXI", "Industrials (EXI)", 2),
+    ("RXI", "Consumer discretionary (RXI)", 2),
+    ("KXI", "Consumer staples (KXI)", 2),
+    ("IXP", "Communication services (IXP)", 2),
+    ("JXI", "Utilities (JXI)", 2),
+    ("REET", "Real estate (REET)", 2),
 ]
 
 # Trailing-horizon lookbacks, in sessions before the last completed one.
@@ -179,18 +158,19 @@ def cash_dec(last):
 def all_groups():
     """The board's groups in order, kind carried per contract.
 
-    Returns [(group name, [(symbol, label, dec, kind)])] — 6
-    groups, 58 lines. US Equity mixes its 14 futures with the 9
-    cash stand-ins; the International equity cash group follows
-    it, then the remaining futures groups.
+    Returns [(group name, [(symbol, label, dec, kind)])] — 7
+    groups, 50 lines. US Equity carries only the four broad index
+    futures; the two cash groups (Global sectors, then
+    International equity) follow it, then the remaining futures
+    groups.
     """
     out = []
     for gname, contracts in GROUPS:
         rows = [(s, l, d, "future") for s, l, d in contracts]
-        if gname == "US Equity":
-            rows += [(s, l, d, "cash") for s, l, d in US_STANDINS]
         out.append((gname, rows))
         if gname == "US Equity":
+            out.append(("Global sectors",
+                        [(s, l, d, "cash") for s, l, d in GLOBAL_SECTORS]))
             for g, c in CASH_GROUPS:
                 out.append((g, [(s, l, d, "cash") for s, l, d in c]))
     return out
@@ -321,7 +301,7 @@ def fetch_board(now=None):
     asof = now.strftime("%A %B %d, %Y, %H:%M %Z")
     data, notes, available = {}, [], 0
     # The two HTTP requests per line (quote + 12y history) are
-    # I/O-bound; fetch all 58 lines concurrently. Futures are awaited
+    # I/O-bound; fetch all 50 lines concurrently. Futures are awaited
     # in symbol order, so notes and data come out in board order.
     order = [(gname, sym, label, dec, kind)
              for gname, contracts in all_groups()

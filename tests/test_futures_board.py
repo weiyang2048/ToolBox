@@ -9,15 +9,19 @@ def test_board_layout():
     groups = fb.all_groups()
     assert [g for g, _c in groups] == [
         "US Equity",
+        "Global sectors",
         "International equity",
         "Commodities", "Crypto", "Rates", "FX",
     ]
-    assert sum(len(c) for _g, c in groups) == 58
+    assert sum(len(c) for _g, c in groups) == 50
     kinds = {k for _g, c in groups for _s, _l, _d, k in c}
     assert kinds == {"future", "cash"}
     us = dict(groups)["US Equity"]
-    assert len(us) == 23
-    assert sum(1 for *_x, k in us if k == "cash") == 9
+    assert len(us) == 4
+    assert all(k == "future" for *_x, k in us)
+    gs = dict(groups)["Global sectors"]
+    assert len(gs) == 11
+    assert all(k == "cash" for *_x, k in gs)
 
 
 def test_cash_dec():
@@ -66,7 +70,7 @@ def test_fetch_board_assembly(monkeypatch):
     closes["ES=F"] = [100.0] * 299 + [110.0]   # +10% week, +10% day base
     del closes["ETH=F"]                        # unavailable -> null row
     rep = _fake_fetch_board(monkeypatch, closes)
-    assert rep["available"] == 57
+    assert rep["available"] == 49
     assert list(rep["data"]) == [g for g, _c in fb.all_groups()]
     es = rep["data"]["US Equity"][0]
     assert es["label"] == "S&P 500 (ES)"
