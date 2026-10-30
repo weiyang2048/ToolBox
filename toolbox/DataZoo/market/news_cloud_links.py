@@ -176,7 +176,10 @@ def linked_cloud_html(topics, edges, caption=None):
     title and footer lines OUTSIDE the frame (user-approved
     2026-10-30): the title above it as a small section head,
     the caption below it as a quiet row, the frame itself
-    holding only the words. `edges` are (a, b, shared) triples
+    holding only the words. The caption's left line (the as-of
+    stamp with the headline/source counts) renders as its own
+    row between the title and the frame, not in the footer
+    (user request 2026-10-30). `edges` are (a, b, shared) triples
     or dicts; the caption's right line is set to the links
     explanation."""
     import html as html_mod
@@ -233,6 +236,8 @@ def linked_cloud_html(topics, edges, caption=None):
     caption = dict(caption or {})
     caption["right"] = ("Lines link topics that share headlines · "
                         "Size = distinct headlines mentioning the topic")
+    asof_row = ('<div class="nc-asof">%s</div>'
+                % caption.get("left", "")) if caption.get("left") else ""
     return ('<div style="width:100%%;font-family:Georgia,'
             "'Times New Roman','DejaVu Serif',serif;\">"
             "<style>%s"
@@ -246,6 +251,9 @@ def linked_cloud_html(topics, edges, caption=None):
             " font-weight:700; }"
             ".nc-topbar .w { font-size:12px; color:#6F6555;"
             " font-style:italic; }"
+            ".nc-asof { padding:0 2px 8px; font-size:12px;"
+            " color:#6F6555; }"
+            ".nc-asof .nc-hl { color:#1D4E89; font-weight:700; }"
             ".nc-cap { display:flex;"
             " justify-content:space-between; gap:16px;"
             " padding:7px 2px 0; font-size:12px; color:#6F6555; }"
@@ -258,17 +266,19 @@ def linked_cloud_html(topics, edges, caption=None):
             " .nc-topbar .t { font-size:12px;"
             " letter-spacing:.14em; }"
             " .nc-topbar .w { font-size:10.5px; }"
+            " .nc-asof { font-size:10.5px; }"
             " .nc-cap { font-size:10.5px; line-height:1.5; }"
             " }</style>"
             '<div class="nc-topbar"><div class="t">What the '
             'market is talking about</div><div class="w">'
             'past 24 hours</div></div>'
+            '%s'
             '<div class="nc-frame" '
             'style="width:100%%;padding:14px 18px;">'
             '<div style="padding:2px 0;">%s</div></div>'
-            '<div class="nc-cap"><div>%s</div><div>%s</div></div>'
+            '<div class="nc-cap"><div></div><div>%s</div></div>'
             "</div>"
-            % (_FRAME_CSS, svg, caption.get("left", ""),
+            % (_FRAME_CSS, asof_row, svg,
                caption.get("right", "")))
 
 
