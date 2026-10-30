@@ -7,14 +7,17 @@ from toolbox.DataZoo.market import futures_board as fb
 
 def test_board_layout():
     groups = fb.all_groups()
-    assert [g for g, _c, _k in groups] == [
+    assert [g for g, _c in groups] == [
         "US Equity",
         "International equity",
         "Commodities", "Crypto", "Rates", "FX",
     ]
-    assert sum(len(c) for _g, c, _k in groups) == 49
-    kinds = {k for _g, _c, k in groups}
+    assert sum(len(c) for _g, c in groups) == 58
+    kinds = {k for _g, c in groups for _s, _l, _d, k in c}
     assert kinds == {"future", "cash"}
+    us = dict(groups)["US Equity"]
+    assert len(us) == 23
+    assert sum(1 for *_x, k in us if k == "cash") == 9
 
 
 def test_cash_dec():
@@ -58,13 +61,13 @@ def _fake_fetch_board(monkeypatch, closes_by_sym):
 
 def test_fetch_board_assembly(monkeypatch):
     closes = {sym: [100.0] * 300
-              for _g, contracts, _k in fb.all_groups()
-              for sym, _l, _d in contracts}
+              for _g, contracts in fb.all_groups()
+              for sym, _l, _d, _k in contracts}
     closes["ES=F"] = [100.0] * 299 + [110.0]   # +10% week, +10% day base
     del closes["ETH=F"]                        # unavailable -> null row
     rep = _fake_fetch_board(monkeypatch, closes)
-    assert rep["available"] == 48
-    assert list(rep["data"]) == [g for g, _c, _k in fb.all_groups()]
+    assert rep["available"] == 57
+    assert list(rep["data"]) == [g for g, _c in fb.all_groups()]
     es = rep["data"]["US Equity"][0]
     assert es["label"] == "S&P 500 (ES)"
     assert abs(es["pct"] - 1.0) < 1e-9         # last = settle * 1.01
@@ -79,8 +82,8 @@ def test_rows_sorted_by_year_within_group(monkeypatch):
     """Within each group, rows sort by Year % CAGR descending and a
     row without a year value goes last (user request 2026-10-30)."""
     closes = {sym: [100.0] * 300
-              for _g, contracts, _k in fb.all_groups()
-              for sym, _l, _d in contracts}
+              for _g, contracts in fb.all_groups()
+              for sym, _l, _d, _k in contracts}
     closes["GC=F"] = [100.0 + i for i in range(300)]      # year > 0
     closes["SI=F"] = [400.0 - i for i in range(300)]      # year < 0
     closes["PL=F"] = [100.0] * 100                        # no year value
@@ -111,8 +114,8 @@ def test_multiyear_horizons_are_cagr(monkeypatch):
     CAGR (not +159% total), y5 = +21%, and year (the 1-year span,
     CAGR == total) at the full total change."""
     closes = {sym: [100.0] * 2521
-              for _g, contracts, _k in fb.all_groups()
-              for sym, _label, _dec in contracts}
+              for _g, contracts in fb.all_groups()
+              for sym, _label, _dec, _k in contracts}
     closes["ES=F"] = [100.0] * 2520 + [100.0 * 1.1 ** 10]
     rep = _fake_fetch_board(monkeypatch, closes)
     es = rep["data"]["US Equity"][0]

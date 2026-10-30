@@ -1,12 +1,13 @@
 """A futures + international cash-index board, with cell shading.
 
 :func:`fetch_board` pulls the latest quotes from Yahoo Finance (v8
-chart API) for 34 futures contracts in five groups — US Equity,
+chart API) for 35 futures contracts in five groups — US Equity,
 Commodities, Crypto, Rates, FX — plus 14 cash indices
 in a single International equity group (rendered immediately
 after US Equity: Yahoo serves no usable non-US equity futures, so
-the international lines are the cash markets themselves), and
-returns the board as plain
+the international lines are the cash markets themselves) and 9
+liquid US sector stand-ins inside US Equity (see US_STANDINS),
+and returns the board as plain
 data. This module is the single implementation shared by every
 consumer (report generators and dashboards alike); renderers format
 the returned rows for their own medium and shade percentage cells
@@ -70,7 +71,8 @@ GROUPS = [
         # bar each. XAK=F joined the board on the retry: Yahoo had
         # resolved it to an MSCI Norway contract in the morning and
         # to the Technology future, with a clean 2016- history, by
-        # the afternoon.
+        # the afternoon. The nine unusable contracts are represented
+        # by liquid stand-ins instead — see US_STANDINS below.
         ("XAZ=F", "Communication services (XAZ)", 1),
         ("XAP=F", "Consumer staples (XAP)", 1),
         ("XAE=F", "Energy sector (XAE)", 1),
@@ -136,6 +138,27 @@ CASH_GROUPS = [
     ]),
 ]
 
+# Liquid stand-ins for the CME sector futures Yahoo cannot serve
+# (user-approved 2026-10-30): each line tracks the same underlying
+# index as the future it stands in for, with a full Yahoo daily
+# history — the SPDR/iShares sector funds for the S&P Select Sector
+# (XAY -> XLY, XAR -> XLRE), Dow Jones Real Estate (RX -> IYR) and
+# S&P Select Industry (SXB -> KRE, SXI -> KIE, SXT -> XBI, SXO ->
+# XOP, SXR -> XRT) futures, and the PHLX Semiconductor index itself
+# for SOX=F. They sit inside US Equity as kind "cash" (day change
+# vs their own prior close, like the international cash indices).
+US_STANDINS = [
+    ("XLY", "Consumer discretionary (XLY)", 2),
+    ("XLRE", "Real estate (XLRE)", 2),
+    ("IYR", "DJ real estate (IYR)", 2),
+    ("^SOX", "Semiconductors (SOX)", None),
+    ("KRE", "Regional banks (KRE)", 2),
+    ("KIE", "Insurance (KIE)", 2),
+    ("XBI", "S&P biotech (XBI)", 2),
+    ("XOP", "Oil & gas E&P (XOP)", 2),
+    ("XRT", "Retail (XRT)", 2),
+]
+
 # Trailing-horizon lookbacks, in sessions before the last completed one.
 HORIZONS = [("week", 5), ("month", 21), ("quarter", 63), ("year", 252),
             ("y3", 756), ("y5", 1260), ("y10", 2520)]
@@ -154,16 +177,22 @@ def cash_dec(last):
 
 
 def all_groups():
-    """Futures groups with the cash continent groups after US Equity.
+    """The board's groups in order, kind carried per contract.
 
-    Returns [(group name, [(symbol, label, dec)], kind)] in board
-    order — 6 groups, 48 lines.
+    Returns [(group name, [(symbol, label, dec, kind)])] — 6
+    groups, 58 lines. US Equity mixes its 14 futures with the 9
+    cash stand-ins; the International equity cash group follows
+    it, then the remaining futures groups.
     """
     out = []
     for gname, contracts in GROUPS:
-        out.append((gname, contracts, "future"))
+        rows = [(s, l, d, "future") for s, l, d in contracts]
         if gname == "US Equity":
-            out.extend((g, c, "cash") for g, c in CASH_GROUPS)
+            rows += [(s, l, d, "cash") for s, l, d in US_STANDINS]
+        out.append((gname, rows))
+        if gname == "US Equity":
+            for g, c in CASH_GROUPS:
+                out.append((g, [(s, l, d, "cash") for s, l, d in c]))
     return out
 
 
@@ -292,11 +321,11 @@ def fetch_board(now=None):
     asof = now.strftime("%A %B %d, %Y, %H:%M %Z")
     data, notes, available = {}, [], 0
     # The two HTTP requests per line (quote + 12y history) are
-    # I/O-bound; fetch all 48 lines concurrently. Futures are awaited
+    # I/O-bound; fetch all 58 lines concurrently. Futures are awaited
     # in symbol order, so notes and data come out in board order.
     order = [(gname, sym, label, dec, kind)
-             for gname, contracts, kind in all_groups()
-             for sym, label, dec in contracts]
+             for gname, contracts in all_groups()
+             for sym, label, dec, kind in contracts]
     with ThreadPoolExecutor(max_workers=8) as pool:
         futs = {sym: pool.submit(_fetch_row, sym)
                 for _, sym, _, _, _ in order}
