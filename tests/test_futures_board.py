@@ -105,3 +105,24 @@ def test_multiyear_horizons_are_cagr(monkeypatch):
     assert abs(es["y5"] - 21.0) < 1e-6
     assert abs(es["year"] - 100.0 * (1.1 ** 10 - 1.0)) < 1e-6
     assert abs(es["week"] - 100.0 * (1.1 ** 10 - 1.0)) < 1e-6
+
+
+def test_ls_states_rising_series_all_long():
+    from toolbox.DataZoo.market.futures_board import ls_states
+    closes = [100.0 * 1.001 ** i for i in range(300)]
+    assert ls_states(closes) == (True, True, True)
+
+
+def test_ls_states_falling_series_all_short():
+    from toolbox.DataZoo.market.futures_board import ls_states
+    closes = [100.0 * 0.999 ** i for i in range(300)]
+    assert ls_states(closes) == (False, False, False)
+
+
+def test_ls_states_length_gates():
+    from toolbox.DataZoo.market.futures_board import ls_states
+    rising = [100.0 * 1.001 ** i for i in range(300)]
+    assert ls_states(rising[:10]) == (None, None, None)
+    assert ls_states(rising[:30]) == (True, None, None)
+    assert ls_states(rising[:120]) == (True, True, None)
+    assert ls_states([]) == (None, None, None)

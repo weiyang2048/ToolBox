@@ -207,6 +207,42 @@ def history(sym):
     return out
 
 
+def _ema_last(closes, span):
+    """Final value of the adjust=False EMA recursion over closes —
+    pandas ewm(span=span, adjust=False) semantics (alpha =
+    2/(span+1), seeded at the first close), without the pandas
+    dependency."""
+    alpha = 2.0 / (span + 1.0)
+    e = closes[0]
+    for c in closes[1:]:
+        e = alpha * c + (1.0 - alpha) * e
+    return e
+
+
+def ls_states(closes):
+    """The (0x20, 20x50, 50x200) trend states on completed daily
+    closes — the same three states the briefs' stats tables carry
+    (combined into one L/S column on the dashboard board at the
+    user's request 2026-10-30). True = L, False = S, None when the
+    history is shorter than the state's lookback (20 / 50 / 200
+    sessions). 0x20: last close above its EMA20; 20x50: EMA20 above
+    EMA50; 50x200: EMA50 above EMA200. EMAs are the adjust=False
+    recursion, identical to pandas ewm(span=N, adjust=False) final
+    values on the same closes."""
+    n = len(closes)
+    if n < 20:
+        return (None, None, None)
+    e20 = _ema_last(closes, 20)
+    px = closes[-1] > e20
+    if n < 50:
+        return (px, None, None)
+    e50 = _ema_last(closes, 50)
+    cross = e20 > e50
+    if n < 200:
+        return (px, cross, None)
+    return (px, cross, e50 > _ema_last(closes, 200))
+
+
 def _fetch_row(sym):
     """(fetch(sym), history(sym)) for one contract.
 
@@ -230,9 +266,11 @@ def fetch_board(now=None):
 
     Returns {asof, source, available, data, notes}: data maps each
     group name to its rows ({sym, label, dec, kind, last, chg, pct,
-    mtime, week..y10}) in board order; available counts the lines
+    mtime, week..y10, ls}) in board order; available counts the lines
     with a live quote; notes carries one human-readable line per
-    degraded contract, for callers that log.
+    degraded contract, for callers that log. Each row's "ls" is the
+    (0x20, 20x50, 50x200) trend-state triple from ls_states() on the
+    same completed closes the horizons use.
     """
     now = now or datetime.datetime.now(CT)
     asof = now.strftime("%A %B %d, %Y, %H:%M %Z")
@@ -249,7 +287,8 @@ def fetch_board(now=None):
         for gname, sym, label, dec, kind in order:
             rows = data.setdefault(gname, [])
             row = {"sym": sym, "label": label, "dec": dec, "kind": kind,
-                   "last": None, "chg": None, "pct": None, "mtime": None}
+                   "last": None, "chg": None, "pct": None, "mtime": None,
+                   "ls": (None, None, None)}
             for key, _n in HORIZONS:
                 row[key] = None
             got, closes = futs[sym].result()
@@ -273,6 +312,7 @@ def fetch_board(now=None):
                 notes.append("futures: %s history unavailable (%s)"
                              % (sym, closes))
                 closes = []
+            row["ls"] = ls_states(closes)
             for key, n in HORIZONS:
                 if len(closes) > n:
                     total = closes[-1] / closes[-1 - n] - 1.0
