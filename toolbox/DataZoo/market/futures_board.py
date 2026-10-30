@@ -63,6 +63,10 @@ GROUPS = [
         ("NG=F", "Natural gas (NG)", 3),
         ("RB=F", "RBOB gasoline (RB)", 4),
     ]),
+    ("Crypto", [
+        ("BTC=F", "Bitcoin CME (BTC)", 0),
+        ("ETH=F", "Ether CME (ETH)", 1),
+    ]),
     ("Metals", [
         ("GC=F", "Gold (GC)", 2),
         ("SI=F", "Silver (SI)", 2),
@@ -85,10 +89,6 @@ GROUPS = [
         ("6E=F", "Euro (6E)", 4),
         ("6J=F", "Yen (6J)", 6),
         ("6B=F", "Pound (6B)", 4),
-    ]),
-    ("Crypto", [
-        ("BTC=F", "Bitcoin CME (BTC)", 0),
-        ("ETH=F", "Ether CME (ETH)", 1),
     ]),
 ]
 
