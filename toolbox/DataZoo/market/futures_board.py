@@ -1,10 +1,10 @@
 """A futures + international cash-index board, with cell shading.
 
 :func:`fetch_board` pulls the latest quotes from Yahoo Finance (v8
-chart API) for 25 futures contracts in five groups — US Equity,
+chart API) for 40 futures contracts in five groups — US Equity,
 Commodities, Crypto, Rates, FX — plus two cash groups rendered
 immediately after US Equity: the 11 iShares global sector ETFs
-(Global sectors; see GLOBAL_SECTORS) and 14 cash indices in a
+(Global sectors; see GLOBAL_SECTORS) and 15 cash indices in a
 single International equity group (Yahoo serves no usable non-US
 equity futures, so the international lines are the cash markets
 themselves), and returns the board as plain data. This module is the single implementation shared by every
@@ -70,13 +70,24 @@ GROUPS = [
         ("BZ=F", "Brent (BZ)", 2),
         ("NG=F", "Natural gas (NG)", 3),
         ("RB=F", "RBOB gasoline (RB)", 4),
+        ("HO=F", "Heating oil (HO)", 4),
         ("GC=F", "Gold (GC)", 2),
         ("SI=F", "Silver (SI)", 2),
         ("HG=F", "Copper (HG)", 4),
         ("PL=F", "Platinum (PL)", 2),
+        ("PA=F", "Palladium (PA)", 1),
         ("ZC=F", "Corn (ZC)", 2),
         ("ZS=F", "Soybeans (ZS)", 2),
+        ("ZL=F", "Soybean oil (ZL)", 2),
+        ("ZM=F", "Soybean meal (ZM)", 1),
         ("ZW=F", "Wheat (ZW)", 2),
+        ("LE=F", "Live cattle (LE)", 2),
+        ("GF=F", "Feeder cattle (GF)", 2),
+        ("HE=F", "Lean hogs (HE)", 2),
+        ("KC=F", "Coffee (KC)", 2),
+        ("CC=F", "Cocoa (CC)", 0),
+        ("SB=F", "Sugar (SB)", 2),
+        ("CT=F", "Cotton (CT)", 2),
     ]),
     ("Crypto", [
         ("BTC=F", "Bitcoin CME (BTC)", 0),
@@ -87,12 +98,16 @@ GROUPS = [
         ("ZB=F", "30Y bond (ZB)", 3),
         ("ZF=F", "5Y note (ZF)", 3),
         ("ZT=F", "2Y note (ZT)", 3),
+        ("ZQ=F", "Fed funds (ZQ)", 2),
     ]),
     ("FX", [
         ("DX-Y.NYB", "Dollar index (DXY)", 3),
         ("6E=F", "Euro (6E)", 4),
         ("6J=F", "Yen (6J)", 6),
         ("6B=F", "Pound (6B)", 4),
+        ("6A=F", "Australian dollar (6A)", 4),
+        ("6C=F", "Canadian dollar (6C)", 4),
+        ("6S=F", "Swiss franc (6S)", 4),
     ]),
 ]
 
@@ -111,6 +126,7 @@ CASH_GROUPS = [
         ("^FCHI", "CAC 40 (France)", None),
         ("^N225", "Nikkei 225 (Japan)", None),
         ("^HSI", "Hang Seng (Hong Kong)", None),
+        ("000001.SS", "SSE Composite (China)", None),
         ("^KS11", "KOSPI (South Korea)", None),
         ("^TWII", "Taiwan Weighted (Taiwan)", None),
         ("^NSEI", "Nifty 50 (India)", None),
@@ -159,7 +175,7 @@ def all_groups():
     """The board's groups in order, kind carried per contract.
 
     Returns [(group name, [(symbol, label, dec, kind)])] — 7
-    groups, 50 lines. US Equity carries only the four broad index
+    groups, 66 lines. US Equity carries only the four broad index
     futures; the two cash groups (Global sectors, then
     International equity) follow it, then the remaining futures
     groups.
@@ -301,7 +317,7 @@ def fetch_board(now=None):
     asof = now.strftime("%A %B %d, %Y, %H:%M %Z")
     data, notes, available = {}, [], 0
     # The two HTTP requests per line (quote + 12y history) are
-    # I/O-bound; fetch all 50 lines concurrently. Futures are awaited
+    # I/O-bound; fetch all 66 lines concurrently. Futures are awaited
     # in symbol order, so notes and data come out in board order.
     order = [(gname, sym, label, dec, kind)
              for gname, contracts in all_groups()

@@ -13,7 +13,7 @@ def test_board_layout():
         "International equity",
         "Commodities", "Crypto", "Rates", "FX",
     ]
-    assert sum(len(c) for _g, c in groups) == 50
+    assert sum(len(c) for _g, c in groups) == 66
     kinds = {k for _g, c in groups for _s, _l, _d, k in c}
     assert kinds == {"future", "cash"}
     us = dict(groups)["US Equity"]
@@ -70,7 +70,7 @@ def test_fetch_board_assembly(monkeypatch):
     closes["ES=F"] = [100.0] * 299 + [110.0]   # +10% week, +10% day base
     del closes["ETH=F"]                        # unavailable -> null row
     rep = _fake_fetch_board(monkeypatch, closes)
-    assert rep["available"] == 49
+    assert rep["available"] == 65
     assert list(rep["data"]) == [g for g, _c in fb.all_groups()]
     es = rep["data"]["US Equity"][0]
     assert es["label"] == "S&P 500 (ES)"
@@ -95,8 +95,13 @@ def test_rows_sorted_by_year_within_group(monkeypatch):
     labels = [r["label"] for r in rep["data"]["Commodities"]]
     assert labels == ["Gold (GC)", "WTI crude (CL)", "Brent (BZ)",
                       "Natural gas (NG)", "RBOB gasoline (RB)",
-                      "Copper (HG)", "Corn (ZC)", "Soybeans (ZS)",
-                      "Wheat (ZW)", "Silver (SI)", "Platinum (PL)"]
+                      "Heating oil (HO)", "Copper (HG)",
+                      "Palladium (PA)", "Corn (ZC)", "Soybeans (ZS)",
+                      "Soybean oil (ZL)", "Soybean meal (ZM)",
+                      "Wheat (ZW)", "Live cattle (LE)",
+                      "Feeder cattle (GF)", "Lean hogs (HE)",
+                      "Coffee (KC)", "Cocoa (CC)", "Sugar (SB)",
+                      "Cotton (CT)", "Silver (SI)", "Platinum (PL)"]
 
 
 def test_board_scales():
