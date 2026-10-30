@@ -100,6 +100,17 @@ GROUPS = [
 # is labelled as such. dec is None: these indices span ~5,400 to
 # ~204,000, so decimals are chosen from the index level (cash_dec).
 CASH_GROUPS = [
+    ("International equity — Americas", [
+        ("^GSPTSE", "TSX Composite (Canada)", None),
+        ("^BVSP", "Bovespa (Brazil)", None),
+        ("^MXX", "IPC (Mexico)", None),
+    ]),
+    ("International equity — Europe", [
+        ("^STOXX50E", "Euro Stoxx 50 (Eurozone)", None),
+        ("^GDAXI", "DAX (Germany)", None),
+        ("^FTSE", "FTSE 100 (United Kingdom)", None),
+        ("^FCHI", "CAC 40 (France)", None),
+    ]),
     ("International equity — Asia-Pacific", [
         ("^N225", "Nikkei 225 (Japan)", None),
         ("^HSI", "Hang Seng (Hong Kong)", None),
@@ -108,17 +119,6 @@ CASH_GROUPS = [
         ("^NSEI", "Nifty 50 (India)", None),
         ("^STI", "Straits Times (Singapore)", None),
         ("^AXJO", "S&P/ASX 200 (Australia)", None),
-    ]),
-    ("International equity — Europe", [
-        ("^STOXX50E", "Euro Stoxx 50 (Eurozone)", None),
-        ("^GDAXI", "DAX (Germany)", None),
-        ("^FTSE", "FTSE 100 (United Kingdom)", None),
-        ("^FCHI", "CAC 40 (France)", None),
-    ]),
-    ("International equity — Americas", [
-        ("^GSPTSE", "TSX Composite (Canada)", None),
-        ("^BVSP", "Bovespa (Brazil)", None),
-        ("^MXX", "IPC (Mexico)", None),
     ]),
 ]
 

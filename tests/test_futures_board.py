@@ -9,9 +9,9 @@ def test_board_layout():
     groups = fb.all_groups()
     assert [g for g, _c, _k in groups] == [
         "Equity index",
-        "International equity — Asia-Pacific",
-        "International equity — Europe",
         "International equity — Americas",
+        "International equity — Europe",
+        "International equity — Asia-Pacific",
         "Energy", "Crypto", "Metals", "Agriculture", "Rates", "FX",
     ]
     assert sum(len(c) for _g, c, _k in groups) == 39
