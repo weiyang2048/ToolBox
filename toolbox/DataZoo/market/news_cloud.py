@@ -396,12 +396,14 @@ def extract_topics(headlines, max_topics=30, min_weight=2):
 # Rendering
 # ------------------------------------------------------------------
 def _sizes(topics, max_px=52):
-    """Font sizes LINEAR in weight between a 10px floor and max_px.
-    The original sqrt curve compressed the range (a 9x weight
-    ratio rendered as only ~2x in size); linear spacing makes
-    the leaders unmistakably larger — user request 2026-10-30."""
+    """Font sizes on a POWER curve (exponent 1.8) between a 9px
+    floor and max_px. The sqrt curve compressed the range (a 9x
+    weight ratio rendered as ~2x in size); linear was better but
+    still not dramatic enough — both user calls on 2026-10-30.
+    The power curve lets the top handful of topics dominate the
+    panel while the tail recedes to the floor."""
     wmax = max(t["weight"] for t in topics)
-    return {t["term"]: round(10 + (max_px - 10) * (t["weight"] / wmax))
+    return {t["term"]: round(9 + (max_px - 9) * (t["weight"] / wmax) ** 1.8)
             for t in topics}
 
 
@@ -500,7 +502,7 @@ def cloud_html(topics, caption=None):
     image round-trip. `topics` are extract_topics() dicts (term,
     weight, group); `caption` carries the left/right footer lines."""
     return ('<div class="nc-frame" style="width:100%%;min-height:330px;">'
-            + _frame_html(topics, caption, max_px=54) + "</div>")
+            + _frame_html(topics, caption, max_px=60) + "</div>")
 
 
 def render_html(topics, png_path, caption=None):
@@ -512,7 +514,7 @@ def render_html(topics, png_path, caption=None):
 body { background:#FFFFFF; }
 </style></head><body><div class="nc-frame"
 style="width:1200px;height:600px;">%s</div></body></html>""" % (
-        _frame_html(topics, caption, max_px=68))
+        _frame_html(topics, caption, max_px=76))
     if not os.path.exists(CHROMIUM):
         return False
     with tempfile.NamedTemporaryFile("w", suffix=".html",
