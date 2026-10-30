@@ -12,7 +12,7 @@ def test_board_layout():
         "International equity — Asia-Pacific",
         "International equity — Europe",
         "International equity — Americas",
-        "Rates", "Energy", "Metals", "Agriculture", "FX", "Crypto",
+        "Energy", "Metals", "Agriculture", "Rates", "FX", "Crypto",
     ]
     assert sum(len(c) for _g, c, _k in groups) == 39
     kinds = {k for _g, _c, k in groups}

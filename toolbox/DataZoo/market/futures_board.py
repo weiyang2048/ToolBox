@@ -57,12 +57,6 @@ GROUPS = [
         ("YM=F", "Dow (YM)", 2),
         ("RTY=F", "Russell 2000 (RTY)", 2),
     ]),
-    ("Rates", [
-        ("ZN=F", "10Y note (ZN)", 3),
-        ("ZB=F", "30Y bond (ZB)", 3),
-        ("ZF=F", "5Y note (ZF)", 3),
-        ("ZT=F", "2Y note (ZT)", 3),
-    ]),
     ("Energy", [
         ("CL=F", "WTI crude (CL)", 2),
         ("BZ=F", "Brent (BZ)", 2),
@@ -79,6 +73,12 @@ GROUPS = [
         ("ZC=F", "Corn (ZC)", 2),
         ("ZS=F", "Soybeans (ZS)", 2),
         ("ZW=F", "Wheat (ZW)", 2),
+    ]),
+    ("Rates", [
+        ("ZN=F", "10Y note (ZN)", 3),
+        ("ZB=F", "30Y bond (ZB)", 3),
+        ("ZF=F", "5Y note (ZF)", 3),
+        ("ZT=F", "2Y note (ZT)", 3),
     ]),
     ("FX", [
         ("DX-Y.NYB", "Dollar index (DXY)", 3),
