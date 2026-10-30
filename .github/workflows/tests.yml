@@ -30,7 +30,7 @@ jobs:
       - name: Install package and test dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev,energy]"
+          pip install -e ".[dev,energy,quantstats]"
       - name: Run tests
         run: python -m pytest -q
 

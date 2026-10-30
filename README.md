@@ -63,7 +63,8 @@ toolbox/
     SeleniumInitializer.py  # Selenium login helper
     random_folder_opener.py # random folder opener + Click CLI (cli.py)
   DataZoo/      # sample and synthetic datasets for demos and tests
-    market/             # FearGreed, StockIndices, Yahoo prices, Zillow data
+    market/             # FearGreed, StockIndices, Yahoo prices, Zillow data,
+                        # futures board, QuantStats indicators (quantstats extra)
     image/              # synthetic image data
   net/          # networking helpers (stdlib only)
     ssh_proxy_connect.py  # HTTP CONNECT ProxyCommand tunnel for ssh/git
@@ -82,6 +83,12 @@ With the automation bots:
 
 ```bash
 pip install -e ".[automation]"
+```
+
+With the QuantStats-backed market indicators:
+
+```bash
+pip install -e ".[quantstats]"
 ```
 
 ## Energy market optimization (salvaged from the Optimization repo)
@@ -115,9 +122,10 @@ uv run pytest
 
 `pyproject.toml`'s `testpaths` covers two suites: `tests/` (core `toolbox`
 packages — `fourier`, pure numpy/scipy; `DataZoo`, whose network sources
-are all mocked so the suite runs offline; and the pure-stdlib helpers of
-`vision`/`automation`) and `energy_optimization_challenge/tests/` (needs
-the `energy` extra and the GLPK solver for the risk-management tests). CI
+are all mocked so the suite runs offline; its QuantStats indicator tests;
+and the pure-stdlib helpers of `vision`/`automation`) and
+`energy_optimization_challenge/tests/` (needs the `energy` extra and the
+GLPK solver for the risk-management tests). CI
 (`.github/workflows/tests.yml`) runs both on Python 3.10–3.12. The
 vision/automation tests that need the heavy optional extras skip via
 `importorskip` in that job; a dedicated single-version CI job installs
