@@ -9,9 +9,7 @@ def test_board_layout():
     groups = fb.all_groups()
     assert [g for g, _c, _k in groups] == [
         "US Equity",
-        "International equity — Americas",
-        "International equity — Europe",
-        "International equity — Asia-Pacific",
+        "International equity",
         "Energy", "Crypto", "Metals", "Agriculture", "Rates", "FX",
     ]
     assert sum(len(c) for _g, c, _k in groups) == 48
@@ -75,6 +73,21 @@ def test_fetch_board_assembly(monkeypatch):
     eth = rep["data"]["Crypto"][1]
     assert eth["last"] is None and eth["pct"] is None
     assert eth["label"] == "Ether CME (ETH)"   # null row keeps its slot
+
+
+def test_rows_sorted_by_year_within_group(monkeypatch):
+    """Within each group, rows sort by Year % CAGR descending and a
+    row without a year value goes last (user request 2026-10-30)."""
+    closes = {sym: [100.0] * 300
+              for _g, contracts, _k in fb.all_groups()
+              for sym, _l, _d in contracts}
+    closes["GC=F"] = [100.0 + i for i in range(300)]      # year > 0
+    closes["SI=F"] = [400.0 - i for i in range(300)]      # year < 0
+    closes["PL=F"] = [100.0] * 100                        # no year value
+    rep = _fake_fetch_board(monkeypatch, closes)
+    labels = [r["label"] for r in rep["data"]["Metals"]]
+    assert labels == ["Gold (GC)", "Copper (HG)",
+                      "Silver (SI)", "Platinum (PL)"]
 
 
 def test_board_scales():

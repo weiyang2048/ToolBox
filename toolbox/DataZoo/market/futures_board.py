@@ -3,10 +3,10 @@
 :func:`fetch_board` pulls the latest quotes from Yahoo Finance (v8
 chart API) for 34 futures contracts in seven groups — US Equity,
 Energy, Crypto, Metals, Agriculture, Rates, FX — plus 14 cash indices
-in three continent groups (International equity — Americas /
-Europe / Asia-Pacific, rendered immediately after US Equity: Yahoo
-serves no usable non-US equity futures, so the international lines
-are the cash markets themselves), and returns the board as plain
+in a single International equity group (rendered immediately
+after US Equity: Yahoo serves no usable non-US equity futures, so
+the international lines are the cash markets themselves), and
+returns the board as plain
 data. This module is the single implementation shared by every
 consumer (report generators and dashboards alike); renderers format
 the returned rows for their own medium and shade percentage cells
@@ -116,18 +116,14 @@ GROUPS = [
 # is labelled as such. dec is None: these indices span ~5,400 to
 # ~204,000, so decimals are chosen from the index level (cash_dec).
 CASH_GROUPS = [
-    ("International equity — Americas", [
+    ("International equity", [
         ("^GSPTSE", "TSX Composite (Canada)", None),
         ("^BVSP", "Bovespa (Brazil)", None),
         ("^MXX", "IPC (Mexico)", None),
-    ]),
-    ("International equity — Europe", [
         ("^STOXX50E", "Euro Stoxx 50 (Eurozone)", None),
         ("^GDAXI", "DAX (Germany)", None),
         ("^FTSE", "FTSE 100 (United Kingdom)", None),
         ("^FCHI", "CAC 40 (France)", None),
-    ]),
-    ("International equity — Asia-Pacific", [
         ("^N225", "Nikkei 225 (Japan)", None),
         ("^HSI", "Hang Seng (Hong Kong)", None),
         ("^KS11", "KOSPI (South Korea)", None),
@@ -159,7 +155,7 @@ def all_groups():
     """Futures groups with the cash continent groups after US Equity.
 
     Returns [(group name, [(symbol, label, dec)], kind)] in board
-    order — 10 groups, 48 lines.
+    order — 8 groups, 48 lines.
     """
     out = []
     for gname, contracts in GROUPS:
@@ -282,7 +278,9 @@ def fetch_board(now=None):
 
     Returns {asof, source, available, data, notes}: data maps each
     group name to its rows ({sym, label, dec, kind, last, chg, pct,
-    mtime, week..y10, ls}) in board order; available counts the lines
+    mtime, week..y10, ls}); rows within each group are sorted by the
+    Year % column (CAGR) descending, rows without a year value last
+    (user request 2026-10-30); available counts the lines
     with a live quote; notes carries one human-readable line per
     degraded contract, for callers that log. Each row's "ls" is the
     (0x20, 20x50, 50x200) trend-state triple from ls_states() on the
@@ -292,7 +290,7 @@ def fetch_board(now=None):
     asof = now.strftime("%A %B %d, %Y, %H:%M %Z")
     data, notes, available = {}, [], 0
     # The two HTTP requests per line (quote + 12y history) are
-    # I/O-bound; fetch all 39 lines concurrently. Futures are awaited
+    # I/O-bound; fetch all 48 lines concurrently. Futures are awaited
     # in symbol order, so notes and data come out in board order.
     order = [(gname, sym, label, dec, kind)
              for gname, contracts, kind in all_groups()
@@ -341,6 +339,12 @@ def fetch_board(now=None):
                         total = (1.0 + total) ** (252.0 / n) - 1.0
                     row[key] = 100.0 * total
             rows.append(row)
+    for rows in data.values():
+        # Within-group order is by Year % CAGR, best first; the sort
+        # is stable, so ties (and the year-less tail) keep the
+        # configured contract order.
+        rows.sort(key=lambda r: (r["year"] is None,
+                                 -(r["year"] or 0.0)))
     return {"asof": asof, "source": "Yahoo Finance",
             "available": available, "data": data, "notes": notes}
 
