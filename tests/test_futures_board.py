@@ -63,7 +63,7 @@ def test_fetch_board_assembly(monkeypatch):
     closes["ES=F"] = [100.0] * 299 + [110.0]   # +10% week, +10% day base
     del closes["ETH=F"]                        # unavailable -> null row
     rep = _fake_fetch_board(monkeypatch, closes)
-    assert rep["available"] == 47
+    assert rep["available"] == 48
     assert list(rep["data"]) == [g for g, _c, _k in fb.all_groups()]
     es = rep["data"]["US Equity"][0]
     assert es["label"] == "S&P 500 (ES)"
