@@ -62,10 +62,15 @@ GROUPS = [
         # CME E-mini Select Sector futures (user request 2026-10-30):
         # the sector lines Yahoo carries with a usable daily history.
         # Deliberately absent — Yahoo has no usable series for them:
-        # XAY=F (sparse, corrupted history), XAR=F / SOX=F / RX=F and
-        # the five Select Industry contracts SXB/SXI/SXT/SXO/SXR=F
-        # (a live quote but a single history bar), and XAK=F, which
-        # Yahoo resolves to an MSCI Norway contract, not Technology.
+        # Deliberately absent (probed 2026-10-30, retried the same
+        # day at the user's request): XAY=F — only ~31 non-null bars
+        # scattered across the decade, so its horizons would span
+        # multi-year gaps; XAR=F / SOX=F / RX=F and SXB/SXT/SXO=F —
+        # a live quote but zero history bars; SXI=F / SXR=F — one
+        # bar each. XAK=F joined the board on the retry: Yahoo had
+        # resolved it to an MSCI Norway contract in the morning and
+        # to the Technology future, with a clean 2016- history, by
+        # the afternoon.
         ("XAZ=F", "Communication services (XAZ)", 1),
         ("XAP=F", "Consumer staples (XAP)", 1),
         ("XAE=F", "Energy sector (XAE)", 1),
@@ -74,6 +79,7 @@ GROUPS = [
         ("XAI=F", "Industrials (XAI)", 1),
         ("XAB=F", "Materials (XAB)", 1),
         ("XAU=F", "Utilities (XAU)", 1),
+        ("XAK=F", "Technology (XAK)", 1),
         ("BIO=F", "Nasdaq biotech (BIO)", 1),
     ]),
     ("Commodities", [

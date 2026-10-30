@@ -12,7 +12,7 @@ def test_board_layout():
         "International equity",
         "Commodities", "Crypto", "Rates", "FX",
     ]
-    assert sum(len(c) for _g, c, _k in groups) == 48
+    assert sum(len(c) for _g, c, _k in groups) == 49
     kinds = {k for _g, _c, k in groups}
     assert kinds == {"future", "cash"}
 
