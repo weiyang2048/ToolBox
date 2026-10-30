@@ -33,3 +33,22 @@ jobs:
           pip install -e ".[dev,energy]"
       - name: Run tests
         run: python -m pytest -q
+
+  # The vision/automation extras pull in torch and selenium, which are too
+  # heavy for the full matrix above. This single-version job installs them
+  # and runs the vision/automation tests for real; in the matrix job those
+  # same tests skip via importorskip, and only the pure-stdlib helpers run.
+  extras-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install package with vision and automation extras
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,vision,automation]"
+      - name: Run vision/automation tests
+        run: python -m pytest -q tests/test_vision_automation.py
