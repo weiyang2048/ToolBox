@@ -142,9 +142,12 @@ def test_efficient_net_b0_forward_with_explicit_num_classes():
     model = EfficientNetModel(
         model_size="b0", num_classes=3, pretrained=False, device=torch.device("cpu")
     )
-    probs = model.predict(torch.zeros(1, 3, 32, 32))
-    assert probs.shape == (1, 3)
-    assert float(probs.sum()) == pytest.approx(1.0, abs=1e-5)
+    # predict() does not switch modes; in train mode BatchNorm rejects a
+    # single 1x1 spatial value per channel, so evaluate explicitly.
+    model.model.eval()
+    probs = model.predict(torch.zeros(2, 3, 32, 32))
+    assert probs.shape == (2, 3)
+    assert probs.sum(dim=1).tolist() == pytest.approx([1.0, 1.0], abs=1e-5)
 
 
 # --- automation: random_folder_opener (stdlib in-file, extra-gated) -----
