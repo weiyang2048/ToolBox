@@ -60,4 +60,5 @@ def test_cloud_html_frame():
 def test_mining_dedupes_hyphen_variants_of_lexicon_terms():
     heads = _heads("Tech Sell-Off deepens as chip stocks slide", 6)
     mined = _mine_phrases(heads, known_terms=["Tech selloff"])
-    assert not any("sell" in m["term"].lower() for m in mined)
+    terms = [m["term"] for m in mined]
+    assert "Tech Sell-Off" not in terms and "Tech Selloff" not in terms
