@@ -62,3 +62,25 @@ def test_mining_dedupes_hyphen_variants_of_lexicon_terms():
     mined = _mine_phrases(heads, known_terms=["Tech selloff"])
     terms = [m["term"] for m in mined]
     assert "Tech Sell-Off" not in terms and "Tech Selloff" not in terms
+
+
+def test_render_html_without_chromium_returns_false(monkeypatch):
+    import toolbox.DataZoo.market.news_cloud as nc
+    monkeypatch.setattr(nc, "CHROMIUM", "/nonexistent/chromium")
+    topics = [{"term": "Midterms", "weight": 5, "group": "macro",
+               "example_headline": "x"}]
+    assert nc.render_html(topics, "/tmp/never.png") is False
+
+
+def test_build_cloud_survives_renderer_failure(monkeypatch, tmp_path):
+    import toolbox.DataZoo.market.news_cloud as nc
+    heads = [{"title": "Bitcoin rallies hard", "source": "T",
+              "published": None}] * 3
+    monkeypatch.setattr(nc, "fetch_headlines",
+                        lambda hours=24, now=None: (heads, {"T": 3}))
+    monkeypatch.setattr(nc, "render_html",
+                        lambda *a, **k: (_ for _ in ()).throw(OSError("x")))
+    summary = nc.build_cloud(png_path=str(tmp_path / "c.png"),
+                             json_path=str(tmp_path / "c.json"))
+    assert summary["renderer"] == "none"
+    assert summary["topics"] and summary["caption"]["left"]

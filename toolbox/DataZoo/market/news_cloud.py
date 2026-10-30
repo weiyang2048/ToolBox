@@ -509,6 +509,8 @@ body { background:#FFFFFF; }
 </style></head><body><div class="nc-frame"
 style="width:1200px;height:600px;">%s</div></body></html>""" % (
         _frame_html(topics, caption, max_px=60))
+    if not os.path.exists(CHROMIUM):
+        return False
     with tempfile.NamedTemporaryFile("w", suffix=".html",
                                      delete=False) as fh:
         fh.write(page)
@@ -522,6 +524,8 @@ style="width:1200px;height:600px;">%s</div></body></html>""" % (
                         "--hide-scrollbars", "--window-size=1240,700",
                         "--screenshot=" + png_path, "file://" + tmp],
                        capture_output=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return False
     finally:
         os.unlink(tmp)
     if not os.path.exists(png_path):
@@ -561,10 +565,18 @@ def build_cloud(png_path=DEFAULT_PNG, json_path=DEFAULT_JSON, hours=24):
                 % (asof, len(headlines), len(source_counts)),
         "right": "Size = distinct headlines mentioning the topic",
     }
-    renderer = ("html-fancy" if render_html(topics, png_path, caption)
-                else "wordcloud")
-    if renderer != "html-fancy":
-        render_wordcloud(topics, png_path)
+    # Rendering the PNG is best-effort: embedders (the Futures
+    # page) consume topics + caption and render HTML themselves,
+    # and a renderer failure must never cost them the data. (Live
+    # lesson 2026-10-30: on Streamlit Cloud there is no Chromium,
+    # and the uncaught spawn error silently emptied the panel.)
+    try:
+        renderer = ("html-fancy" if render_html(topics, png_path, caption)
+                    else "wordcloud")
+        if renderer != "html-fancy":
+            render_wordcloud(topics, png_path)
+    except Exception:
+        renderer = "none"
     summary = {
         "window": "past %d hours ending %s" % (hours, now.isoformat()),
         "headlines": len(headlines),
