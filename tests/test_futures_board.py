@@ -11,7 +11,8 @@ def test_board_layout():
         "US Equity",
         "Global sectors",
         "International equity",
-        "Coins", "Commodities", "Rates", "FX",
+        "Crypto", "Metals", "Energy", "Grains & oilseeds",
+        "Livestock", "Softs", "Rates", "FX",
     ]
     assert sum(len(c) for _g, c in groups) == 66
     kinds = {k for _g, c in groups for _s, _l, _d, k in c}
@@ -77,7 +78,7 @@ def test_fetch_board_assembly(monkeypatch):
     assert abs(es["pct"] - 1.0) < 1e-9         # last = settle * 1.01
     assert abs(es["week"] - 10.0) < 1e-9       # close[-1]/close[-6]
     assert es["y10"] is None                   # 300 closes < 2520
-    eth = next(r for r in rep["data"]["Coins"]
+    eth = next(r for r in rep["data"]["Crypto"]
                if r["sym"] == "ETH=F")   # null rows sort last
     assert eth["last"] is None and eth["pct"] is None
     assert eth["label"] == "Ether CME (ETH)"   # null row keeps its slot
@@ -93,9 +94,8 @@ def test_rows_sorted_by_year_within_group(monkeypatch):
     closes["SI=F"] = [400.0 - i for i in range(300)]      # year < 0
     closes["PL=F"] = [100.0] * 100                        # no year value
     rep = _fake_fetch_board(monkeypatch, closes)
-    labels = [r["label"] for r in rep["data"]["Coins"]]
-    assert labels == ["Gold (GC)", "Bitcoin CME (BTC)",
-                      "Ether CME (ETH)", "Copper (HG)",
+    labels = [r["label"] for r in rep["data"]["Metals"]]
+    assert labels == ["Gold (GC)", "Copper (HG)",
                       "Palladium (PA)", "Silver (SI)",
                       "Platinum (PL)"]
 

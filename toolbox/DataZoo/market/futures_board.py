@@ -1,8 +1,9 @@
 """A futures + international cash-index board, with cell shading.
 
 :func:`fetch_board` pulls the latest quotes from Yahoo Finance (v8
-chart API) for 40 futures contracts in five groups — US Equity,
-Coins, Commodities, Rates, FX — plus two cash groups rendered
+chart API) for 40 futures contracts in nine groups — US Equity,
+Crypto, Metals, Energy, Grains & oilseeds, Livestock, Softs,
+Rates, FX — plus two cash groups rendered
 immediately after US Equity: the 11 iShares global sector ETFs
 (Global sectors; see GLOBAL_SECTORS) and 15 cash indices in a
 single International equity group (Yahoo serves no usable non-US
@@ -65,32 +66,44 @@ GROUPS = [
         # removed; sector exposure moved to the Global sectors
         # cash group below.
     ]),
-    # Coins (user direction 2026-10-30): the crypto futures and
-    # the five metals in one group — the board's hard-asset
-    # "coins" — rendered first in the app's Non-equity board.
-    ("Coins", [
+    # Crypto and Metals (user direction 2026-10-30, splitting the
+    # Coins group created earlier the same day): the two crypto
+    # futures, then the five metals — the first two groups of the
+    # app's Commodity board.
+    ("Crypto", [
         ("BTC=F", "Bitcoin CME (BTC)", 0),
         ("ETH=F", "Ether CME (ETH)", 1),
+    ]),
+    ("Metals", [
         ("GC=F", "Gold (GC)", 2),
         ("SI=F", "Silver (SI)", 2),
         ("HG=F", "Copper (HG)", 4),
         ("PL=F", "Platinum (PL)", 2),
         ("PA=F", "Palladium (PA)", 1),
     ]),
-    ("Commodities", [
+    # The commodity types (user direction 2026-10-30): the flat
+    # Commodities group split by type — Energy, Grains & oilseeds,
+    # Livestock, Softs — the rest of the app's Commodity board.
+    ("Energy", [
         ("CL=F", "WTI crude (CL)", 2),
         ("BZ=F", "Brent (BZ)", 2),
         ("NG=F", "Natural gas (NG)", 3),
         ("RB=F", "RBOB gasoline (RB)", 4),
         ("HO=F", "Heating oil (HO)", 4),
+    ]),
+    ("Grains & oilseeds", [
         ("ZC=F", "Corn (ZC)", 2),
         ("ZS=F", "Soybeans (ZS)", 2),
         ("ZL=F", "Soybean oil (ZL)", 2),
         ("ZM=F", "Soybean meal (ZM)", 1),
         ("ZW=F", "Wheat (ZW)", 2),
+    ]),
+    ("Livestock", [
         ("LE=F", "Live cattle (LE)", 2),
         ("GF=F", "Feeder cattle (GF)", 2),
         ("HE=F", "Lean hogs (HE)", 2),
+    ]),
+    ("Softs", [
         ("KC=F", "Coffee (KC)", 2),
         ("CC=F", "Cocoa (CC)", 0),
         ("SB=F", "Sugar (SB)", 2),
@@ -177,11 +190,11 @@ def cash_dec(last):
 def all_groups():
     """The board's groups in order, kind carried per contract.
 
-    Returns [(group name, [(symbol, label, dec, kind)])] — 7
+    Returns [(group name, [(symbol, label, dec, kind)])] — 11
     groups, 66 lines. US Equity carries only the four broad index
     futures; the two cash groups (Global sectors, then
     International equity) follow it, then the remaining futures
-    groups.
+    groups (the Commodity board's six, then Rates and FX).
     """
     out = []
     for gname, contracts in GROUPS:
