@@ -8,13 +8,13 @@ from toolbox.DataZoo.market import futures_board as fb
 def test_board_layout():
     groups = fb.all_groups()
     assert [g for g, _c, _k in groups] == [
-        "Equity index",
+        "US Equity",
         "International equity — Americas",
         "International equity — Europe",
         "International equity — Asia-Pacific",
         "Energy", "Crypto", "Metals", "Agriculture", "Rates", "FX",
     ]
-    assert sum(len(c) for _g, c, _k in groups) == 39
+    assert sum(len(c) for _g, c, _k in groups) == 48
     kinds = {k for _g, _c, k in groups}
     assert kinds == {"future", "cash"}
 
@@ -65,9 +65,9 @@ def test_fetch_board_assembly(monkeypatch):
     closes["ES=F"] = [100.0] * 299 + [110.0]   # +10% week, +10% day base
     del closes["ETH=F"]                        # unavailable -> null row
     rep = _fake_fetch_board(monkeypatch, closes)
-    assert rep["available"] == 38
+    assert rep["available"] == 47
     assert list(rep["data"]) == [g for g, _c, _k in fb.all_groups()]
-    es = rep["data"]["Equity index"][0]
+    es = rep["data"]["US Equity"][0]
     assert es["label"] == "S&P 500 (ES)"
     assert abs(es["pct"] - 1.0) < 1e-9         # last = settle * 1.01
     assert abs(es["week"] - 10.0) < 1e-9       # close[-1]/close[-6]
@@ -100,7 +100,7 @@ def test_multiyear_horizons_are_cagr(monkeypatch):
               for sym, _label, _dec in contracts}
     closes["ES=F"] = [100.0] * 2520 + [100.0 * 1.1 ** 10]
     rep = _fake_fetch_board(monkeypatch, closes)
-    es = rep["data"]["Equity index"][0]
+    es = rep["data"]["US Equity"][0]
     assert abs(es["y10"] - 10.0) < 1e-6
     assert abs(es["y5"] - 21.0) < 1e-6
     assert abs(es["year"] - 100.0 * (1.1 ** 10 - 1.0)) < 1e-6

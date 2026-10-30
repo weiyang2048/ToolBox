@@ -1,10 +1,10 @@
 """A futures + international cash-index board, with cell shading.
 
 :func:`fetch_board` pulls the latest quotes from Yahoo Finance (v8
-chart API) for 25 futures contracts in seven groups — Equity index,
-Rates, Energy, Metals, Agriculture, FX, Crypto — plus 14 cash indices
-in three continent groups (International equity — Asia-Pacific /
-Europe / Americas, rendered immediately after Equity index: Yahoo
+chart API) for 34 futures contracts in seven groups — US Equity,
+Energy, Crypto, Metals, Agriculture, Rates, FX — plus 14 cash indices
+in three continent groups (International equity — Americas /
+Europe / Asia-Pacific, rendered immediately after US Equity: Yahoo
 serves no usable non-US equity futures, so the international lines
 are the cash markets themselves), and returns the board as plain
 data. This module is the single implementation shared by every
@@ -54,11 +54,27 @@ UA = {"User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
 
 # (group, [(yahoo symbol, display label, decimals for Last)])
 GROUPS = [
-    ("Equity index", [
+    ("US Equity", [
         ("ES=F", "S&P 500 (ES)", 2),
         ("NQ=F", "Nasdaq 100 (NQ)", 2),
         ("YM=F", "Dow (YM)", 2),
         ("RTY=F", "Russell 2000 (RTY)", 2),
+        # CME E-mini Select Sector futures (user request 2026-10-30):
+        # the sector lines Yahoo carries with a usable daily history.
+        # Deliberately absent — Yahoo has no usable series for them:
+        # XAY=F (sparse, corrupted history), XAR=F / SOX=F / RX=F and
+        # the five Select Industry contracts SXB/SXI/SXT/SXO/SXR=F
+        # (a live quote but a single history bar), and XAK=F, which
+        # Yahoo resolves to an MSCI Norway contract, not Technology.
+        ("XAZ=F", "Communication services (XAZ)", 1),
+        ("XAP=F", "Consumer staples (XAP)", 1),
+        ("XAE=F", "Energy sector (XAE)", 1),
+        ("XAF=F", "Financials (XAF)", 1),
+        ("XAV=F", "Health care (XAV)", 1),
+        ("XAI=F", "Industrials (XAI)", 1),
+        ("XAB=F", "Materials (XAB)", 1),
+        ("XAU=F", "Utilities (XAU)", 1),
+        ("BIO=F", "Nasdaq biotech (BIO)", 1),
     ]),
     ("Energy", [
         ("CL=F", "WTI crude (CL)", 2),
@@ -140,15 +156,15 @@ def cash_dec(last):
 
 
 def all_groups():
-    """Futures groups with the cash continent groups after Equity index.
+    """Futures groups with the cash continent groups after US Equity.
 
     Returns [(group name, [(symbol, label, dec)], kind)] in board
-    order — 10 groups, 39 lines.
+    order — 10 groups, 48 lines.
     """
     out = []
     for gname, contracts in GROUPS:
         out.append((gname, contracts, "future"))
-        if gname == "Equity index":
+        if gname == "US Equity":
             out.extend((g, c, "cash") for g, c in CASH_GROUPS)
     return out
 
