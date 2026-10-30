@@ -2,7 +2,7 @@
 
 :func:`fetch_board` pulls the latest quotes from Yahoo Finance (v8
 chart API) for 40 futures contracts in five groups — US Equity,
-Commodities, Crypto, Rates, FX — plus two cash groups rendered
+Coins, Commodities, Rates, FX — plus two cash groups rendered
 immediately after US Equity: the 11 iShares global sector ETFs
 (Global sectors; see GLOBAL_SECTORS) and 15 cash indices in a
 single International equity group (Yahoo serves no usable non-US
@@ -65,17 +65,24 @@ GROUPS = [
         # removed; sector exposure moved to the Global sectors
         # cash group below.
     ]),
+    # Coins (user direction 2026-10-30): the crypto futures and
+    # the five metals in one group — the board's hard-asset
+    # "coins" — rendered first in the app's Non-equity board.
+    ("Coins", [
+        ("BTC=F", "Bitcoin CME (BTC)", 0),
+        ("ETH=F", "Ether CME (ETH)", 1),
+        ("GC=F", "Gold (GC)", 2),
+        ("SI=F", "Silver (SI)", 2),
+        ("HG=F", "Copper (HG)", 4),
+        ("PL=F", "Platinum (PL)", 2),
+        ("PA=F", "Palladium (PA)", 1),
+    ]),
     ("Commodities", [
         ("CL=F", "WTI crude (CL)", 2),
         ("BZ=F", "Brent (BZ)", 2),
         ("NG=F", "Natural gas (NG)", 3),
         ("RB=F", "RBOB gasoline (RB)", 4),
         ("HO=F", "Heating oil (HO)", 4),
-        ("GC=F", "Gold (GC)", 2),
-        ("SI=F", "Silver (SI)", 2),
-        ("HG=F", "Copper (HG)", 4),
-        ("PL=F", "Platinum (PL)", 2),
-        ("PA=F", "Palladium (PA)", 1),
         ("ZC=F", "Corn (ZC)", 2),
         ("ZS=F", "Soybeans (ZS)", 2),
         ("ZL=F", "Soybean oil (ZL)", 2),
@@ -88,10 +95,6 @@ GROUPS = [
         ("CC=F", "Cocoa (CC)", 0),
         ("SB=F", "Sugar (SB)", 2),
         ("CT=F", "Cotton (CT)", 2),
-    ]),
-    ("Crypto", [
-        ("BTC=F", "Bitcoin CME (BTC)", 0),
-        ("ETH=F", "Ether CME (ETH)", 1),
     ]),
     ("Rates", [
         ("ZN=F", "10Y note (ZN)", 3),

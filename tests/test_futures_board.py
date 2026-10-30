@@ -11,7 +11,7 @@ def test_board_layout():
         "US Equity",
         "Global sectors",
         "International equity",
-        "Commodities", "Crypto", "Rates", "FX",
+        "Coins", "Commodities", "Rates", "FX",
     ]
     assert sum(len(c) for _g, c in groups) == 66
     kinds = {k for _g, c in groups for _s, _l, _d, k in c}
@@ -77,7 +77,8 @@ def test_fetch_board_assembly(monkeypatch):
     assert abs(es["pct"] - 1.0) < 1e-9         # last = settle * 1.01
     assert abs(es["week"] - 10.0) < 1e-9       # close[-1]/close[-6]
     assert es["y10"] is None                   # 300 closes < 2520
-    eth = rep["data"]["Crypto"][1]
+    eth = next(r for r in rep["data"]["Coins"]
+               if r["sym"] == "ETH=F")   # null rows sort last
     assert eth["last"] is None and eth["pct"] is None
     assert eth["label"] == "Ether CME (ETH)"   # null row keeps its slot
 
@@ -92,16 +93,11 @@ def test_rows_sorted_by_year_within_group(monkeypatch):
     closes["SI=F"] = [400.0 - i for i in range(300)]      # year < 0
     closes["PL=F"] = [100.0] * 100                        # no year value
     rep = _fake_fetch_board(monkeypatch, closes)
-    labels = [r["label"] for r in rep["data"]["Commodities"]]
-    assert labels == ["Gold (GC)", "WTI crude (CL)", "Brent (BZ)",
-                      "Natural gas (NG)", "RBOB gasoline (RB)",
-                      "Heating oil (HO)", "Copper (HG)",
-                      "Palladium (PA)", "Corn (ZC)", "Soybeans (ZS)",
-                      "Soybean oil (ZL)", "Soybean meal (ZM)",
-                      "Wheat (ZW)", "Live cattle (LE)",
-                      "Feeder cattle (GF)", "Lean hogs (HE)",
-                      "Coffee (KC)", "Cocoa (CC)", "Sugar (SB)",
-                      "Cotton (CT)", "Silver (SI)", "Platinum (PL)"]
+    labels = [r["label"] for r in rep["data"]["Coins"]]
+    assert labels == ["Gold (GC)", "Bitcoin CME (BTC)",
+                      "Ether CME (ETH)", "Copper (HG)",
+                      "Palladium (PA)", "Silver (SI)",
+                      "Platinum (PL)"]
 
 
 def test_board_scales():
