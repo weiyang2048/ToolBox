@@ -33,7 +33,7 @@ from toolbox.DataZoo.market.news_cloud import (
 # ------------------------------------------------------------------
 LINK_MIN_SHARED = 2
 LINK_MAX_EDGES = 22
-LINK_PANEL_W, LINK_PANEL_H = 1124, 560
+LINK_PANEL_W, LINK_PANEL_H = 1124, 500
 
 
 def topic_members(topics, headlines):
@@ -82,10 +82,12 @@ def _linked_layout(topics, edges, sizes):
     max-min placement over the whole panel, then ellipse-aware
     repulsion (a word clears its full box plus a margin, not just
     its center) with weak edge springs and weak gravity, and a
-    padded de-overlap pass. Tuned through three demo rounds with
-    the user on 2026-10-30 (spiral start clustered; v3 spread is
-    the settled form)."""
-    margin = 30.0
+    padded de-overlap pass. Tuned through four demo rounds with
+    the user on 2026-10-30: spiral start clustered (v1), box
+    repulsion spread it (v2), wider still (v3, wired first),
+    then tightened back at his word — shorter panel, smaller
+    margin, stronger springs (v4, the settled form)."""
+    margin = 20.0
     nodes = {}
     placed = []
     grid = [(gx, gy) for gx in range(40, LINK_PANEL_W - 39, 40)
@@ -130,14 +132,14 @@ def _linked_layout(topics, edges, sizes):
                 s = strength.get((terms[i], terms[j]))
                 if s:
                     d = math.hypot(dx, dy) or 1.0
-                    pull = 0.002 * s * (d - rx * 1.7)
+                    pull = 0.0032 * s * (d - rx * 1.5)
                     fx, fy = pull * dx / d, pull * dy / d
                     a["vx"] += fx; a["vy"] += fy
                     b["vx"] -= fx; b["vy"] -= fy
         for t in terms:
             n = nodes[t]
-            n["vx"] += (LINK_PANEL_W / 2 - n["x"]) * 0.002
-            n["vy"] += (LINK_PANEL_H / 2 - n["y"]) * 0.003
+            n["vx"] += (LINK_PANEL_W / 2 - n["x"]) * 0.003
+            n["vy"] += (LINK_PANEL_H / 2 - n["y"]) * 0.0045
             n["vx"] *= 0.84; n["vy"] *= 0.84
             n["x"] += n["vx"]; n["y"] += n["vy"]
             n["x"] = min(max(n["x"], n["w"] / 2), LINK_PANEL_W - n["w"] / 2)
@@ -147,8 +149,8 @@ def _linked_layout(topics, edges, sizes):
         for i in range(len(terms)):
             for j in range(i + 1, len(terms)):
                 a, b = nodes[terms[i]], nodes[terms[j]]
-                ox = (a["w"] + b["w"]) / 2 + 16 - abs(b["x"] - a["x"])
-                oy = (a["h"] + b["h"]) / 2 + 10 - abs(b["y"] - a["y"])
+                ox = (a["w"] + b["w"]) / 2 + 12 - abs(b["x"] - a["x"])
+                oy = (a["h"] + b["h"]) / 2 + 8 - abs(b["y"] - a["y"])
                 if ox > 0 and oy > 0:
                     moved = True
                     if ox < oy:
@@ -176,7 +178,7 @@ def linked_cloud_html(topics, edges, caption=None):
     import html as html_mod
     triples = [(e["a"], e["b"], e["shared"]) if isinstance(e, dict)
                else tuple(e) for e in edges]
-    sizes = _sizes(topics, max_px=70)
+    sizes = _sizes(topics, max_px=72)
     nodes = _linked_layout(topics, triples, sizes)
     by_term = {t["term"]: t for t in topics}
     smax = max((s for _, _, s in triples), default=1)
