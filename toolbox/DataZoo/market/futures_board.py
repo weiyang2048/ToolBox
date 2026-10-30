@@ -23,9 +23,12 @@ Horizon columns: each row also carries trailing % changes of the
 front-month continuous daily close vs the close N sessions before
 the last completed session — week 5, month 21, quarter 63, year 252,
 3Y 756, 5Y 1260, 10Y 2520 (fields week/month/quarter/year/y3/y5/y10).
-A horizon is None (renders n/a) when the contract's history is
-shorter than the lookback — 10Y for RTY=F (series starts 2017),
-BTC=F (2017) and ETH=F (2021).
+The year-and-longer horizons (year, y3, y5, y10) are expressed as
+CAGR — the total change annualized over sessions/252 years, exactly
+1, 3, 5 and 10 (user request 2026-10-29); week, month and quarter
+stay total % changes. A horizon is None (renders n/a) when the
+contract's history is shorter than the lookback — 10Y for RTY=F
+(series starts 2017), BTC=F (2017) and ETH=F (2021).
 
 Degrade rules: a contract Yahoo cannot serve (a symbol that 404s) is
 emitted as a null row so renderers show n/a; a failed history pull
@@ -272,7 +275,15 @@ def fetch_board(now=None):
                 closes = []
             for key, n in HORIZONS:
                 if len(closes) > n:
-                    row[key] = 100.0 * (closes[-1] / closes[-1 - n] - 1.0)
+                    total = closes[-1] / closes[-1 - n] - 1.0
+                    if n >= 252:
+                        # Multi-year columns are CAGR (user request
+                        # 2026-10-29): annualize at sessions/252
+                        # years — exactly 1, 3, 5, 10 for the
+                        # year-and-longer lookbacks (n = 252 is the
+                        # identity).
+                        total = (1.0 + total) ** (252.0 / n) - 1.0
+                    row[key] = 100.0 * total
             rows.append(row)
     return {"asof": asof, "source": "Yahoo Finance",
             "available": available, "data": data, "notes": notes}

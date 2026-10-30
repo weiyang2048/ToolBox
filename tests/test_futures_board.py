@@ -88,3 +88,20 @@ def test_board_scales():
     assert day == 4.0
     assert scales == {"week": 8.0, "month": 5.0, "quarter": 2.0,
                       "year": 6.0, "y3": 0, "y5": 0, "y10": 0}
+
+
+def test_multiyear_horizons_are_cagr(monkeypatch):
+    """Year-and-longer horizons annualize (user request 2026-10-29):
+    a series up exactly 1.1**10 over its full span reads y10 = +10%
+    CAGR (not +159% total), y5 = +21%, and year (the 1-year span,
+    CAGR == total) at the full total change."""
+    closes = {sym: [100.0] * 2521
+              for _g, contracts, _k in fb.all_groups()
+              for sym, _label, _dec in contracts}
+    closes["ES=F"] = [100.0] * 2520 + [100.0 * 1.1 ** 10]
+    rep = _fake_fetch_board(monkeypatch, closes)
+    es = rep["data"]["Equity index"][0]
+    assert abs(es["y10"] - 10.0) < 1e-6
+    assert abs(es["y5"] - 21.0) < 1e-6
+    assert abs(es["year"] - 100.0 * (1.1 ** 10 - 1.0)) < 1e-6
+    assert abs(es["week"] - 100.0 * (1.1 ** 10 - 1.0)) < 1e-6
