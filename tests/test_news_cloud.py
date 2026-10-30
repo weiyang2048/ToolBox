@@ -55,3 +55,9 @@ def test_cloud_html_frame():
     assert "linear-gradient" in html and "As of test" in html
     # The leader renders larger than the smaller term.
     assert html.index("Midterms") > -1 and "font-size:46px" in html
+
+
+def test_mining_dedupes_hyphen_variants_of_lexicon_terms():
+    heads = _heads("Tech Sell-Off deepens as chip stocks slide", 6)
+    mined = _mine_phrases(heads, known_terms=["Tech selloff"])
+    assert not any("sell" in m["term"].lower() for m in mined)

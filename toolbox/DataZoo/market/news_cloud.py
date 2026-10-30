@@ -342,7 +342,7 @@ def _mine_phrases(headlines, known_terms, top_n=10, min_weight=4):
     # price ...") whose scaffolding would otherwise top the cloud.
     boilerplate = re.compile(
         r"\bresults?\b|share price|stock price|\bq[1-4]\b|"
-        r"\bnews\b|broadcasting|corporation")
+        r"\bnews\b|broadcasting|corporation|experts'? views")
     mined = []
     # Deterministic candidate order: Counter.most_common ties
     # follow set-iteration order (hash-randomized per process),
@@ -355,11 +355,18 @@ def _mine_phrases(headlines, known_terms, top_n=10, min_weight=4):
             break
         if boilerplate.search(gram):
             continue
-        if any(gram in t.lower() or t.lower() in gram
-               for t in known_terms):
+        # Overlap dedupe on a hyphen/space-insensitive key, so a
+        # mined "tech sell-off" cannot duplicate the lexicon's
+        # "Tech selloff" (seen live 2026-10-30: both rendered).
+        key = gram.replace("-", "").replace(" ", "")
+
+        def _overlaps(term):
+            k = term.lower().replace("-", "").replace(" ", "")
+            return key in k or k in key
+
+        if any(_overlaps(t) for t in known_terms):
             continue
-        if any(gram in t["term"].lower() or t["term"].lower() in gram
-               for t in mined):
+        if any(_overlaps(t["term"]) for t in mined):
             continue
         mined.append({"term": gram.title(), "weight": weight,
                       "example_headline": example[gram],
