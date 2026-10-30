@@ -53,8 +53,8 @@ def test_cloud_html_frame():
     html = cloud_html(topics, {"left": "As of test", "right": "Size"})
     assert "nc-frame" in html and "Midterms" in html
     assert "linear-gradient" in html and "As of test" in html
-    # The leader renders larger than the smaller term.
-    assert html.index("Midterms") > -1 and "font-size:46px" in html
+    # The leader renders at the embed ceiling, larger than the rest.
+    assert html.index("Midterms") > -1 and "font-size:54px" in html
 
 
 def test_mining_dedupes_hyphen_variants_of_lexicon_terms():
@@ -84,3 +84,13 @@ def test_build_cloud_survives_renderer_failure(monkeypatch, tmp_path):
                              json_path=str(tmp_path / "c.json"))
     assert summary["renderer"] == "none"
     assert summary["topics"] and summary["caption"]["left"]
+
+
+def test_sizes_spread_is_linear_and_wide():
+    from toolbox.DataZoo.market.news_cloud import _sizes
+    topics = [{"term": "big", "weight": 18}, {"term": "mid", "weight": 9},
+              {"term": "small", "weight": 2}]
+    s = _sizes(topics, max_px=54)
+    assert s["big"] == 54 and s["mid"] == 32
+    # A 9x weight ratio must read as a clearly visible size gap.
+    assert s["big"] - s["small"] >= 35
