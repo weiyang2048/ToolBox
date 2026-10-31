@@ -125,8 +125,9 @@ def test_sizes_spread_is_dramatic():
               {"term": "small", "weight": 2}]
     s = _sizes(topics, max_px=60)
     assert s["big"] == 60
-    # Exponent 1.35: half the leader's weight lands at ~60% of its
-    # size, the tail stays legible just above the floor.
-    assert 26 <= s["mid"] <= 32 and s["small"] <= 13
-    assert s["big"] - s["small"] >= 45
+    # Exponent 1.35 over the 16px floor (raised from 9px on
+    # 2026-10-31): half the leader's weight lands ~33px, the
+    # tail sits just above the floor.
+    assert 30 <= s["mid"] <= 36 and 16 <= s["small"] <= 20
+    assert s["big"] - s["small"] >= 40
 

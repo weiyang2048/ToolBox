@@ -457,13 +457,15 @@ def extract_topics(headlines, max_topics=30, min_weight=2):
 # Rendering
 # ------------------------------------------------------------------
 def _sizes(topics, max_px=52):
-    """Font sizes on a POWER curve between a 9px floor and
+    """Font sizes on a POWER curve between a 16px floor and
     max_px. Calibrated by the user's three calls on 2026-10-30:
     sqrt (0.5) was too flat, linear (1.0) not dramatic enough,
     exponent 1.8 too much — 1.35 is the settled middle: leaders
-    clearly dominate, the tail stays legible."""
+    clearly dominate, the tail stays legible. The floor was
+    raised 9px -> 16px on 2026-10-31 (the smallest words were
+    too small to read on the live page)."""
     wmax = max(t["weight"] for t in topics)
-    return {t["term"]: round(9 + (max_px - 9) * (t["weight"] / wmax) ** 1.35)
+    return {t["term"]: round(16 + (max_px - 16) * (t["weight"] / wmax) ** 1.35)
             for t in topics}
 
 
@@ -513,7 +515,7 @@ _FRAME_CSS = """
 .nc-tilt { transform:rotate(-5deg); }
 .nc-foot { border-top:1px solid #D8CBB6; padding-top:8px; font-size:13.5px;
   color:#6F6555; display:flex; justify-content:space-between; gap:16px; }
-.nc-hl { color:#1D4E89; font-weight:700; }
+.nc-hl { color:#FFB066; font-weight:700; }
 """
 
 

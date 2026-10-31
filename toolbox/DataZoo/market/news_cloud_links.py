@@ -185,7 +185,7 @@ def linked_cloud_html(topics, edges, caption=None):
     import html as html_mod
     triples = [(e["a"], e["b"], e["shared"]) if isinstance(e, dict)
                else tuple(e) for e in edges]
-    sizes = _sizes(topics, max_px=72)
+    sizes = _sizes(topics, max_px=84)
     nodes = _linked_layout(topics, triples, sizes)
     by_term = {t["term"]: t for t in topics}
     smax = max((s for _, _, s in triples), default=1)
@@ -253,7 +253,7 @@ def linked_cloud_html(topics, edges, caption=None):
             " font-style:italic; }"
             ".nc-asof { padding:0 2px 8px; font-size:12px;"
             " color:#6F6555; }"
-            ".nc-asof .nc-hl { color:#1D4E89; font-weight:700; }"
+            ".nc-asof .nc-hl { color:#FFB066; font-weight:700; }"
             ".nc-cap { display:flex;"
             " justify-content:space-between; gap:16px;"
             " padding:7px 2px 0; font-size:12px; color:#6F6555; }"
