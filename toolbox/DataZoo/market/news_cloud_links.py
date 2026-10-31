@@ -185,7 +185,7 @@ def linked_cloud_html(topics, edges, caption=None):
     import html as html_mod
     triples = [(e["a"], e["b"], e["shared"]) if isinstance(e, dict)
                else tuple(e) for e in edges]
-    sizes = _sizes(topics, max_px=84)
+    sizes = _sizes(topics, max_px=64)
     nodes = _linked_layout(topics, triples, sizes)
     by_term = {t["term"]: t for t in topics}
     smax = max((s for _, _, s in triples), default=1)
