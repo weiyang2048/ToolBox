@@ -317,6 +317,58 @@ def _family_of(phrase):
     return "neutral"
 
 
+_TOKEN_RE = re.compile(r"[a-z0-9$%.'&-]+")
+
+
+def _tokens(text):
+    """Headline -> normalized word tokens for phrase mining.
+
+    One canonical tokenizer for the cloud. The character class
+    keeps intra-word punctuation that carries meaning — the &
+    of S&P / AT&T / M&A, the $ and % of figures, apostrophes,
+    hyphens — so entity names survive tokenization whole
+    instead of shattering into fragments (the miner once
+    surfaced "P 500" out of "S&P 500": & split the token and
+    the bigram "p 500" outlived the pieces). Edge punctuation
+    is stripped, a trailing period goes unless the token is an
+    abbreviation ("u.s." keeps its dots, matching STOPWORDS),
+    possessives fold to the bare noun ("china's" -> "china"),
+    and a spaced ampersand stays as its own glue token so
+    "Procter & Gamble" can form as a trigram.
+    """
+    out = []
+    for raw in _TOKEN_RE.findall(text.lower()):
+        if raw == "&":
+            out.append("&")
+            continue
+        tok = raw.strip("&'-")
+        if tok.endswith(".") and tok.count(".") == 1:
+            tok = tok[:-1]
+        if tok.endswith("'s") and len(tok) > 2:
+            tok = tok[:-2]
+        if tok and re.search(r"[a-z0-9]", tok):
+            out.append(tok)
+    return out
+
+
+def _display(tokens):
+    """Display form for a mined gram: Title Case per word, except
+    ampersand tokens — their letter segments are initialisms
+    and take full caps ("s&p" -> "S&P", "at&t" -> "AT&T",
+    "m&a" -> "M&A")."""
+    words = []
+    for tok in tokens:
+        if "&" in tok:
+            words.append("&".join(
+                seg.upper() if len(seg) <= 2 else seg.capitalize()
+                for seg in tok.split("&")))
+        elif tok == "&":
+            words.append("&")
+        else:
+            words.append(tok.title())
+    return " ".join(words)
+
+
 def _mine_phrases(headlines, known_terms, top_n=10, min_weight=4):
     """Frequent bigrams/trigrams across ALL headlines — the neutral
     discovery layer, co-equal with the lexicon: it runs on the whole
@@ -326,12 +378,20 @@ def _mine_phrases(headlines, known_terms, top_n=10, min_weight=4):
     term (either direction) are dropped as duplicates of it."""
     counts, example = Counter(), {}
     for h in headlines:
-        words = [w for w in re.findall(r"[a-z0-9$%.'-]+", h["title"].lower())]
+        words = _tokens(h["title"])
         grams = set()
         for n in (2, 3):
             for i in range(len(words) - n + 1):
                 gram = words[i:i + n]
                 if gram[0] in STOPWORDS or gram[-1] in STOPWORDS:
+                    continue
+                # The ampersand is glue, never an edge; and no
+                # single-letter token may sit in a gram — a lone
+                # letter is a fragment of something the tokenizer
+                # split (the "p" of the old "P 500"), not a topic.
+                if gram[0] == "&" or gram[-1] == "&":
+                    continue
+                if any(len(w) == 1 and w.isalpha() for w in gram):
                     continue
                 grams.add(" ".join(gram))
         for gram in grams:
@@ -368,7 +428,8 @@ def _mine_phrases(headlines, known_terms, top_n=10, min_weight=4):
             continue
         if any(_overlaps(t["term"]) for t in mined):
             continue
-        mined.append({"term": gram.title(), "weight": weight,
+        mined.append({"term": _display(gram.split(" ")),
+                      "weight": weight,
                       "example_headline": example[gram],
                       "group": _family_of(gram), "mined": True})
     return mined

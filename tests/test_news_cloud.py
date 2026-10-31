@@ -2,7 +2,8 @@
 mining, boilerplate filter), and the embeddable frame HTML.
 All offline — synthetic headlines only."""
 from toolbox.DataZoo.market.news_cloud import (
-    _family_of, _mine_phrases, _parse_date, cloud_html, extract_topics)
+    _display, _family_of, _mine_phrases, _parse_date, _tokens,
+    cloud_html, extract_topics)
 
 
 def _heads(title, n, source="Test"):
@@ -31,6 +32,36 @@ def test_mining_finds_uncovered_phrase():
     heads = _heads("Jio Platforms unveils new data centre plan", 5)
     mined = _mine_phrases(heads, known_terms=[])
     assert any(m["term"] == "Jio Platforms" for m in mined)
+
+
+def test_tokens_keep_ampersand_entities_whole():
+    toks = _tokens("S&P 500 slips as AT&T weighs M&A curbs in China")
+    assert "s&p" in toks and "at&t" in toks and "m&a" in toks
+    assert "s" not in toks and "p" not in toks
+    assert _tokens("China's exports rise") == ["china", "exports", "rise"]
+    assert _tokens("Procter & Gamble rises") == [
+        "procter", "&", "gamble", "rises"]
+
+
+def test_display_ampersand_initialisms():
+    assert _display(["s&p", "500"]) == "S&P 500"
+    assert _display(["at&t"]) == "AT&T"
+    assert _display(["procter", "&", "gamble"]) == "Procter & Gamble"
+    assert _display(["tech", "selloff"]) == "Tech Selloff"
+
+
+def test_mining_renders_sp_500_not_p_500():
+    heads = _heads("S&P 500 falls as megacap tech slides again", 6)
+    terms = [m["term"] for m in _mine_phrases(heads, known_terms=[])]
+    assert "S&P 500" in terms
+    assert "P 500" not in terms
+    assert not any(t.startswith("P 500") for t in terms)
+
+
+def test_mining_spaced_ampersand_trigram():
+    heads = _heads("Procter & Gamble raises outlook on demand", 6)
+    terms = [m["term"] for m in _mine_phrases(heads, known_terms=[])]
+    assert "Procter & Gamble" in terms
 
 
 def test_mining_filters_boilerplate():
