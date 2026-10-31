@@ -5,11 +5,14 @@ import pandas as pd
 import pytest
 
 from toolbox.DataZoo.market.strategies import (
+    COMBO_STRATEGY_NAMES,
     STRATEGY_NAMES,
     clean_covariance,
     clean_mean,
+    estimate_inputs,
     james_stein,
     log_returns,
+    resolve_strategy,
     snapshot_weights,
     strategy_weights,
     walk_forward_backtest,
@@ -166,3 +169,58 @@ def test_log_returns_shape():
     prices = _prices(n=100)
     R = log_returns(prices)
     assert len(R) == 99 and R.shape[1] == prices.shape[1]
+
+
+def test_resolve_strategy_names():
+    assert resolve_strategy("1/N") == ("1/N", None, None)
+    assert resolve_strategy("Average") == ("Average", None, None)
+    assert resolve_strategy("Max Sharpe (raw × sample)") == (
+        "Max Sharpe", "sample", "sample")
+    assert resolve_strategy("Max Sharpe (BBP × JS)") == (
+        "Max Sharpe", "bbp", "james_stein")
+    assert resolve_strategy("Max Sharpe (BBP × BS)") == (
+        "Max Sharpe", "bbp", "bayes_stein")
+    assert resolve_strategy("Min variance (raw)") == (
+        "Min variance", "sample", None)
+    assert resolve_strategy("NCO (BBP)") == ("NCO", "bbp", None)
+    with pytest.raises(ValueError):
+        resolve_strategy("Max Sharpe (LW × BS)")
+    with pytest.raises(ValueError):
+        resolve_strategy("Bogus")
+
+
+def test_combo_names_cover_the_demoed_grid():
+    assert len(COMBO_STRATEGY_NAMES) == 17
+    assert len(set(COMBO_STRATEGY_NAMES)) == 17
+    for name in COMBO_STRATEGY_NAMES:
+        resolve_strategy(name)  # every listed name must resolve
+
+
+def test_snapshot_combo_rows_match_their_own_pair():
+    R = _returns(n=300)
+    names = ["Max Sharpe (BBP × BS)", "Min variance (raw)", "Average"]
+    W, _info = snapshot_weights(R, "sample", "sample", 0.0, names)
+    mu, S, _i = estimate_inputs(R, "bbp", "bayes_stein", 0.0)
+    want = strategy_weights("Max Sharpe", R, S, mu, 0.0)
+    np.testing.assert_allclose(W.loc["Max Sharpe (BBP × BS)"].values,
+                               want, atol=1e-12)
+    mu0, S0, _i0 = estimate_inputs(R, "sample", "sample", 0.0)
+    want0 = strategy_weights("Min variance", R, S0, mu0, 0.0)
+    np.testing.assert_allclose(W.loc["Min variance (raw)"].values,
+                               want0, atol=1e-12)
+    np.testing.assert_allclose(
+        W.loc["Average"].values,
+        W.drop(index="Average").mean().values, atol=1e-12)
+    assert list(W.index) == names  # combo display order, Average last
+
+
+def test_backtest_combo_strategies_run():
+    prices = _prices(n=400)
+    names = ["Max Sharpe (raw × JS)", "Max Sharpe (BBP × BS)",
+             "Min variance (BBP)", "Average"]
+    out = walk_forward_backtest(prices, strategies=names,
+                                cov_method="bbp", mean_method="bayes_stein",
+                                seed=126, hold=21)
+    assert out is not None
+    assert set(out["returns"].columns) == set(names)
+    assert set(out["stats"].index) == set(names)

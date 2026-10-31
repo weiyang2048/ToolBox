@@ -15,11 +15,14 @@ universes of ETFs / stocks:
   the grand mean (the briefs' cleaner), Jorion's Bayes–Stein, and
   the grand mean itself (full shrinkage).
 - **Strategies** — long-only, fully invested (``w >= 0``,
-  ``sum w = 1``), solved from the *cleaned* inputs the caller chose:
-  1/N, minimum variance, maximum diversification, NCO (nested
-  clustered optimisation), HRP, risk parity (ERC), minimum CVaR
-  (95%), maximum Sharpe (tangency), and the ensemble Average of the
-  selected rules.
+  ``sum w = 1``), solved from *cleaned* inputs: 1/N, minimum
+  variance, maximum diversification, NCO (nested clustered
+  optimisation), HRP, risk parity (ERC), minimum CVaR (95%),
+  maximum Sharpe (tangency), and the ensemble Average of the
+  selected rules. A strategy may also be named as a *combination*
+  (:data:`COMBO_STRATEGY_NAMES`) that carries its own cleaning
+  pair — the briefs' allocation-table convention — in which case
+  the caller's pair is only the fallback for unqualified names.
 - **Backtest** — walk-forward with an expanding estimation window,
   monthly-style rebalancing every ``hold`` days, weights estimated
   on log returns up to each rebalance close only (no lookahead),
@@ -68,6 +71,74 @@ STRATEGY_NAMES = (
     "Max Sharpe",
     "Average",
 )
+
+# Combination strategies (user direction 2026-10-31): a strategy may
+# carry its own cleaning pair in its name, exactly as the briefs'
+# allocation tables name their rows — "Max Sharpe (BBP × BS)" is the
+# tangency portfolio on the BBP covariance with Bayes–Stein means.
+# The pair in the name overrides the caller's (cov_method,
+# mean_method); an unqualified name — and HRP / Risk parity, which
+# are named bare — falls back to the caller's pair for the missing
+# component.
+_COV_SHORT = {"sample": "raw", "bbp": "BBP"}
+_MEAN_SHORT = {"sample": "sample", "james_stein": "JS",
+               "bayes_stein": "BS"}
+_COV_FROM_SHORT = {v: k for k, v in _COV_SHORT.items()}
+_MEAN_FROM_SHORT = {v: k for k, v in _MEAN_SHORT.items()}
+_GRID_COVS = ("sample", "bbp")
+_GRID_MEANS = ("sample", "james_stein", "bayes_stein")
+_COV_ONLY_RULES = ("Min variance", "Max diversification", "NCO")
+
+COMBO_STRATEGY_NAMES = (
+    tuple(f"Max Sharpe ({_COV_SHORT[c]} × {_MEAN_SHORT[m]})"
+          for c in _GRID_COVS for m in _GRID_MEANS)
+    + tuple(f"{rule} ({_COV_SHORT[c]})"
+            for rule in _COV_ONLY_RULES for c in _GRID_COVS)
+    + ("1/N", "HRP", "Risk parity", "Min CVaR", "Average")
+)
+
+
+def resolve_strategy(name: str) -> tuple[str, str | None, str | None]:
+    """``(base_rule, cov_method, mean_method)`` for a strategy name.
+
+    A ``None`` component falls back to the caller's pair. Bare base
+    names resolve to ``(name, None, None)`` — ``"Average"`` likewise
+    (the ensemble layer handles it). Raises ValueError on an unknown
+    name or qualifier.
+    """
+    if name in STRATEGY_NAMES:
+        return name, None, None
+    if " (" in name and name.endswith(")"):
+        base, qual = name[:-1].split(" (", 1)
+        if base == "Max Sharpe" and " × " in qual:
+            cov_s, mean_s = qual.split(" × ")
+            if cov_s in _COV_FROM_SHORT and mean_s in _MEAN_FROM_SHORT:
+                return (base, _COV_FROM_SHORT[cov_s],
+                        _MEAN_FROM_SHORT[mean_s])
+        if base in _COV_ONLY_RULES and qual in _COV_FROM_SHORT:
+            return base, _COV_FROM_SHORT[qual], None
+    raise ValueError(f"Unknown strategy: {name}")
+
+
+def _strategy_order(names: list[str]) -> list[str]:
+    """Display order for a set of strategy names.
+
+    A pure combination set follows :data:`COMBO_STRATEGY_NAMES`.
+    Otherwise bare-name order rules, with each combination placed
+    at its base rule's position (Average, a bare name, stays last).
+    """
+    if all(s in COMBO_STRATEGY_NAMES for s in names):
+        rank = {s: i for i, s in enumerate(COMBO_STRATEGY_NAMES)}
+        return sorted(names, key=rank.__getitem__)
+    base_rank = {s: i for i, s in enumerate(STRATEGY_NAMES)}
+    combo_rank = {s: i for i, s in enumerate(COMBO_STRATEGY_NAMES)}
+
+    def key(s: str) -> tuple[int, int]:
+        base = s if s in STRATEGY_NAMES else resolve_strategy(s)[0]
+        return (base_rank.get(base, len(base_rank)),
+                combo_rank.get(s, -1))
+
+    return sorted(names, key=key)
 
 # ---------------------------------------------------------------------------
 # Returns and risk-free
@@ -570,19 +641,29 @@ def snapshot_weights(R: pd.DataFrame, cov_method: str, mean_method: str,
                      rf_d: float, strategies: list[str]) -> tuple[pd.DataFrame, dict]:
     """Current weights of ``strategies`` on the window ``R``.
 
-    Returns ``(weights, info)``: weights indexed by strategy with one
-    column per ticker (Average = mean of the other selected rules),
-    and the estimation diagnostics from :func:`estimate_inputs`.
+    Combination names (see :data:`COMBO_STRATEGY_NAMES`) are solved
+    on their own cleaning pair; ``(cov_method, mean_method)`` is the
+    fallback pair for unqualified names. Inputs are estimated once
+    per distinct pair in play. Returns ``(weights, info)``: weights
+    indexed by strategy with one column per ticker (Average = mean
+    of the other selected rules), and the estimation diagnostics of
+    the fallback pair.
     """
-    mu, S, info = estimate_inputs(R, cov_method, mean_method, rf_d)
+    mu0, S0, info = estimate_inputs(R, cov_method, mean_method, rf_d)
     tickers = list(R.columns)
     rows = {}
     base = [s for s in strategies if s != "Average"]
+    cache = {(cov_method, mean_method): (mu0, S0)}
     for name in base:
-        rows[name] = strategy_weights(name, R, S, mu, rf_d)
+        rule, cov_m, mean_m = resolve_strategy(name)
+        pair = (cov_m or cov_method, mean_m or mean_method)
+        if pair not in cache:
+            cache[pair] = estimate_inputs(R, pair[0], pair[1], rf_d)[:2]
+        mu, S = cache[pair]
+        rows[name] = strategy_weights(rule, R, S, mu, rf_d)
     if "Average" in strategies and base:
         rows["Average"] = np.mean([rows[s] for s in base], axis=0)
-    order = [s for s in STRATEGY_NAMES if s in rows]
+    order = _strategy_order(list(rows))
     W = pd.DataFrame({t: [rows[s][i] for s in order]
                       for i, t in enumerate(tickers)}, index=order)
     return W, info
@@ -690,7 +771,10 @@ def walk_forward_backtest(
     Expanding estimation window seeded after ``seed`` log returns;
     rebalances every ``hold`` trading days. At each rebalance the
     inputs are estimated on all log returns up to that close (no
-    lookahead), the snapshot cost of trading from the drifted
+    lookahead) — once per distinct cleaning pair in play, since
+    combination strategy names carry their own pair and
+    ``(cov_method, mean_method)`` is only the fallback for
+    unqualified names — the snapshot cost of trading from the drifted
     weights to the new weights — ``Σ|Δw| × cost_bps`` — is charged
     to the first day of the new holding period, and weights drift
     with daily simple returns in between. ``Average`` (when
@@ -712,6 +796,7 @@ def walk_forward_backtest(
     rf_all = rf_daily_series(logret.index, rf_annual_pct)
     tickers = list(px.columns)
     base = [s for s in strategies if s != "Average"]
+    resolved = {name: resolve_strategy(name) for name in base}
     labels = list(base) + (["Average"] if "Average" in strategies and base else [])
     if not labels:
         return None
@@ -724,8 +809,16 @@ def walk_forward_backtest(
         end = min(start + hold, len(simple))
         R = logret.iloc[:start]
         rf_win = float(rf_all[:start].mean())
-        mu, S, _info = estimate_inputs(R, cov_method, mean_method, rf_win)
-        W = {name: strategy_weights(name, R, S, mu, rf_win) for name in base}
+        cache: dict[tuple[str, str], tuple[np.ndarray, np.ndarray]] = {}
+        W = {}
+        for name in base:
+            rule, cov_m, mean_m = resolved[name]
+            pair = (cov_m or cov_method, mean_m or mean_method)
+            if pair not in cache:
+                cache[pair] = estimate_inputs(R, pair[0], pair[1],
+                                              rf_win)[:2]
+            mu, S = cache[pair]
+            W[name] = strategy_weights(rule, R, S, mu, rf_win)
         if "Average" in labels:
             W["Average"] = np.mean([W[s] for s in base], axis=0)
         n_reb += 1
