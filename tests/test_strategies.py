@@ -7,11 +7,13 @@ import pytest
 from toolbox.DataZoo.market.strategies import (
     COMBO_STRATEGY_NAMES,
     STRATEGY_NAMES,
+    bbp_clean_corr,
     clean_covariance,
     clean_mean,
     estimate_inputs,
     james_stein,
     log_returns,
+    nlshrink_eigs,
     resolve_strategy,
     snapshot_weights,
     strategy_weights,
@@ -37,7 +39,8 @@ def _prices(n=500, p=8):
     return 100.0 * np.exp(R.cumsum())
 
 
-@pytest.mark.parametrize("method", ["sample", "bbp", "clip", "ledoit_wolf"])
+@pytest.mark.parametrize("method", ["sample", "bbp", "clip", "ledoit_wolf",
+                                    "nlshrink"])
 def test_clean_covariance_psd_and_symmetric(method):
     R = _returns()
     S, info = clean_covariance(R, method)
@@ -63,6 +66,46 @@ def test_bbp_and_clip_recover_factor_better_than_sample():
     # BBP must at least move the spectrum: largest eigenvalue shrunk.
     assert info_bbp["eigenvalues"][0] >= np.linalg.eigvalsh(
         info_bbp["corr_clean"])[-1] - 1e-8
+
+
+def test_nlshrink_matches_rie_oracle_on_identity_population():
+    # With population = identity the covariance LSD *is* Marčenko–
+    # Pastur, so the analytic BBP/RIE map applied to the covariance
+    # eigenvalues is the exact oracle; the kernel plug-in must land
+    # close to it (gap = kernel smoothing bias, shrinking in n).
+    rng = np.random.default_rng(42)
+    n, p = 1000, 100
+    X = rng.normal(size=(n, p))
+    S0 = np.cov(X.T) * (n - 1) / n
+    lam = np.linalg.eigvalsh(S0)
+    d_nls = np.sort(nlshrink_eigs(lam, n))
+    d_oracle = np.sort(np.linalg.eigvalsh(bbp_clean_corr(S0, p / n)))
+    rel = np.linalg.norm(d_nls - d_oracle) / np.linalg.norm(d_oracle)
+    assert rel < 0.06
+    # Trace is (asymptotically) preserved by the RIE map.
+    assert d_nls.sum() == pytest.approx(lam.sum(), rel=0.02)
+
+
+def test_nlshrink_scale_equivariance_and_compression():
+    lam = np.array([0.02, 0.05, 0.1, 0.3, 0.8, 1.5, 3.0, 6.0])
+    a = nlshrink_eigs(lam, 500)
+    b = nlshrink_eigs(37.0 * lam, 500)
+    assert np.allclose(b, 37.0 * a, rtol=1e-8)
+    # Nonlinear shrinkage compresses: top eigenvalue down, bottom up.
+    rng = np.random.default_rng(5)
+    X = rng.normal(0, 0.01, size=(800, 12))
+    S0 = np.cov(X.T) * (799 / 800)
+    raw = np.linalg.eigvalsh(S0)
+    d = np.sort(nlshrink_eigs(raw, 800))
+    assert d[-1] < raw[-1]
+    assert d[0] > raw[0]
+
+
+def test_nlshrink_q_ge_1_falls_back_to_ledoit_wolf():
+    R = _returns(n=30, p=40)
+    S_nls, _ = clean_covariance(R, "nlshrink")
+    S_lw, _ = clean_covariance(R, "ledoit_wolf")
+    assert np.allclose(S_nls, S_lw)
 
 
 def test_james_stein_shrinks_toward_grand_mean():

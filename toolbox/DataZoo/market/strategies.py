@@ -8,8 +8,11 @@ universes of ETFs / stocks:
   the default truth. Cleaners: BBP (the feasible rotationally
   invariant estimator of Bun–Bouchaud–Potters, via the hybrid
   Stieltjes transform — the briefs' cleaner), Marčenko–Pastur
-  eigenvalue clipping (Laloux et al.), and Ledoit–Wolf linear
-  shrinkage to a scaled identity.
+  eigenvalue clipping (Laloux et al.), Ledoit–Wolf linear shrinkage
+  to a scaled identity, and Ledoit–Péché nonlinear shrinkage —
+  the same RIE shrinkage function as BBP but with the Stieltjes
+  transform estimated from the *covariance* spectrum itself, so
+  it works in covariance space where the MP law does not apply.
 - **Mean cleaning** — sample means are the noisiest input in
   Markowitz (Merton 1980). Cleaners: James–Stein shrinkage toward
   the grand mean (the briefs' cleaner), Jorion's Bayes–Stein, and
@@ -46,12 +49,13 @@ from scipy.spatial.distance import squareform
 
 TRADING_DAYS = 252
 
-COV_METHODS = ("sample", "bbp", "clip", "ledoit_wolf")
+COV_METHODS = ("sample", "bbp", "clip", "ledoit_wolf", "nlshrink")
 COV_LABELS = {
     "sample": "Sample (raw)",
     "bbp": "BBP — RIE cleaned",
     "clip": "MP clipping",
     "ledoit_wolf": "Ledoit–Wolf",
+    "nlshrink": "Nonlinear shrinkage (covariance)",
 }
 MEAN_METHODS = ("sample", "james_stein", "bayes_stein", "grand_mean")
 MEAN_LABELS = {
@@ -229,6 +233,80 @@ def clip_clean_corr(C: np.ndarray, q: float) -> np.ndarray:
     return 0.5 * (out + out.T)
 
 
+_SQRT5 = np.sqrt(5.0)
+
+
+def _epanechnikov(u: np.ndarray) -> np.ndarray:
+    """Epanechnikov kernel ``(3/(4√5))(1 − u²/5)`` on ``|u| ≤ √5``."""
+    k = (3.0 / (4.0 * _SQRT5)) * (1.0 - u ** 2 / 5.0)
+    return np.where(np.abs(u) <= _SQRT5, k, 0.0)
+
+
+def nlshrink_eigs(lam: np.ndarray, n: int) -> np.ndarray:
+    """Ledoit–Péché nonlinear shrinkage of covariance eigenvalues.
+
+    Each sample eigenvalue ``λ`` of the covariance matrix is replaced
+    by the rotationally invariant oracle shrinkage
+    ``ξ = λ / |1 − q + qλ·g(λ)|²``, ``q = p/n``, with ``g`` the
+    Stieltjes (resolvent) transform of the *limiting spectral
+    distribution of the covariance eigenvalues themselves* — the
+    same shrinkage function as :func:`bbp_clean_corr`, differing
+    only in the plug-in for ``g``: BBP uses the analytic Marčenko–
+    Pastur transform, valid only for a correlation spectrum (unit
+    population variances), while here ``g`` is estimated from the
+    sample spectrum by Epanechnikov kernel smoothing (bandwidth
+    ``h = n^(−1/3)`` in units of the mean eigenvalue, so the map is
+    exactly scale-equivariant), with the principal-value part by
+    trapezoid integration of the smoothed density against the
+    singularity-subtracted kernel — the numerical scheme of
+    :func:`_stieltjes_hybrid`. This is the Ledoit–Wolf (2017, 2020)
+    nonlinear shrinkage estimator; it shrinks each eigenvalue by its
+    own amount, unlike the single-intensity linear shrinkage of
+    :func:`ledoit_wolf_cov`. Requires ``q < 1``.
+    """
+    lam = np.sort(np.maximum(np.asarray(lam, dtype=float), 0.0))
+    p = len(lam)
+    q = p / n
+    scale = lam.mean()
+    if scale <= 0:
+        return lam
+    x = lam / scale
+    h = n ** (-1.0 / 3.0)
+    # Smoothed spectral density at the sample eigenvalues.
+    f = _epanechnikov((x[:, None] - x[None, :]) / h).mean(axis=1) / h
+    # Principal value of g on a fine grid over the kernel support.
+    a = x.min() - _SQRT5 * h - 1e-9
+    b = x.max() + _SQRT5 * h + 1e-9
+    grid = np.linspace(a, b, 4097)
+    dx = grid[1] - grid[0]
+    fg = _epanechnikov((grid[:, None] - x[None, :]) / h).mean(axis=1) / h
+    g = np.empty(p)
+    for i in range(p):
+        denom = x[i] - grid
+        near = np.abs(denom) < 1e-12
+        integrand = np.where(
+            near, 0.0, (fg - f[i]) / np.where(near, 1.0, denom))
+        g[i] = ((0.5 * integrand[0] + integrand[1:-1].sum()
+                 + 0.5 * integrand[-1]) * dx
+                + f[i] * np.log((x[i] - a) / (b - x[i])))
+    xi = x / ((1.0 - q + q * x * g) ** 2 + (np.pi * q * x * f) ** 2)
+    return xi * scale
+
+
+def nlshrink_cov(R: pd.DataFrame) -> tuple[np.ndarray, float]:
+    """Nonlinear-shrinkage covariance of log returns ``R``.
+
+    Returns ``(covariance, bandwidth)`` with the bandwidth in units
+    of the mean sample eigenvalue. Uses the population (1/n) sample
+    covariance, as in the original estimator.
+    """
+    S0 = sample_cov(R)
+    vals, vecs = np.linalg.eigh(S0)
+    d = nlshrink_eigs(vals, len(R))
+    S = (vecs * d) @ vecs.T
+    return 0.5 * (S + S.T), float(len(R) ** (-1.0 / 3.0))
+
+
 def ledoit_wolf_cov(R: pd.DataFrame) -> tuple[np.ndarray, float]:
     """Ledoit–Wolf (2004) covariance: sample shrunk to a scaled identity.
 
@@ -285,10 +363,12 @@ def clean_covariance(R: pd.DataFrame, method: str) -> tuple[np.ndarray, dict]:
         "cond_raw": float(np.linalg.cond(S_raw)),
         "method": method,
         "shrinkage": None,
+        "bandwidth": None,
     }
     if method == "sample" or q >= 1.0:
-        # RIE/clipping need q < 1; with q >= 1 the sample matrix is
-        # singular and the honest fallbacks are shrinkage or sample.
+        # RIE/clipping/NLS need q < 1; with q >= 1 the sample matrix
+        # is singular and the honest fallbacks are shrinkage or
+        # sample.
         S = S_raw if method == "sample" else ledoit_wolf_cov(R)[0]
         if method == "ledoit_wolf":
             S, info["shrinkage"] = ledoit_wolf_cov(R)
@@ -296,6 +376,8 @@ def clean_covariance(R: pd.DataFrame, method: str) -> tuple[np.ndarray, dict]:
         S = np.outer(vols, vols) * bbp_clean_corr(C, q)
     elif method == "clip":
         S = np.outer(vols, vols) * clip_clean_corr(C, q)
+    elif method == "nlshrink":
+        S, info["bandwidth"] = nlshrink_cov(R)
     else:  # ledoit_wolf
         S, info["shrinkage"] = ledoit_wolf_cov(R)
     S = 0.5 * (S + S.T)
