@@ -326,6 +326,14 @@ def _fetch_row(sym):
     return got, closes
 
 
+def group_year_average(rows):
+    """A group's average Year % CAGR: the mean of its rows'
+    year values, rows without one excluded; None when no row
+    carries a year value."""
+    ys = [r["year"] for r in rows if r.get("year") is not None]
+    return sum(ys) / len(ys) if ys else None
+
+
 def fetch_board(now=None, groups=None):
     """Pull the whole board, or only the named groups.
 
@@ -339,7 +347,9 @@ def fetch_board(now=None, groups=None):
     group name to its rows ({sym, label, dec, kind, last, chg, pct,
     mtime, week..y10, ls}); rows within each group are sorted by the
     Year % column (CAGR) descending, rows without a year value last
-    (user request 2026-10-30); available counts the lines
+    (user request 2026-10-30), and the groups themselves are
+    ordered by their average Year % CAGR descending, year-less
+    groups last (user request 2026-10-31); available counts the lines
     with a last price (live quote, or the completed-close fallback
     below); notes carries one human-readable line per
     degraded contract, for callers that log. Each row's "ls" is the
@@ -425,6 +435,16 @@ def fetch_board(now=None, groups=None):
         # configured contract order.
         rows.sort(key=lambda r: (r["year"] is None,
                                  -(r["year"] or 0.0)))
+    # Group order is by the group's average Year % CAGR, best
+    # first (user request 2026-10-31): consumers render groups
+    # in data order within each of their boards, so this one
+    # sort orders every board. Stable — ties and groups with
+    # no year values keep the configured group order, last.
+    def _group_key(item):
+        avg = group_year_average(item[1])
+        return (avg is None, -(avg or 0.0))
+
+    data = dict(sorted(data.items(), key=_group_key))
     return {"asof": asof, "source": "Yahoo Finance",
             "available": available, "data": data, "notes": notes}
 

@@ -148,6 +148,30 @@ def test_rows_sorted_by_year_within_group(monkeypatch):
                       "Platinum (PL)"]
 
 
+def test_groups_ordered_by_average_year(monkeypatch):
+    """Groups come back ordered by their average Year % CAGR
+    descending (user request 2026-10-31); a group with no year
+    values keeps its configured place among the year-less,
+    last. Flat series everywhere except Metals (rising) and
+    Energy (falling): averages Metals > flat 0 > Energy."""
+    closes = {sym: [100.0] * 300
+              for _g, contracts in fb.all_groups()
+              for sym, _l, _d, _k in contracts}
+    for sym in ("GC=F", "SI=F", "HG=F", "PL=F", "PA=F"):
+        closes[sym] = [100.0 + i for i in range(300)]
+    for sym in ("CL=F", "BZ=F", "NG=F", "HO=F", "RB=F"):
+        closes[sym] = [400.0 - i for i in range(300)]
+    rep = _fake_fetch_board(monkeypatch, closes)
+    order = list(rep["data"])
+    assert order[0] == "Metals"
+    assert order[-1] == "Energy"
+    assert fb.group_year_average(rep["data"]["Metals"]) > 0
+    assert fb.group_year_average(rep["data"]["Energy"]) < 0
+    assert fb.group_year_average([{"year": None}]) is None
+    assert fb.group_year_average(
+        [{"year": 10.0}, {"year": None}, {"year": 20.0}]) == 15.0
+
+
 def test_board_scales():
     data = {"G": [{"pct": -4.0, "week": 8.0, "month": None,
                    "quarter": -2.0, "year": 1.0, "y3": None,
