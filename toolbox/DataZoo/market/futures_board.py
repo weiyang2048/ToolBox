@@ -124,6 +124,7 @@ GROUPS = [
         ("6A=F", "Australian dollar (6A)", 4),
         ("6C=F", "Canadian dollar (6C)", 4),
         ("6S=F", "Swiss franc (6S)", 4),
+        ("RMB=F", "Renminbi (RMB)", 5),
     ]),
 ]
 
@@ -324,7 +325,8 @@ def fetch_board(now=None):
     mtime, week..y10, ls}); rows within each group are sorted by the
     Year % column (CAGR) descending, rows without a year value last
     (user request 2026-10-30); available counts the lines
-    with a live quote; notes carries one human-readable line per
+    with a last price (live quote, or the completed-close fallback
+    below); notes carries one human-readable line per
     degraded contract, for callers that log. Each row's "ls" is the
     (0x20, 20x50, 50x200) trend-state triple from ls_states() on the
     same completed closes the horizons use.
@@ -333,7 +335,7 @@ def fetch_board(now=None):
     asof = now.strftime("%A %B %d, %Y, %H:%M %Z")
     data, notes, available = {}, [], 0
     # The two HTTP requests per line (quote + 12y history) are
-    # I/O-bound; fetch all 66 lines concurrently. Futures are awaited
+    # I/O-bound; fetch all lines concurrently. Futures are awaited
     # in symbol order, so notes and data come out in board order.
     order = [(gname, sym, label, dec, kind)
              for gname, contracts in all_groups()
@@ -369,6 +371,21 @@ def fetch_board(now=None):
                 notes.append("futures: %s history unavailable (%s)"
                              % (sym, closes))
                 closes = []
+            if got is None and len(closes) >= 2 and closes[-2]:
+                # No live quote but a usable history (Yahoo serves
+                # some contracts, e.g. RMB=F, as ALTSYMBOL: full
+                # history, no quote meta): fall back to the last two
+                # completed closes — the cash convention, last vs
+                # the prior completed close. The day change then
+                # lags one session behind live-quoted rows.
+                row["last"] = closes[-1]
+                row["chg"] = closes[-1] - closes[-2]
+                row["pct"] = 100.0 * row["chg"] / closes[-2]
+                if dec is None:  # cash index: decimals from its level
+                    row["dec"] = cash_dec(row["last"])
+                available += 1
+                notes.append("futures: %s quote unavailable; last/day "
+                             "from completed closes" % sym)
             row["ls"] = ls_states(closes)
             for key, n in HORIZONS:
                 if len(closes) > n:

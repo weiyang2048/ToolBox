@@ -14,7 +14,7 @@ def test_board_layout():
         "Crypto", "Metals", "Energy", "Grains & oilseeds",
         "Livestock", "Softs", "Rates", "FX",
     ]
-    assert sum(len(c) for _g, c in groups) == 66
+    assert sum(len(c) for _g, c in groups) == 67
     kinds = {k for _g, c in groups for _s, _l, _d, k in c}
     assert kinds == {"future", "cash"}
     us = dict(groups)["US Equity"]
@@ -71,7 +71,7 @@ def test_fetch_board_assembly(monkeypatch):
     closes["ES=F"] = [100.0] * 299 + [110.0]   # +10% week, +10% day base
     del closes["ETH=F"]                        # unavailable -> null row
     rep = _fake_fetch_board(monkeypatch, closes)
-    assert rep["available"] == 65
+    assert rep["available"] == 66
     assert list(rep["data"]) == [g for g, _c in fb.all_groups()]
     es = rep["data"]["US Equity"][0]
     assert es["label"] == "S&P 500 (ES)"
@@ -82,6 +82,31 @@ def test_fetch_board_assembly(monkeypatch):
                if r["sym"] == "ETH=F")   # null rows sort last
     assert eth["last"] is None and eth["pct"] is None
     assert eth["label"] == "Ether CME (ETH)"   # null row keeps its slot
+
+
+def test_fetch_board_quote_fallback(monkeypatch):
+    """A contract with history but no live quote (Yahoo ALTSYMBOL,
+    e.g. RMB=F) takes last/day from its last two completed closes
+    instead of rendering a null row."""
+    closes = {sym: [100.0] * 300
+              for _g, contracts in fb.all_groups()
+              for sym, _l, _d, _k in contracts}
+    closes["RMB=F"] = [100.0] * 299 + [101.0]
+
+    def fake_fetch(sym):
+        if sym == "RMB=F":
+            return None
+        c = closes[sym]
+        return c[-1] * 1.01, c[-1], 1_700_000_000
+
+    monkeypatch.setattr(fb, "fetch", fake_fetch)
+    monkeypatch.setattr(fb, "history", lambda sym: closes.get(sym) or [])
+    rep = fb.fetch_board(now=datetime.datetime(2026, 10, 29, 12, 0))
+    rmb = next(r for r in rep["data"]["FX"] if r["sym"] == "RMB=F")
+    assert rmb["last"] == 101.0
+    assert abs(rmb["pct"] - 1.0) < 1e-9     # 101 vs prior close 100
+    assert rep["available"] == 67
+    assert any("RMB=F" in n for n in rep["notes"])
 
 
 def test_rows_sorted_by_year_within_group(monkeypatch):
