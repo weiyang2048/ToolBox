@@ -347,7 +347,10 @@ def fetch_board(now=None, groups=None):
     same completed closes the horizons use.
     """
     now = now or datetime.datetime.now(CT)
-    asof = now.strftime("%A %B %d, %Y, %H:%M %Z")
+    # Same short format as the news cloud's stamp
+    # ("%a %b %-d, %-I:%M %p CT") — one as-of format
+    # across the Markets page (user direction 2026-10-31).
+    asof = now.strftime("%a %b %-d, %-I:%M %p CT")
     data, notes, available = {}, [], 0
     # The two HTTP requests per line (quote + 12y history) are
     # I/O-bound; fetch all lines concurrently. Futures are awaited
