@@ -317,8 +317,14 @@ def _fetch_row(sym):
     return got, closes
 
 
-def fetch_board(now=None):
-    """Pull the whole board.
+def fetch_board(now=None, groups=None):
+    """Pull the whole board, or only the named groups.
+
+    groups (user request 2026-10-30, for the dashboard's
+    progressive rendering): an iterable of group names; when
+    given, only those groups are fetched and returned in data,
+    so a consumer can render each board as its data lands
+    instead of waiting on the full board.
 
     Returns {asof, source, available, data, notes}: data maps each
     group name to its rows ({sym, label, dec, kind, last, chg, pct,
@@ -337,9 +343,11 @@ def fetch_board(now=None):
     # The two HTTP requests per line (quote + 12y history) are
     # I/O-bound; fetch all lines concurrently. Futures are awaited
     # in symbol order, so notes and data come out in board order.
+    wanted = set(groups) if groups is not None else None
     order = [(gname, sym, label, dec, kind)
              for gname, contracts in all_groups()
-             for sym, label, dec, kind in contracts]
+             for sym, label, dec, kind in contracts
+             if wanted is None or gname in wanted]
     with ThreadPoolExecutor(max_workers=8) as pool:
         futs = {sym: pool.submit(_fetch_row, sym)
                 for _, sym, _, _, _ in order}

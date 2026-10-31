@@ -109,6 +109,22 @@ def test_fetch_board_quote_fallback(monkeypatch):
     assert any("RMB=F" in n for n in rep["notes"])
 
 
+def test_fetch_board_subset_groups(monkeypatch):
+    """groups= restricts the fetch and the returned data to the
+    named groups (the dashboard's per-board progressive loads)."""
+    closes = {sym: [100.0] * 300
+              for _g, contracts in fb.all_groups()
+              for sym, _l, _d, _k in contracts}
+    _fake_fetch_board(monkeypatch, closes)
+    rep = fb.fetch_board(now=datetime.datetime(2026, 10, 29, 12, 0),
+                         groups=("FX",))
+    assert list(rep["data"]) == ["FX"]
+    assert rep["available"] == 8
+    assert [r["sym"] for r in rep["data"]["FX"]] == [
+        sym for _g, contracts in fb.all_groups() if _g == "FX"
+        for sym, _l, _d, _k in contracts]
+
+
 def test_rows_sorted_by_year_within_group(monkeypatch):
     """Within each group, rows sort by Year % CAGR descending and a
     row without a year value goes last (user request 2026-10-30)."""
