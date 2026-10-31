@@ -84,12 +84,14 @@ STRATEGY_NAMES = (
 # mean_method); an unqualified name — and HRP / Risk parity, which
 # are named bare — falls back to the caller's pair for the missing
 # component.
-_COV_SHORT = {"sample": "raw", "bbp": "BBP"}
+_COV_SHORT = {"sample": "raw", "bbp": "BBP", "ledoit_wolf": "LW"}
 _MEAN_SHORT = {"sample": "sample", "james_stein": "JS",
                "bayes_stein": "BS"}
 _COV_FROM_SHORT = {v: k for k, v in _COV_SHORT.items()}
 _MEAN_FROM_SHORT = {v: k for k, v in _MEAN_SHORT.items()}
-_GRID_COVS = ("sample", "bbp")
+# Ledoit–Wolf joined the grid 2026-10-31 at the user's direction
+# ("Add lw — this will increase strategy list"): 17 → 23 names.
+_GRID_COVS = ("sample", "bbp", "ledoit_wolf")
 _GRID_MEANS = ("sample", "james_stein", "bayes_stein")
 _COV_ONLY_RULES = ("Min variance", "Max diversification", "NCO")
 

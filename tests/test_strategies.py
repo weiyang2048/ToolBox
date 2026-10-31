@@ -226,27 +226,39 @@ def test_resolve_strategy_names():
     assert resolve_strategy("Min variance (raw)") == (
         "Min variance", "sample", None)
     assert resolve_strategy("NCO (BBP)") == ("NCO", "bbp", None)
+    assert resolve_strategy("Max Sharpe (LW × BS)") == (
+        "Max Sharpe", "ledoit_wolf", "bayes_stein")
+    assert resolve_strategy("Min variance (LW)") == (
+        "Min variance", "ledoit_wolf", None)
     with pytest.raises(ValueError):
-        resolve_strategy("Max Sharpe (LW × BS)")
+        resolve_strategy("Max Sharpe (XX × BS)")
     with pytest.raises(ValueError):
         resolve_strategy("Bogus")
 
 
 def test_combo_names_cover_the_demoed_grid():
-    assert len(COMBO_STRATEGY_NAMES) == 17
-    assert len(set(COMBO_STRATEGY_NAMES)) == 17
+    # 23 since Ledoit–Wolf joined the grid (user direction
+    # 2026-10-31): Max Sharpe 3 covs x 3 means, the three cov-only
+    # rules x 3 covs, plus the five bare names.
+    assert len(COMBO_STRATEGY_NAMES) == 23
+    assert len(set(COMBO_STRATEGY_NAMES)) == 23
     for name in COMBO_STRATEGY_NAMES:
         resolve_strategy(name)  # every listed name must resolve
 
 
 def test_snapshot_combo_rows_match_their_own_pair():
     R = _returns(n=300)
-    names = ["Max Sharpe (BBP × BS)", "Min variance (raw)", "Average"]
+    names = ["Max Sharpe (BBP × BS)", "Min variance (raw)",
+             "Min variance (LW)", "Average"]
     W, _info = snapshot_weights(R, "sample", "sample", 0.0, names)
     mu, S, _i = estimate_inputs(R, "bbp", "bayes_stein", 0.0)
     want = strategy_weights("Max Sharpe", R, S, mu, 0.0)
     np.testing.assert_allclose(W.loc["Max Sharpe (BBP × BS)"].values,
                                want, atol=1e-12)
+    mu_lw, S_lw, _i_lw = estimate_inputs(R, "ledoit_wolf", "sample", 0.0)
+    want_lw = strategy_weights("Min variance", R, S_lw, mu_lw, 0.0)
+    np.testing.assert_allclose(W.loc["Min variance (LW)"].values,
+                               want_lw, atol=1e-12)
     mu0, S0, _i0 = estimate_inputs(R, "sample", "sample", 0.0)
     want0 = strategy_weights("Min variance", R, S0, mu0, 0.0)
     np.testing.assert_allclose(W.loc["Min variance (raw)"].values,
