@@ -5,8 +5,9 @@ chart API) for 40 futures contracts in nine groups — US Equity,
 Crypto, Metals, Energy, Grains & oilseeds, Livestock, Softs,
 Rates, FX — plus two cash groups rendered
 immediately after US Equity: the 11 iShares global sector ETFs
-(Global sectors; see GLOBAL_SECTORS) and 15 cash indices in a
-single International equity group (Yahoo serves no usable non-US
+(Global sectors; see GLOBAL_SECTORS) and 15 cash indices in
+three regional groups — Asia-Pacific, Europe, Americas (Yahoo
+serves no usable non-US
 equity futures, so the international lines are the cash markets
 themselves), and returns the board as plain data. This module is the single implementation shared by every
 consumer (report generators and dashboards alike); renderers format
@@ -132,15 +133,12 @@ GROUPS = [
 # in parentheses; the Euro Stoxx 50 is a region — the Eurozone — and
 # is labelled as such. dec is None: these indices span ~5,400 to
 # ~204,000, so decimals are chosen from the index level (cash_dec).
+# Regional order as directed by the user 2026-10-31 (the single
+# International equity group split three ways). Asia-Pacific is
+# a region: Australia sits in it, while its continent for label
+# coloring stays Oceania (user correction 2026-10-30).
 CASH_GROUPS = [
-    ("International equity", [
-        ("^GSPTSE", "TSX Composite (Canada)", None),
-        ("^BVSP", "Bovespa (Brazil)", None),
-        ("^MXX", "IPC (Mexico)", None),
-        ("^STOXX50E", "Euro Stoxx 50 (Eurozone)", None),
-        ("^GDAXI", "DAX (Germany)", None),
-        ("^FTSE", "FTSE 100 (United Kingdom)", None),
-        ("^FCHI", "CAC 40 (France)", None),
+    ("Asia-Pacific", [
         ("^N225", "Nikkei 225 (Japan)", None),
         ("^HSI", "Hang Seng (Hong Kong)", None),
         ("000001.SS", "SSE Composite (China)", None),
@@ -149,6 +147,17 @@ CASH_GROUPS = [
         ("^NSEI", "Nifty 50 (India)", None),
         ("^STI", "Straits Times (Singapore)", None),
         ("^AXJO", "S&P/ASX 200 (Australia)", None),
+    ]),
+    ("Europe", [
+        ("^STOXX50E", "Euro Stoxx 50 (Eurozone)", None),
+        ("^GDAXI", "DAX (Germany)", None),
+        ("^FTSE", "FTSE 100 (United Kingdom)", None),
+        ("^FCHI", "CAC 40 (France)", None),
+    ]),
+    ("Americas", [
+        ("^GSPTSE", "TSX Composite (Canada)", None),
+        ("^BVSP", "Bovespa (Brazil)", None),
+        ("^MXX", "IPC (Mexico)", None),
     ]),
 ]
 
@@ -191,10 +200,10 @@ def cash_dec(last):
 def all_groups():
     """The board's groups in order, kind carried per contract.
 
-    Returns [(group name, [(symbol, label, dec, kind)])] — 11
-    groups, 66 lines. US Equity carries only the four broad index
-    futures; the two cash groups (Global sectors, then
-    International equity) follow it, then the remaining futures
+    Returns [(group name, [(symbol, label, dec, kind)])] — 13
+    groups, 67 lines. US Equity carries only the four broad index
+    futures; the cash groups (Global sectors, then Asia-Pacific,
+    Europe, Americas) follow it, then the remaining futures
     groups (the Commodity board's six, then Rates and FX).
     """
     out = []

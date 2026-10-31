@@ -10,7 +10,7 @@ def test_board_layout():
     assert [g for g, _c in groups] == [
         "US Equity",
         "Global sectors",
-        "International equity",
+        "Asia-Pacific", "Europe", "Americas",
         "Crypto", "Metals", "Energy", "Grains & oilseeds",
         "Livestock", "Softs", "Rates", "FX",
     ]
@@ -23,6 +23,13 @@ def test_board_layout():
     gs = dict(groups)["Global sectors"]
     assert len(gs) == 11
     assert all(k == "cash" for *_x, k in gs)
+    gd = dict(groups)
+    assert [len(gd[g]) for g in ("Asia-Pacific", "Europe",
+                                 "Americas")] == [8, 4, 3]
+    assert gd["Asia-Pacific"][-1][0] == "^AXJO"
+    assert all(k == "cash" for g in ("Asia-Pacific", "Europe",
+                                     "Americas")
+               for *_x, k in gd[g])
 
 
 def test_cash_dec():
