@@ -224,3 +224,29 @@ def test_backtest_combo_strategies_run():
     assert out is not None
     assert set(out["returns"].columns) == set(names)
     assert set(out["stats"].index) == set(names)
+
+
+def test_backtest_window_huge_equals_expanding():
+    prices = _prices(n=400)
+    names = ["Max Sharpe (BBP × BS)", "Min variance (raw)", "Average"]
+    kw = dict(strategies=names, cov_method="bbp",
+              mean_method="bayes_stein", seed=126, hold=21)
+    exp = walk_forward_backtest(prices, **kw)
+    huge = walk_forward_backtest(prices, window=10 ** 9, **kw)
+    pd.testing.assert_frame_equal(exp["returns"], huge["returns"])
+    assert exp["window"] is None and huge["window"] == 10 ** 9
+
+
+def test_backtest_window_rolling_keeps_oos_span():
+    prices = _prices(n=400)
+    names = ["Max Sharpe (BBP × BS)", "Average"]
+    kw = dict(strategies=names, cov_method="bbp",
+              mean_method="bayes_stein", seed=126, hold=21)
+    exp = walk_forward_backtest(prices, **kw)
+    roll = walk_forward_backtest(prices, window=126, **kw)
+    assert roll["oos_start"] == exp["oos_start"]
+    assert roll["oos_end"] == exp["oos_end"]
+    assert roll["n_rebalances"] == exp["n_rebalances"]
+    assert not np.allclose(roll["returns"].values, exp["returns"].values)
+    with pytest.raises(ValueError):
+        walk_forward_backtest(prices, window=0, **kw)

@@ -764,6 +764,7 @@ def walk_forward_backtest(
     seed: int = 126,
     hold: int = 21,
     cost_bps: float = 0.0,
+    window: int | None = None,
     rf_annual_pct: pd.Series | None = None,
 ) -> dict | None:
     """Walk-forward backtest of ``strategies`` on ``prices``.
@@ -781,6 +782,15 @@ def walk_forward_backtest(
     selected) holds the mean of the other selected rules' weights
     at each rebalance and is scored exactly like a rule.
 
+    ``window`` (user direction 2026-10-31) switches the estimation
+    to a rolling window: each rebalance then estimates on the
+    trailing ``window`` log returns — fewer while less history
+    exists — and the window-mean risk-free rate follows the same
+    slice. ``None`` (the default) is the expanding window and is
+    bit-identical to the pre-``window`` behavior. ``seed`` only
+    sets where out-of-sample scoring starts, so every
+    ``(seed, window)`` pair is valid.
+
     Returns ``None`` when the common history cannot seed plus hold.
     Otherwise a dict with the OOS daily ``returns`` and ``equity``
     frames, the ``stats`` frame (one row per strategy), the
@@ -790,6 +800,8 @@ def walk_forward_backtest(
     px = prices.dropna().sort_index()
     if len(px) < seed + hold + 1:
         return None
+    if window is not None and window < 1:
+        raise ValueError(f"window must be positive, got {window}")
     simple = px.pct_change().dropna()
     logret = np.log(px / px.shift(1)).dropna()
     simple = simple.loc[logret.index]
@@ -807,8 +819,9 @@ def walk_forward_backtest(
     n_reb = 0
     for start in range(seed, len(simple), hold):
         end = min(start + hold, len(simple))
-        R = logret.iloc[:start]
-        rf_win = float(rf_all[:start].mean())
+        lo = 0 if window is None else max(0, start - window)
+        R = logret.iloc[lo:start]
+        rf_win = float(rf_all[lo:start].mean())
         cache: dict[tuple[str, str], tuple[np.ndarray, np.ndarray]] = {}
         W = {}
         for name in base:
@@ -858,6 +871,7 @@ def walk_forward_backtest(
         "weights_history": weights_history,
         "oos_start": dates[0], "oos_end": dates[-1],
         "n_rebalances": n_reb, "seed": seed, "hold": hold,
+        "window": window,
         "cov_method": cov_method, "mean_method": mean_method,
         "cost_bps": cost_bps, "tickers": tickers,
     }
