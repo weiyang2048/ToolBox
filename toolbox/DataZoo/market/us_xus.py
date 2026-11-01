@@ -318,8 +318,9 @@ def render_us_xus(p):
         "Shift tape &nbsp;<b>%+.1f pts</b>" % p["spread_now"],
         "Ratio vs its 200-day &nbsp;<b>%+.1f%%</b>"
         % s["xus"]["vs200"],
-        "Last month &nbsp;US <b>%+.1f%%</b> · EM <b>%+.1f%%</b>"
-        % (r1m["SPY"], r1m["EEM"]),
+        "Last month &nbsp;US <b>%+.1f%%</b> · Dev <b>%+.1f%%</b>"
+        " · EM <b>%+.1f%%</b> · ex-US <b>%+.1f%%</b>"
+        % (r1m["SPY"], r1m["EFA"], r1m["EEM"], r1m["ACWX"]),
     ]
     chip_html = "".join(
         '<span style="background:#171512;border:1px solid '
