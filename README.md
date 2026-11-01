@@ -64,7 +64,10 @@ toolbox/
     random_folder_opener.py # random folder opener + Click CLI (cli.py)
   DataZoo/      # sample and synthetic datasets for demos and tests
     market/             # FearGreed, StockIndices, Yahoo prices, Zillow data,
-                        # futures board, QuantStats indicators (quantstats extra)
+                        # futures board, news cloud (+ headline links),
+                        # sentiment (Fear & Greed + gold), strategies
+                        # (covariance/mean cleaning, walk-forward backtest),
+                        # QuantStats indicators (quantstats extra)
     image/              # synthetic image data
   net/          # networking helpers (stdlib only)
     ssh_proxy_connect.py  # HTTP CONNECT ProxyCommand tunnel for ssh/git

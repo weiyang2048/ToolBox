@@ -62,7 +62,6 @@ def test_bbp_and_clip_recover_factor_better_than_sample():
     np.fill_diagonal(pop_corr, 1.0)
     R = _returns(n=n, p=p, seed=11)
     _, info_bbp = clean_covariance(R, "bbp")
-    C_sample = np.corrcoef(R.values.T)
     # BBP must at least move the spectrum: largest eigenvalue shrunk.
     assert info_bbp["eigenvalues"][0] >= np.linalg.eigvalsh(
         info_bbp["corr_clean"])[-1] - 1e-8

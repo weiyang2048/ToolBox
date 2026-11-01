@@ -41,7 +41,6 @@ matching the board's own day-change colors).
 """
 
 import json
-import math
 import os
 import re
 import subprocess

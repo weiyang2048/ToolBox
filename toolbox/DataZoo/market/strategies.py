@@ -775,7 +775,6 @@ def performance_stats(daily: np.ndarray, rf_daily: np.ndarray,
     total = float(eq[-1] - 1.0) if len(r) else 0.0
     cagr = float(eq[-1] ** (1.0 / years) - 1.0) if years > 0 and eq[-1] > 0 else 0.0
     sd = float(exc.std(ddof=1)) if len(exc) > 1 else 0.0
-    downside = exc[exc < 0]
     dsd = float(np.sqrt(np.mean(np.minimum(exc, 0.0) ** 2))) if len(exc) else 0.0
     max_dd = float(dd.min()) if len(dd) else 0.0
     return {
