@@ -381,6 +381,7 @@ def _mine_phrases(headlines, known_terms, top_n=10, min_weight=4):
     for can't hide a second theme. Phrases overlapping a lexicon
     term (either direction) are dropped as duplicates of it."""
     counts, example, example_link = Counter(), {}, {}
+    free_example, free_example_link = {}, {}
     for h in headlines:
         words = _tokens(h["title"])
         grams = set()
@@ -402,6 +403,14 @@ def _mine_phrases(headlines, known_terms, top_n=10, min_weight=4):
             counts[gram] += 1
             example.setdefault(gram, h["title"])
             example_link.setdefault(gram, h.get("link", ""))
+            # The first NON-paywalled example is tracked
+            # alongside: a mined topic's link prefers it (the
+            # representative rule in _representative, applied
+            # here at collection time).
+            if not _paywalled(h.get("source", "")):
+                free_example.setdefault(gram, h["title"])
+                free_example_link.setdefault(gram,
+                                             h.get("link", ""))
     # Template/boilerplate phrases are not topics: regional
     # editions carry formulaic headlines ("Q2 results 2026: X share
     # price ...") whose scaffolding would otherwise top the cloud.
@@ -462,10 +471,45 @@ def _mine_phrases(headlines, known_terms, top_n=10, min_weight=4):
             continue
         mined.append({"term": _display(gram.split(" ")),
                       "weight": weight,
-                      "example_headline": example[gram],
-                      "link": example_link.get(gram, ""),
+                      "example_headline": free_example.get(
+                          gram, example[gram]),
+                      "link": free_example_link.get(
+                          gram, example_link.get(gram, "")),
                       "group": _family_of(gram), "mined": True})
     return mined
+
+
+# ------------------------------------------------------------------
+# Representative link choice
+# ------------------------------------------------------------------
+# Outlets whose articles sit behind a paywall. A topic's link
+# prefers a non-paywalled source (user request 2026-11-01) and
+# falls back to a paywalled one only when no free source covers
+# the topic. Matched against the headline's source name — the
+# feed's name for direct feeds, the publisher for Google News.
+_PAYWALLED_PHRASES = ("wall street journal", "bloomberg",
+                      "financial times", "nikkei", "marketwatch",
+                      "barron", "seeking alpha", "economist",
+                      "new york times", "washington post",
+                      "telegraph", "fortune")
+_PAYWALLED_TOKENS = {"wsj", "ft"}
+
+
+def _paywalled(source):
+    s = (source or "").lower()
+    if any(p in s for p in _PAYWALLED_PHRASES):
+        return True
+    return any(tok in _PAYWALLED_TOKENS
+               for tok in re.split(r"[^a-z]+", s))
+
+
+def _representative(hits):
+    """The headline a topic links to: the first non-paywalled
+    hit, else the first hit."""
+    for h in hits:
+        if not _paywalled(h.get("source", "")):
+            return h
+    return hits[0]
 
 
 def extract_topics(headlines, max_topics=30, min_weight=2):
@@ -478,9 +522,10 @@ def extract_topics(headlines, max_topics=30, min_weight=2):
                 if any(_matches(p, h["title"].lower()) for p in patterns)]
         if len(hits) < min_weight:
             continue
+        rep = _representative(hits)
         topics.append({"term": term, "weight": len(hits),
-                       "example_headline": hits[0]["title"],
-                       "link": hits[0].get("link", ""),
+                       "example_headline": rep["title"],
+                       "link": rep.get("link", ""),
                        "group": group})
     topics += _mine_phrases(headlines, [t["term"] for t in topics])
     topics.sort(key=lambda t: (-t["weight"], t["term"]))
