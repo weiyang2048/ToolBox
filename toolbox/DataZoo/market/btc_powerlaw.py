@@ -206,7 +206,7 @@ def chart_png(data):
     last, floor, st = data["last"], data["floor"], data["stats"]
     b, b_r = st["slope"], st["ratio_slope"]
 
-    fig = plt.figure(figsize=(11, 8))
+    fig = plt.figure(figsize=(11, 7.4))
     gs = gridspec.GridSpec(2, 2, height_ratios=[1.6, 1],
                            hspace=0.08, wspace=0.22)
     ax1 = fig.add_subplot(gs[0, 0])
@@ -311,7 +311,7 @@ def chart_png(data):
                  datetime.datetime(2030, 12, 31))
     ax2.xaxis.set_major_locator(mdates.YearLocator(2))
     ax2.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
-    fig.tight_layout(rect=[0, 0, 1, 0.96])
+    fig.tight_layout(rect=[0, 0, 1, 0.95])
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=110)
     plt.close(fig)
