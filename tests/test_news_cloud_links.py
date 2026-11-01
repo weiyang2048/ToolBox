@@ -80,18 +80,7 @@ def test_linked_cloud_html_topics_are_clickable():
     assert "Select a topic to open a source article" in html
 
 
-def test_low_visibility_families_render_gray():
-    from toolbox.DataZoo.market.news_cloud_links import (
-        _contrast_on_white, _effective_gradient)
-    # The current palette: gold and teal light stops wash out
-    # on the white panel; the rest read fine.
-    assert _contrast_on_white("#D9A821") < 2.6   # commodities
-    assert _contrast_on_white("#35B5A8") < 2.6   # tech
-    assert _contrast_on_white("#A78BFA") > 2.6   # crypto
-    assert _effective_gradient("commodities") == ("#9AA0A6",
-                                                  "#5F6368")
-    assert _effective_gradient("tech") == ("#9AA0A6", "#5F6368")
-    assert _effective_gradient("macro") == ("#5B8DC9", "#173F6E")
+def test_word_gradients_carry_the_family_colors():
     from toolbox.DataZoo.market.news_cloud_links import (
         linked_cloud_html)
     topics = [{"term": "Gold", "weight": 9, "group": "commodities",
@@ -99,10 +88,24 @@ def test_low_visibility_families_render_gray():
               {"term": "Midterms", "weight": 18, "group": "macro",
                "example_headline": "y"}]
     html = linked_cloud_html(topics, [], caption=None)
-    # The rendered gradient defs carry the gray pair for the
-    # faint families and the true colors for the rest.
-    assert ('<linearGradient id="ncg-commodities" x1="0" y1="0" '
-            'x2="0" y2="1"><stop offset="15%" '
-            'stop-color="#9AA0A6"/>') in html
-    assert "#D9A821" not in html
-    assert "#173F6E" in html  # macro keeps its deep blue
+    # The words keep their family colors (a gray substitution
+    # for faint families was tried and reverted at the user's
+    # direction 2026-11-01).
+    assert 'stop-color="#D9A821"' in html  # commodities light
+    assert 'stop-color="#7A5C00"' in html  # commodities deep
+    assert 'stop-color="#173F6E"' in html  # macro deep
+
+
+def test_cloud_caption_text_uses_the_footnote_gray():
+    from toolbox.DataZoo.market.news_cloud_links import (
+        linked_cloud_html)
+    topics = [{"term": "Gold", "weight": 9, "group": "commodities",
+               "example_headline": "x"}]
+    html = linked_cloud_html(
+        topics, [], {"left": 'As of <span class="nc-hl">now</span>'})
+    # The muted text around the cloud (as-of line, window
+    # note, footer caption) uses the dashboard's canonical
+    # muted gray #9AA0A6 — the footnote gray the user picked
+    # (2026-11-01) — not the old tan #6F6555.
+    assert "#6F6555" not in html
+    assert html.count("#9AA0A6") >= 3

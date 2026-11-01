@@ -585,7 +585,7 @@ _FRAME_CSS = """
   border-bottom:2px solid #A67C00; padding-bottom:8px; }
 .nc-title { font-size:19px; letter-spacing:3.5px; color:#1D4E89;
   font-variant:small-caps; font-weight:700; }
-.nc-window { font-size:14px; color:#6F6555; font-style:italic; }
+.nc-window { font-size:14px; color:#9AA0A6; font-style:italic; }
 .nc-cloud { flex:1; display:flex; flex-wrap:wrap; align-items:center;
   align-content:center; justify-content:center; column-gap:26px; row-gap:8px;
   padding:10px 4px; }
@@ -594,7 +594,7 @@ _FRAME_CSS = """
   filter:drop-shadow(0 1px 1px rgba(35,34,31,.22)); }
 .nc-tilt { transform:rotate(-5deg); }
 .nc-foot { border-top:1px solid #D8CBB6; padding-top:8px; font-size:13.5px;
-  color:#6F6555; display:flex; justify-content:space-between; gap:16px; }
+  color:#9AA0A6; display:flex; justify-content:space-between; gap:16px; }
 .nc-hl { color:#FFB066; font-weight:700; }
 .nc-cloud a.nc-w { text-decoration:none; cursor:pointer; }
 .nc-cloud a.nc-w:hover { opacity:.72; }
