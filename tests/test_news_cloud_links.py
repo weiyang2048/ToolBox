@@ -81,8 +81,7 @@ def test_linked_cloud_html_topics_are_clickable():
 
 
 def test_word_gradients_carry_the_family_colors():
-    from toolbox.DataZoo.market.news_cloud_links import (
-        linked_cloud_html)
+    from toolbox.DataZoo.market.news_cloud_links import linked_cloud_html
     topics = [{"term": "Gold", "weight": 9, "group": "commodities",
                "example_headline": "x"},
               {"term": "Midterms", "weight": 18, "group": "macro",
@@ -97,8 +96,7 @@ def test_word_gradients_carry_the_family_colors():
 
 
 def test_cloud_caption_text_uses_the_footnote_gray():
-    from toolbox.DataZoo.market.news_cloud_links import (
-        linked_cloud_html)
+    from toolbox.DataZoo.market.news_cloud_links import linked_cloud_html
     topics = [{"term": "Gold", "weight": 9, "group": "commodities",
                "example_headline": "x"}]
     html = linked_cloud_html(
