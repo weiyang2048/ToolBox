@@ -295,6 +295,14 @@ def chart_png(data):
     ax1r.axvline(_lr_x, color="#b3543f", ls="--", lw=1.2)
     ax1r.text(_lr_x + pd.Timedelta(days=8), 20, "latest",
               color="#b3543f", fontsize=9, va="top")
+    # Source note, bottom-right in short lines that stay clear
+    # of the legend (which ends near x=0.58 of the panel).
+    ax1r.text(0.98, 0.02,
+              "BTC cap: blockchain.info samples,\n"
+              f"latest {st['ratio_date']} (~4\u20136d sampling)\n"
+              "Gold: GC=F \u00d7 WGC above-ground stock",
+              transform=ax1r.transAxes, fontsize=7.5, va="bottom",
+              ha="right", color="#777777")
     ax1r.set_ylabel("BTC \u00f7 gold market cap (%)", color="#B8860B")
     ax1r.tick_params(axis="y", colors="#B8860B")
     ax1r.set_title("BTC / gold market cap — power law", fontsize=10)
@@ -325,6 +333,13 @@ def chart_png(data):
     ax2.xaxis.set_major_locator(mdates.YearLocator(2))
     ax2.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
     fig.tight_layout(rect=[0, 0, 1, 0.95])
+    # tight_layout leaves ~120px of white on the right and
+    # ~65px at the bottom of the 1210x814 canvas (measured);
+    # pull the outer margins in (user request 2026-11-01).
+    # Ink margins measured after the change: left 81->17,
+    # right 120->11, bottom 67->34; nothing clipped.
+    fig.subplots_adjust(left=0.072, right=0.99, bottom=0.07,
+                        top=0.93)
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=110)
     plt.close(fig)
