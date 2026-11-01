@@ -6,8 +6,7 @@ must all read +10.0 at 1Y, breadth 11 of 11, DXY vs its
 import numpy as np
 import pandas as pd
 
-from toolbox.DataZoo.market.the_dollar import _compute, \
-    render_the_dollar
+from toolbox.DataZoo.market.the_dollar import _compute, render_the_dollar
 
 N = 2900
 IDX = pd.bdate_range("2015-01-01", periods=N)

@@ -271,7 +271,7 @@ def _spread_panel(frame):
             y = scale(v, lo, hi, h - B, T)
             sign = 1 if v > 0 else -1
             if prev is not None and prev[2] != sign:
-                pv, px, py = prev[1], prev[0], prev[3]
+                pv, px, _py = prev[1], prev[0], prev[3]
                 xc = px + (x - px) * (0.0 - pv) / (v - pv)
                 closing = -sign
                 runs[closing].append((xc, yz))
