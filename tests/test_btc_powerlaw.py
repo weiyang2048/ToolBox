@@ -34,3 +34,45 @@ def test_roll_corr_of_identical_series_is_one():
     assert len(out) > 0
     assert abs(out.iloc[-1] - 1.0) < 1e-9
 
+
+
+def test_with_retry_recovers_from_transient_429():
+    from urllib.error import HTTPError
+
+    calls = {"n": 0}
+
+    def flaky():
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise HTTPError("u", 429, "Too Many Requests",
+                            None, None)
+        return "ok"
+
+    assert bp._with_retry(flaky, "leg-x") == "ok"
+    assert calls["n"] == 3
+
+
+def test_with_retry_names_the_leg_on_final_failure():
+    import pytest
+
+    def bad():
+        raise ValueError("boom")
+
+    with pytest.raises(RuntimeError, match="leg-y: boom"):
+        bp._with_retry(bad, "leg-y")
+
+
+def test_with_retry_does_not_retry_permanent_http_errors():
+    from urllib.error import HTTPError
+
+    import pytest
+
+    calls = {"n": 0}
+
+    def gone():
+        calls["n"] += 1
+        raise HTTPError("u", 404, "Not Found", None, None)
+
+    with pytest.raises(RuntimeError, match="leg-z"):
+        bp._with_retry(gone, "leg-z")
+    assert calls["n"] == 1

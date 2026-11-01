@@ -97,24 +97,55 @@ def roll_corr(a, b_, win=63, minp=8):
     return a.rolling(f"{win}D", min_periods=minp).corr(b_).dropna()
 
 
+def _with_retry(fn, leg, attempts=3):
+    """Run one fetch leg, retrying transient HTTP errors (429 /
+    5xx) with backoff, and name the leg in any final failure so
+    a caller surfacing the error can say WHICH source failed.
+    (Added 2026-11-01: the deployed dashboard's power-law tab
+    failed with a bare "HTTP Error 429" — a rate limiter on the
+    cloud host's shared egress IP — and no leg identity.)"""
+    import time as _time
+    from urllib.error import HTTPError
+
+    delay = 1.5
+    for k in range(attempts):
+        try:
+            return fn()
+        except HTTPError as e:
+            if (e.code not in (429, 500, 502, 503, 504)
+                    or k == attempts - 1):
+                raise RuntimeError("%s: %s" % (leg, e)) from e
+            _time.sleep(delay)
+            delay *= 2.5
+        except Exception as e:
+            raise RuntimeError("%s: %s" % (leg, e)) from e
+
+
 def fetch_powerlaw():
     """Fetch all six sources and compute the chart payload + stats.
 
     Returns a dict consumed by chart_png() and by the page's stats
-    chips. Raises on any fetch failure — the caller isolates it.
+    chips. Each leg retries transient HTTP errors with backoff;
+    a final failure raises a RuntimeError naming the leg — the
+    caller isolates it.
     """
     p2 = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
+    # BTC trades 24/7: keep Yahoo's in-progress UTC-day bar
+    # (the shared equity-session truncation would end the
+    # series a day early, and two days early on weekends).
+    legs = [("yahoo BTC-USD",
+             lambda: yahoo_daily("BTC-USD", p2=p2,
+                                 include_partial=True)),
+            ("yahoo GLD", lambda: yahoo_daily("GLD", p2=p2)),
+            ("yahoo SPY", lambda: yahoo_daily("SPY", p2=p2)),
+            ("yahoo GC=F", lambda: yahoo_daily("GC=F", p2=p2)),
+            ("blockchain.info market-price", blockchain_btc),
+            ("blockchain.info market-cap", blockchain_marketcap)]
     with ThreadPoolExecutor(max_workers=6) as pool:
-        # BTC trades 24/7: keep Yahoo's in-progress UTC-day bar
-        # (the shared equity-session truncation would end the
-        # series a day early, and two days early on weekends).
-        jobs = [pool.submit(yahoo_daily, "BTC-USD", p2=p2,
-                            include_partial=True)]
-        jobs += [pool.submit(yahoo_daily, t, p2=p2)
-                 for t in ("GLD", "SPY", "GC=F")]
-        jobs += [pool.submit(blockchain_btc),
-                 pool.submit(blockchain_marketcap)]
-        btc, gld, spy, gold_oz, bdf, bmc = [f.result() for f in jobs]
+        jobs = [pool.submit(_with_retry, fn, leg)
+                for leg, fn in legs]
+        btc, gld, spy, gold_oz, bdf, bmc = [f.result()
+                                            for f in jobs]
 
     # --- extended fit on 2010+ history ---
     t = days_since_genesis(bdf.index)
