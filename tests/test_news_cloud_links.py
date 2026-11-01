@@ -72,6 +72,9 @@ def test_linked_cloud_html_topics_are_clickable():
     assert ('<a href="https://example.com/midterms" '
             'target="_blank"') in html
     assert "<title>Midterms headline</title>" in html
+    # The linked topic carries the dotted-underline clickability
+    # marker; the unlinked one gets neither anchor nor marker.
+    assert html.count('class="nc-link-line"') == 1
     # A topic without a link stays plain text — no empty anchor.
     assert html.count("<a href=") == 1
     assert "Select a topic to open a source article" in html

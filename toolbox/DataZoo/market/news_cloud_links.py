@@ -232,13 +232,35 @@ def linked_cloud_html(topics, edges, caption=None):
             # Clickable topic (user request 2026-11-01): the
             # word links to its representative source article;
             # the SVG <title> gives the headline as a tooltip.
+            # A solid underline in the word's own gradient
+            # indicates the clickability without relying on
+            # hover (the user asked for the indication itself;
+            # on mobile there is no hover). (A ↗ glyph at the
+            # word's corner and a dotted line both rendered too
+            # faint at cloud sizes — the solid underline is the
+            # legible form.)
+            px = sizes[t["term"]]
+            uw = max(10.0, n["w"] - 16)
+            # Solid deep-family hex, NOT the gradient: a line's
+            # bounding box has zero height, so the vertical
+            # objectBoundingBox gradient collapses and paints
+            # (almost) nothing.
+            deep = FAMILY_GRADIENTS.get(
+                t["group"], ("#8A7A5A", "#5A4A2A"))[1]
+            glyph_el = ('<line class="nc-link-line" x1="%.1f" '
+                        'x2="%.1f" y1="%.1f" y2="%.1f" '
+                        'stroke="%s" stroke-width="2.6" '
+                        'stroke-linecap="round" opacity="0.85"/>'
+                        % (n["x"] - uw / 2, n["x"] + uw / 2,
+                           n["y"] + px * 0.58, n["y"] + px * 0.58,
+                           deep))
             text_el = ('<a href="%s" target="_blank" '
                        'rel="noopener noreferrer"><title>%s</title>'
-                       '%s</a>'
+                       '%s%s</a>'
                        % (html_mod.escape(link, quote=True),
                           html_mod.escape(
                               t.get("example_headline", "")),
-                          text_el))
+                          text_el, glyph_el))
         texts.append(text_el)
     svg = ('<svg viewBox="0 0 %d %d" style="width:100%%;height:auto;'
            'display:block" xmlns="http://www.w3.org/2000/svg">'
