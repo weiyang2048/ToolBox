@@ -11,6 +11,11 @@ Sources (all public, no auth; fetched fresh on each call):
   Crypto https://api.alternative.me/fng/?limit=365
   Gold   GC=F gold futures via the Yahoo v8 chart API
 
+The CNN and crypto series build on the canonical raw fetchers in
+:mod:`toolbox.DataZoo.market.fear_greed` (``fetch_cnn_graph`` /
+``fetch_crypto_entries``) — one fetch layer for both modules; only
+the gold fetch and the chart rendering live here.
+
 :func:`fetch_sentiment` returns the three one-year series plus
 the latest readings; any source that fails is omitted (the
 caller degrades), and the result is None only when nothing at
@@ -27,15 +32,13 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
+from toolbox.DataZoo.market.fear_greed import (
+    fetch_cnn_graph,
+    fetch_crypto_entries,
+)
+
 CT = ZoneInfo("America/Chicago")
 UA = {"User-Agent": "toolbox-sentiment"}
-CNN_UA = {"User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                         "AppleWebKit/537.36 (KHTML, like Gecko) "
-                         "Chrome/120.0 Safari/537.36"),
-          "Accept": "application/json",
-          "Accept-Language": "en-US,en;q=0.9",
-          "Referer": "https://www.cnn.com/markets/fear-and-greed",
-          "Origin": "https://www.cnn.com"}
 
 CNN_COLOR = "#1a3c6e"
 CRYPTO_COLOR = "#8e44ad"
@@ -65,8 +68,7 @@ def _daily_series(vals, epochs, unit):
 
 def fetch_cnn():
     """CNN Fear & Greed (US stocks), last 365 days, trading days."""
-    d = _get_json("https://production.dataviz.cnn.io/index/"
-                  "fearandgreed/graphdata", headers=CNN_UA)
+    d = fetch_cnn_graph(timeout=30)
     pts = d["fear_and_greed_historical"]["data"]
     cut = (datetime.datetime.now(datetime.timezone.utc)
            - datetime.timedelta(days=365)).timestamp() * 1000
@@ -77,8 +79,7 @@ def fetch_cnn():
 
 def fetch_crypto():
     """Crypto Fear & Greed (alternative.me), 365 calendar days."""
-    d = _get_json("https://api.alternative.me/fng/?limit=365")
-    rows = sorted(d["data"], key=lambda r: int(r["timestamp"]))
+    rows = fetch_crypto_entries(365, timeout=30)
     return _daily_series([int(r["value"]) for r in rows],
                          [int(r["timestamp"]) for r in rows], "s")
 

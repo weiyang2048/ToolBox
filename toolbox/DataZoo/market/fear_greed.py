@@ -6,6 +6,12 @@ Exposes :class:`FearGreed`, a small wrapper around two sentiment sources:
 - **Crypto** via the public `alternative.me <https://alternative.me/crypto/fear-and-greed-index/>`_ API.
 
 Both history methods return series shaped for plotting (see :meth:`FearGreed.cnn_history`).
+
+The module also carries the package's one canonical raw fetch layer for
+these two sources — :func:`fetch_cnn_graph` and :func:`fetch_crypto_entries` —
+on which both :class:`FearGreed` and the dashboard sentiment block
+(``toolbox.DataZoo.market.sentiment``) build, so a URL or header fix ever
+lands in exactly one place.
 """
 
 from __future__ import annotations
@@ -19,8 +25,17 @@ import requests
 #: Timeout (seconds) for outbound HTTP requests.
 _REQUEST_TIMEOUT = 10
 
-#: CNN's data API rejects requests without a browser-like User-Agent.
-_BROWSER_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+#: CNN's data API rejects requests without a browser-like User-Agent and
+#: the CNN page context; this full header set is the canonical one.
+CNN_HEADERS = {
+    "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                   "AppleWebKit/537.36 (KHTML, like Gecko) "
+                   "Chrome/120.0 Safari/537.36"),
+    "Accept": "application/json",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://www.cnn.com/markets/fear-and-greed",
+    "Origin": "https://www.cnn.com",
+}
 
 #: CNN Fear & Greed graph data endpoint (headline index + all components).
 _CNN_URL = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
@@ -42,6 +57,28 @@ CNN_SERIES_LABELS = {
     "junk_bond_demand": "Junk Bond Demand (yield spread)",
     "safe_haven_demand": "Safe Haven Demand (stocks - bonds 20d)",
 }
+
+
+def fetch_cnn_graph(timeout: int = _REQUEST_TIMEOUT) -> dict:
+    """Raw CNN Fear & Greed graph payload (headline index + components).
+
+    The package's one canonical CNN fetch. Raises on transport or HTTP
+    failure; callers apply their own failure policy.
+    """
+    response = requests.get(_CNN_URL, headers=CNN_HEADERS, timeout=timeout)
+    response.raise_for_status()
+    return response.json()
+
+
+def fetch_crypto_entries(limit: int = 365, timeout: int = _REQUEST_TIMEOUT) -> list:
+    """Raw alternative.me Fear & Greed entries, oldest first.
+
+    The package's one canonical crypto fetch. Raises on transport or
+    HTTP failure; callers apply their own failure policy.
+    """
+    response = requests.get(_CRYPTO_URL, params={"limit": limit}, timeout=timeout)
+    response.raise_for_status()
+    return sorted(response.json()["data"], key=lambda e: int(e["timestamp"]))
 
 
 class FearGreed:
@@ -86,9 +123,7 @@ class FearGreed:
             / empty DataFrame on failure.
         """
         try:
-            response = requests.get(_CNN_URL, headers=_BROWSER_HEADERS, timeout=_REQUEST_TIMEOUT)
-            response.raise_for_status()
-            graph = response.json()
+            graph = fetch_cnn_graph()
         except Exception:
             return pd.DataFrame() if return_df else []
         history = []
@@ -135,9 +170,7 @@ class FearGreed:
             ordered oldest-to-newest, or an empty dict on failure.
         """
         try:
-            response = requests.get(_CRYPTO_URL, params={"limit": limit}, timeout=_REQUEST_TIMEOUT)
-            response.raise_for_status()
-            entries = sorted(response.json()["data"], key=lambda e: int(e["timestamp"]))
+            entries = fetch_crypto_entries(limit=limit)
             return {
                 "key": "crypto_fear_and_greed",
                 "label": "Crypto Fear & Greed Index (0-100)",

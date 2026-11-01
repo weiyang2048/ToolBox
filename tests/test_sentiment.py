@@ -4,6 +4,32 @@ import pandas as pd
 from toolbox.DataZoo.market import sentiment as sm
 
 
+def test_fetch_cnn_builds_on_canonical_graph(monkeypatch):
+    import datetime
+
+    now_ms = int(datetime.datetime.now(datetime.timezone.utc).timestamp() * 1000)
+    payload = {"fear_and_greed_historical": {"data": [
+        {"x": now_ms - 86_400_000, "y": 41.6},
+        {"x": now_ms, "y": 42.4},
+    ]}}
+    monkeypatch.setattr(sm, "fetch_cnn_graph", lambda timeout=30: payload)
+    out = sm.fetch_cnn()
+    assert out.tolist() == [42, 42]  # int-rounded, as before
+
+
+def test_fetch_crypto_builds_on_canonical_entries(monkeypatch):
+    entries = [
+        {"timestamp": "1767225600", "value": "30",
+         "value_classification": "Fear"},
+        {"timestamp": "1767312000", "value": "34",
+         "value_classification": "Fear"},
+    ]
+    monkeypatch.setattr(
+        sm, "fetch_crypto_entries", lambda limit, timeout=30: entries)
+    out = sm.fetch_crypto()
+    assert out.tolist() == [30, 34]
+
+
 def test_zone_boundaries():
     assert sm.zone(0) == "Extreme Fear"
     assert sm.zone(25) == "Extreme Fear"
