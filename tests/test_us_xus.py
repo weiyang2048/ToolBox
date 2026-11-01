@@ -5,9 +5,13 @@ the Dev 1y ratio change is (1.05/1.10 - 1), the spread equals
 the ACWX minus SPY 12-month spread exactly (6% - 10% on the
 final window, in points), and every ex-US ratio must sit
 BELOW its 200-day (a steady relative downtrend)."""
+import time
+from urllib.error import HTTPError
+
 import numpy as np
 import pandas as pd
 
+from toolbox.DataZoo.market import us_xus
 from toolbox.DataZoo.market.us_xus import _compute, render_us_xus
 
 N = 2900
@@ -39,3 +43,26 @@ def test_shift_math_on_synthetic():
     assert "US vs ex-US" not in out  # title lives in the tab
     assert "Shift tape" in out and "-4.0 pts" in out
     assert out.count("<svg") == 3
+
+
+def test_fetch_survives_a_transient_429_on_one_leg(monkeypatch):
+    """One leg (EEM) 429s once, then answers: the shared retry
+    absorbs it and the full payload still computes, with the
+    same values as the direct _compute test."""
+    monkeypatch.setattr(time, "sleep", lambda s: None)
+    annual = {"SPY": 0.10, "EFA": 0.05, "EEM": 0.0,
+              "ACWX": 0.06, "DX-Y.NYB": 0.02}
+    calls = {}
+
+    def fake(sym, p1=0, **kw):
+        calls[sym] = calls.get(sym, 0) + 1
+        if sym == "EEM" and calls[sym] == 1:
+            raise HTTPError("u", 429, "Too Many Requests",
+                            None, None)
+        return series(annual[sym])
+
+    monkeypatch.setattr(us_xus, "yahoo_daily", fake)
+    p = us_xus.fetch_us_xus()
+    assert calls["EEM"] == 2
+    assert p["ret1y"]["SPY"] == 10.0
+    assert p["spread_now"] == -4.0

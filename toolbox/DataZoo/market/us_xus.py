@@ -21,7 +21,7 @@ import html
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-from toolbox.DataZoo.market.yahoo_prices import yahoo_daily
+from toolbox.DataZoo.market.yahoo_prices import with_retry, yahoo_daily
 
 
 def scale(v, d0, d1, r0, r1):
@@ -49,13 +49,17 @@ _BLOCS = (("dev", "EFA", "Developed ex-US", "#2E8B57"),
 
 
 def fetch_us_xus():
-    """The shift payload. Raises on any failed leg."""
+    """The shift payload. Each leg retries transient HTTP
+    errors with backoff (the shared with_retry, as in the
+    power law); a final failure raises a RuntimeError naming
+    the leg."""
     import pandas as pd
 
     p1 = int(time.time()) - (10 * 365 + 320) * 86400
 
     def get(sym):
-        return sym, yahoo_daily(sym, p1=p1)
+        return sym, with_retry(
+            lambda: yahoo_daily(sym, p1=p1), "yahoo " + sym)
 
     with ThreadPoolExecutor(max_workers=5) as pool:
         got = dict(pool.map(get, _SYMS))

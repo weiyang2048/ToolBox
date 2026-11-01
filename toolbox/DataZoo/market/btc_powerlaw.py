@@ -35,7 +35,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from toolbox.DataZoo.market.yahoo_prices import fetch_json, yahoo_daily
+from toolbox.DataZoo.market.yahoo_prices import fetch_json, with_retry, yahoo_daily
 
 UA = "toolbox-datazoo"
 CT = ZoneInfo("America/Chicago")
@@ -97,28 +97,15 @@ def roll_corr(a, b_, win=63, minp=8):
     return a.rolling(f"{win}D", min_periods=minp).corr(b_).dropna()
 
 
-def _with_retry(fn, leg, attempts=3):
-    """Run one fetch leg, retrying transient HTTP errors (429 /
-    5xx) with backoff, and name the leg in any final failure so
-    a caller surfacing the error can say WHICH source failed.
-    (Added 2026-11-01: the deployed dashboard's power-law tab
-    failed with a bare "HTTP Error 429" — a rate limiter on the
-    cloud host's shared egress IP — and no leg identity.)"""
-    import time as _time
-    from urllib.error import HTTPError
-
-    delay = 1.5
-    for k in range(attempts):
-        try:
-            return fn()
-        except HTTPError as e:
-            if (e.code not in (429, 500, 502, 503, 504)
-                    or k == attempts - 1):
-                raise RuntimeError("%s: %s" % (leg, e)) from e
-            _time.sleep(delay)
-            delay *= 2.5
-        except Exception as e:
-            raise RuntimeError("%s: %s" % (leg, e)) from e
+# The legs' retry is the shared with_retry in yahoo_prices
+# (canonical there since 2026-11-01, when the dollar and
+# US vs ex-US fetchers adopted it). It began as this module's
+# private copy the same day: the deployed dashboard's
+# power-law tab had failed with a bare "HTTP Error 429" — a
+# rate limiter on the cloud host's shared egress IP — and no
+# leg identity. Kept under the original private name: the
+# call sites below and this module's tests use it unchanged.
+_with_retry = with_retry
 
 
 def fetch_powerlaw():

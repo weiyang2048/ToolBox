@@ -19,7 +19,7 @@ import html
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-from toolbox.DataZoo.market.yahoo_prices import yahoo_daily
+from toolbox.DataZoo.market.yahoo_prices import with_retry, yahoo_daily
 
 _MUTE = "#9AA0A6"
 _ACCENT = "#FFB066"
@@ -54,14 +54,18 @@ def svg_elems(w, h, body):
 
 
 def fetch_the_dollar():
-    """The dollar payload. Raises on any failed leg."""
+    """The dollar payload. Each leg retries transient HTTP
+    errors with backoff (the shared with_retry, as in the
+    power law); a final failure raises a RuntimeError naming
+    the leg."""
     import pandas as pd
 
     p1 = int(time.time()) - (10 * 365 + 320) * 86400
     syms = [s for s, _n in FX] + ["DX-Y.NYB"]
 
     def get(sym):
-        return sym, yahoo_daily(sym, p1=p1)
+        return sym, with_retry(
+            lambda: yahoo_daily(sym, p1=p1), "yahoo " + sym)
 
     with ThreadPoolExecutor(max_workers=6) as pool:
         got = dict(pool.map(get, syms))

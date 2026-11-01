@@ -8,6 +8,12 @@ first valid print. Session caching and universe filters stay with the caller.
 (adjclose events), with a complete-trading-day rule: the in-progress
 session's partial bar is dropped, so a series always ends at the latest
 complete trading day. :func:`fetch_json` is its JSON-over-HTTP helper.
+
+:func:`with_retry` is the one retry wrapper for fetch legs built on
+this layer: the dashboard's multi-leg fetchers (power law, the dollar,
+US vs ex-US) wrap each leg in it, so a transient HTTP 429/5xx from
+Yahoo's rate limiter is absorbed with backoff instead of failing a
+whole tab on a single leg.
 """
 
 from __future__ import annotations
@@ -88,6 +94,33 @@ def fetch_json(url, timeout=30, user_agent=None):
         url, headers={"User-Agent": user_agent or _USER_AGENT})
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return json.load(resp)
+
+
+def with_retry(fn, leg, attempts=3):
+    """Run one fetch leg, retrying transient HTTP errors (429 /
+    5xx) with backoff, and name the leg in any final failure so
+    a caller surfacing the error can say WHICH source failed.
+    The canonical retry for this layer — moved here 2026-11-01
+    from btc_powerlaw's private copy so every multi-leg fetcher
+    (power law, the dollar, US vs ex-US) shares the one
+    implementation: 3 attempts, delays 1.5s then 3.75s, and
+    only HTTP 429/500/502/503/504 are retried; anything else
+    fails at once, wrapped in a RuntimeError naming the leg."""
+    import time as _time
+    from urllib.error import HTTPError
+
+    delay = 1.5
+    for k in range(attempts):
+        try:
+            return fn()
+        except HTTPError as e:
+            if (e.code not in (429, 500, 502, 503, 504)
+                    or k == attempts - 1):
+                raise RuntimeError("%s: %s" % (leg, e)) from e
+            _time.sleep(delay)
+            delay *= 2.5
+        except Exception as e:
+            raise RuntimeError("%s: %s" % (leg, e)) from e
 
 
 def yahoo_daily(ticker, p1=0, p2=None, include_partial=False):
