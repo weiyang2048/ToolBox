@@ -69,27 +69,6 @@ def blockchain_marketcap():
     return _blockchain_chart("market-cap", "2013-01-01", "mc")
 
 
-def extend_cap_tail(mc, yahoo_price):
-    """Extend the sampled market-cap series to the latest date.
-
-    blockchain.info serves the market-cap chart only every
-    ~4-6 days, which leaves a cap-based series days stale. The
-    sampled history is kept exactly as served; only the short
-    tail past the last sample is bridged, scaling the last
-    sampled cap by Yahoo's daily price growth since that date
-    (circulating-supply growth over a few days is ~0.01%, far
-    below the chart's other errors). The next served sample
-    re-anchors the series.
-    """
-    last_d = mc.index[-1]
-    after = yahoo_price[yahoo_price.index > last_d]
-    if after.empty:
-        return mc
-    base = yahoo_price.loc[:last_d].iloc[-1]
-    tail = mc.iloc[-1] * after / base
-    return pd.concat([mc, tail])
-
-
 def days_since_genesis(idx):
     """Days since 2009-01-03 for each timestamp in idx (vectorized)."""
     return (idx.normalize() - pd.Timestamp(GENESIS)).days.to_numpy(float)
@@ -167,13 +146,11 @@ def fetch_powerlaw():
     eg = roll_corr(pre["BTC"], pre["GOLD"])
     es = roll_corr(pre["BTC"], pre["SPX"])
 
-    # --- BTC-to-gold market-cap ratio. The cap series carries
-    # a short price-scaled tail past the last blockchain.info
-    # sample, so the plotted line and the "now" reading run to
-    # the latest BTC date; the FIT stays on the sampled points
-    # exactly as before, so the published slope and flippening
-    # do not move with the bridge. ---
-    cap = extend_cap_tail(bmc["mc"], btc)
+    # --- BTC-to-gold market-cap ratio. The series is the
+    # sampled cap exactly as served and is dated by its last
+    # sample (user direction 2026-11-01: keep the date honest
+    # — no synthetic extension wearing a measured date). ---
+    cap = bmc["mc"]
     g_on_b = gold_oz.reindex(cap.index, method="ffill")
     gold_days = days_since_genesis(cap.index)
     gold_mc = g_on_b * (216265.0 + (gold_days - _ANCHOR_DAYS)
@@ -182,9 +159,8 @@ def fetch_powerlaw():
         [np.inf, -np.inf], np.nan).dropna()
     ratio = ratio[ratio > 0]
     ratio_now = float(ratio.iloc[-1])
-    sampled = ratio.reindex(bmc.index).dropna()
-    rt = days_since_genesis(sampled.index)
-    b_r, lnA_r, sigma_r = fit_power_law(rt, sampled.values)
+    rt = days_since_genesis(ratio.index)
+    b_r, lnA_r, sigma_r = fit_power_law(rt, ratio.values)
     r_days = pd.date_range("2013-01-01", end, freq="D")
     r_trend, r_lo, r_hi = trend_envelope(
         lnA_r, b_r, sigma_r, days_since_genesis(r_days))
@@ -301,7 +277,7 @@ def chart_png(data):
     ax1r.semilogy(ratio.index, ratio * 100, color="#B8860B", lw=1.4,
                   alpha=0.9, zorder=4,
                   label="BTC/gold market cap "
-                        f"(now {st['ratio_pct']:.2f}%)")
+                        f"(latest {st['ratio_pct']:.2f}%)")
     _lr_x, _lr_y = ratio.index[-1], float(ratio.iloc[-1] * 100)
     ax1r.plot([_lr_x], [_lr_y], marker="o", ms=6, color="#b3543f",
               markeredgecolor="white", markeredgewidth=1.0, zorder=6)
@@ -312,8 +288,12 @@ def chart_png(data):
                   bbox=dict(boxstyle="round,pad=0.3", facecolor="white",
                             alpha=0.9, edgecolor="#b3543f", lw=0.7),
                   arrowprops=dict(arrowstyle="-", color="#b3543f", lw=0.9))
-    ax1r.axvline(last, color="#b3543f", ls="--", lw=1.2)
-    ax1r.text(last + pd.Timedelta(days=8), 20, "today",
+    # The marker line sits on the ratio's own last (sampled)
+    # date and says "latest" — the shared `last` line used
+    # before sat days away from the point and called it
+    # "today", which the sampled date is not.
+    ax1r.axvline(_lr_x, color="#b3543f", ls="--", lw=1.2)
+    ax1r.text(_lr_x + pd.Timedelta(days=8), 20, "latest",
               color="#b3543f", fontsize=9, va="top")
     ax1r.set_ylabel("BTC \u00f7 gold market cap (%)", color="#B8860B")
     ax1r.tick_params(axis="y", colors="#B8860B")
