@@ -1,11 +1,21 @@
-"""Yahoo Finance adjusted close prices.
+"""Yahoo Finance price access — two paths in one canonical module.
 
 :func:`download_close_prices` batches a yfinance history request, keeps Close,
 and drops timezone info. Pass ``normalize=True`` to scale each series to its
 first valid print. Session caching and universe filters stay with the caller.
+
+:func:`yahoo_daily` is the single-ticker sibling on the raw v8 chart API
+(adjclose events), with a complete-trading-day rule: the in-progress
+session's partial bar is dropped, so a series always ends at the latest
+complete trading day. :func:`fetch_json` is its JSON-over-HTTP helper.
 """
 
 from __future__ import annotations
+
+import datetime
+import json
+import urllib.request
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 
@@ -67,3 +77,42 @@ def _strip_timezone(prices: pd.DataFrame) -> pd.DataFrame:
         prices = prices.copy()
         prices.index = index.tz_convert(None)
     return prices
+
+
+_USER_AGENT = "toolbox-datazoo"
+
+
+def fetch_json(url, timeout=30, user_agent=None):
+    """GET ``url`` and parse the JSON body. Closes the response handle."""
+    req = urllib.request.Request(
+        url, headers={"User-Agent": user_agent or _USER_AGENT})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.load(resp)
+
+
+def yahoo_daily(ticker, p1=0, p2=None):
+    """Daily adjusted closes for one ticker from Yahoo's v8 chart API.
+
+    Returns a tz-naive, midnight-normalized Series of adjclose values,
+    NaNs dropped. The in-progress session's partial bar is dropped:
+    the series ends at the latest COMPLETE trading day
+    (America/New_York); after the 16:00 ET close on a weekday, that
+    day's bar is complete and is kept.
+    """
+    if p2 is None:  # fetch through "now"; a fixed stamp would silently go stale
+        p2 = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
+    url = (f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
+           f"?period1={p1}&period2={p2}&interval=1d&events=adjclose")
+    d = fetch_json(url, 30)
+    r = d["chart"]["result"][0]
+    ts, closes = r["timestamp"], r["indicators"]["adjclose"][0]["adjclose"]
+    s = pd.Series(
+        closes,
+        index=pd.to_datetime(ts, unit="s", utc=True).tz_convert(None).normalize(),
+    ).dropna()
+    now_ny = datetime.datetime.now(datetime.timezone.utc).astimezone(
+        ZoneInfo("America/New_York"))
+    today_ny = pd.Timestamp(now_ny.date())
+    if now_ny.weekday() < 5 and now_ny.hour >= 16:
+        return s[s.index <= today_ny]
+    return s[s.index < today_ny]

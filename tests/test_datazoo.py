@@ -17,6 +17,7 @@ from toolbox.DataZoo.market import yahoo_prices as yp_module
 from toolbox.DataZoo.market.yahoo_prices import (
     download_close_prices,
     normalize_close_prices,
+    yahoo_daily,
 )
 from toolbox.DataZoo.market.zillow_data import ZillowZipData
 
@@ -117,6 +118,59 @@ def test_download_normalize_scales_to_first_print(monkeypatch):
 def test_download_empty_history_returns_empty(monkeypatch):
     monkeypatch.setattr(yp_module, "_history", lambda t, p: pd.DataFrame())
     assert download_close_prices(["AAA"]).empty
+
+
+# --- yahoo_daily / fetch_json (raw chart API) --------------------------------
+
+
+def _chart_payload():
+    def _ts(year, month, day):
+        dt = datetime.datetime(year, month, day, 14, 30, tzinfo=UTC)
+        return int(dt.timestamp())
+
+    return {"chart": {"result": [{
+        "timestamp": [_ts(2024, 1, 2), _ts(2024, 1, 3), _ts(2024, 1, 4)],
+        "indicators": {"adjclose": [{"adjclose": [100.0, None, 102.5]}]},
+    }]}}
+
+
+def test_yahoo_daily_parses_adjclose_drops_nan(monkeypatch):
+    seen = {}
+
+    def fake_fetch(url, timeout):
+        seen["url"] = url
+        return _chart_payload()
+
+    monkeypatch.setattr(yp_module, "fetch_json", fake_fetch)
+    out = yahoo_daily("SPY", p1=0, p2=1_800_000_000)
+    assert "chart/SPY" in seen["url"]
+    assert list(out.index) == [pd.Timestamp("2024-01-02"),
+                               pd.Timestamp("2024-01-04")]
+    assert out.index.tz is None
+    np.testing.assert_allclose(out, [100.0, 102.5])
+
+
+def test_fetch_json_parses_body_and_sends_user_agent(monkeypatch):
+    import io
+    import urllib.request
+
+    captured = {}
+
+    class _Resp:
+        def __enter__(self):
+            return io.BytesIO(b'{"a": 1}')
+
+        def __exit__(self, *exc):
+            return False
+
+    def fake_urlopen(req, timeout=None):
+        captured["ua"] = req.get_header("User-agent")
+        captured["timeout"] = timeout
+        return _Resp()
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    assert yp_module.fetch_json("https://example.test/x", 7) == {"a": 1}
+    assert captured == {"ua": "toolbox-datazoo", "timeout": 7}
 
 
 # --- StockIndices ----------------------------------------------------------

@@ -9,7 +9,9 @@ from toolbox.DataZoo.market.futures_board import (
 from toolbox.DataZoo.market.stock_indices import StockIndices
 from toolbox.DataZoo.market.yahoo_prices import (
     download_close_prices,
+    fetch_json,
     normalize_close_prices,
+    yahoo_daily,
 )
 from toolbox.DataZoo.market.zillow_data import ZillowZipData
 
@@ -20,6 +22,8 @@ __all__ = [
     "StockIndices",
     "download_close_prices",
     "normalize_close_prices",
+    "fetch_json",
+    "yahoo_daily",
     "fetch_board",
     "board_scales",
     "shade_zero",
