@@ -18,8 +18,8 @@ themselves — no topic-targeted search queries anywhere, since a
 query manufactures the ranking it claims to measure. The pool is
 a GLOBAL MIX (user direction 2026-10-30): the Google News
 Business section in six English regional editions, US outlet
-fronts, the BBC and Guardian business desks, Nikkei Asia and
-Livemint Markets. Topic
+fronts, the BBC and Guardian business desks, and Nikkei Asia.
+Topic
 extraction is two-layered and co-equal: a curated market lexicon
 (the Fed, earnings names, oil, gold, bitcoin, yields, ...) matched
 against every headline, plus data-driven bigram/trigram mining
@@ -86,7 +86,8 @@ FEEDS = [
     ("Yahoo ^IXIC", "https://feeds.finance.yahoo.com/rss/2.0/headline?s=%5EIXIC&region=US&lang=en-US"),
     # Regional section fronts (global-mix widening, 2026-10-30).
     ("Nikkei Asia", "https://asia.nikkei.com/rss/feed/nar"),
-    ("Livemint Markets", "https://www.livemint.com/rss/markets"),
+    # Livemint Markets was removed at the user's direction
+    # 2026-11-01.
     # SCMP's RSS answers with a bot-wall HTML page (checked
     # 2026-10-30) — omitted rather than carried as a dead entry.
 ]
