@@ -65,8 +65,29 @@ def blockchain_btc():
 
 
 def blockchain_marketcap():
-    """BTC market cap history (sparse, ~4-day spacing)."""
+    """BTC market cap history (sparse, ~6-day spacing)."""
     return _blockchain_chart("market-cap", "2013-01-01", "mc")
+
+
+def extend_cap_tail(mc, yahoo_price):
+    """Extend the sampled market-cap series to the latest date.
+
+    blockchain.info serves the market-cap chart only every
+    ~4-6 days, which leaves a cap-based series days stale. The
+    sampled history is kept exactly as served; only the short
+    tail past the last sample is bridged, scaling the last
+    sampled cap by Yahoo's daily price growth since that date
+    (circulating-supply growth over a few days is ~0.01%, far
+    below the chart's other errors). The next served sample
+    re-anchors the series.
+    """
+    last_d = mc.index[-1]
+    after = yahoo_price[yahoo_price.index > last_d]
+    if after.empty:
+        return mc
+    base = yahoo_price.loc[:last_d].iloc[-1]
+    tail = mc.iloc[-1] * after / base
+    return pd.concat([mc, tail])
 
 
 def days_since_genesis(idx):
@@ -105,8 +126,13 @@ def fetch_powerlaw():
     """
     p2 = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
     with ThreadPoolExecutor(max_workers=6) as pool:
-        jobs = [pool.submit(yahoo_daily, t, p2=p2)
-                for t in ("BTC-USD", "GLD", "SPY", "GC=F")]
+        # BTC trades 24/7: keep Yahoo's in-progress UTC-day bar
+        # (the shared equity-session truncation would end the
+        # series a day early, and two days early on weekends).
+        jobs = [pool.submit(yahoo_daily, "BTC-USD", p2=p2,
+                            include_partial=True)]
+        jobs += [pool.submit(yahoo_daily, t, p2=p2)
+                 for t in ("GLD", "SPY", "GC=F")]
         jobs += [pool.submit(blockchain_btc),
                  pool.submit(blockchain_marketcap)]
         btc, gld, spy, gold_oz, bdf, bmc = [f.result() for f in jobs]
@@ -141,17 +167,24 @@ def fetch_powerlaw():
     eg = roll_corr(pre["BTC"], pre["GOLD"])
     es = roll_corr(pre["BTC"], pre["SPX"])
 
-    # --- BTC-to-gold market-cap ratio ---
-    g_on_b = gold_oz.reindex(bmc.index, method="ffill")
-    gold_days = days_since_genesis(bmc.index)
+    # --- BTC-to-gold market-cap ratio. The cap series carries
+    # a short price-scaled tail past the last blockchain.info
+    # sample, so the plotted line and the "now" reading run to
+    # the latest BTC date; the FIT stays on the sampled points
+    # exactly as before, so the published slope and flippening
+    # do not move with the bridge. ---
+    cap = extend_cap_tail(bmc["mc"], btc)
+    g_on_b = gold_oz.reindex(cap.index, method="ffill")
+    gold_days = days_since_genesis(cap.index)
     gold_mc = g_on_b * (216265.0 + (gold_days - _ANCHOR_DAYS)
                         / 365.25 * 3738.0) * OZT_PER_TONNE
-    ratio = (bmc["mc"] / gold_mc).replace(
+    ratio = (cap / gold_mc).replace(
         [np.inf, -np.inf], np.nan).dropna()
     ratio = ratio[ratio > 0]
     ratio_now = float(ratio.iloc[-1])
-    rt = days_since_genesis(ratio.index)
-    b_r, lnA_r, sigma_r = fit_power_law(rt, ratio.values)
+    sampled = ratio.reindex(bmc.index).dropna()
+    rt = days_since_genesis(sampled.index)
+    b_r, lnA_r, sigma_r = fit_power_law(rt, sampled.values)
     r_days = pd.date_range("2013-01-01", end, freq="D")
     r_trend, r_lo, r_hi = trend_envelope(
         lnA_r, b_r, sigma_r, days_since_genesis(r_days))

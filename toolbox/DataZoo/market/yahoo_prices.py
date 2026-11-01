@@ -90,7 +90,7 @@ def fetch_json(url, timeout=30, user_agent=None):
         return json.load(resp)
 
 
-def yahoo_daily(ticker, p1=0, p2=None):
+def yahoo_daily(ticker, p1=0, p2=None, include_partial=False):
     """Daily adjusted closes for one ticker from Yahoo's v8 chart API.
 
     Returns a tz-naive, midnight-normalized Series of adjclose values,
@@ -98,6 +98,11 @@ def yahoo_daily(ticker, p1=0, p2=None):
     the series ends at the latest COMPLETE trading day
     (America/New_York); after the 16:00 ET close on a weekday, that
     day's bar is complete and is kept.
+
+    ``include_partial=True`` skips that equity-session rule and
+    keeps every bar Yahoo serves, including the in-progress one —
+    the right choice for 24/7 instruments (crypto), whose current
+    UTC-day bar is the standard "today" bar on every crypto chart.
     """
     if p2 is None:  # fetch through "now"; a fixed stamp would silently go stale
         p2 = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
@@ -110,6 +115,8 @@ def yahoo_daily(ticker, p1=0, p2=None):
         closes,
         index=pd.to_datetime(ts, unit="s", utc=True).tz_convert(None).normalize(),
     ).dropna()
+    if include_partial:
+        return s
     now_ny = datetime.datetime.now(datetime.timezone.utc).astimezone(
         ZoneInfo("America/New_York"))
     today_ny = pd.Timestamp(now_ny.date())
