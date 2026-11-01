@@ -37,7 +37,10 @@ def test_lexicon_topics_and_groups():
 def test_mining_finds_uncovered_phrase():
     heads = _heads("Jio Platforms unveils new data centre plan", 5)
     mined = _mine_phrases(heads, known_terms=[])
-    assert any(m["term"] == "Jio Platforms" for m in mined)
+    # Since the 2026-11-01 fragment suppression, the miner
+    # returns the maximal phrase, not its bigram fragment.
+    assert any(m["term"].startswith("Jio Platforms")
+               for m in mined)
 
 
 def test_tokens_keep_ampersand_entities_whole():
@@ -59,7 +62,10 @@ def test_display_ampersand_initialisms():
 def test_mining_renders_sp_500_not_p_500():
     heads = _heads("S&P 500 falls as megacap tech slides again", 6)
     terms = [m["term"] for m in _mine_phrases(heads, known_terms=[])]
-    assert "S&P 500" in terms
+    # Maximal-phrase mining (2026-11-01): the topic is the
+    # whole "S&P 500 Falls"; the point of this test stands —
+    # the tokenizer never splits "S&P" into a "P 500" fragment.
+    assert "S&P 500 Falls" in terms
     assert "P 500" not in terms
     assert not any(t.startswith("P 500") for t in terms)
 
@@ -137,3 +143,27 @@ def test_sizes_spread_is_dramatic():
     assert 30 <= s["mid"] <= 36 and 16 <= s["small"] <= 20
     assert s["big"] - s["small"] >= 40
 
+
+
+def test_mining_suppresses_bigram_fragments_of_a_trigram():
+    # The 2026-11-01 live case: every "protests turn" and
+    # "turn violent" headline was the single phrase "protests
+    # turn violent" — only the whole phrase is a topic.
+    heads = _heads("Protests turn violent in France", 4)
+    mined = {m["term"] for m in _mine_phrases(heads, known_terms=[])}
+    assert "Protests Turn Violent" in mined
+    assert "Protests Turn" not in mined
+    assert "Turn Violent" not in mined
+
+
+def test_mining_keeps_bigram_with_independent_usage():
+    # A bigram that also stands on its own (outside the longer
+    # phrase) at min_weight or more survives alongside it.
+    heads = (_heads("Protests turn violent in France", 4)
+             + _heads("Turn violent clashes erupt downtown", 4))
+    mined = {m["term"] for m in _mine_phrases(heads, known_terms=[])}
+    assert "Turn Violent" in mined
+    assert "Protests Turn" not in mined
+    # The trigram (weight 4) folds into the heavier bigram
+    # (weight 8) via the overlap dedupe — one topic, not two.
+    assert "Protests Turn Violent" not in mined

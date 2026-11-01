@@ -406,6 +406,31 @@ def _mine_phrases(headlines, known_terms, top_n=10, min_weight=4):
     boilerplate = re.compile(
         r"\bresults?\b|share price|stock price|\bq[1-4]\b|"
         r"\bnews\b|broadcasting|corporation|experts'? views")
+    # Fragment suppression: a gram that occurs only inside a
+    # longer gram is a fragment of it, not its own topic (seen
+    # live 2026-11-01: "protests turn" and "turn violent" both
+    # rendered as topics, linked to each other, while every one
+    # of their headlines was the single phrase "protests turn
+    # violent" — at equal weight the shorter grams rank first
+    # below, get accepted, and the dedupe then rejects the
+    # whole phrase as their duplicate). A gram survives only
+    # if its count outside every longer container still clears
+    # min_weight on its own.
+    def _contained(short, long_):
+        s, l = short.split(" "), long_.split(" ")
+        return any(l[i:i + len(s)] == s
+                   for i in range(len(l) - len(s) + 1))
+
+    containers = [g for g, w in counts.items()
+                  if w >= 2 and not boilerplate.search(g)]
+
+    def _independent(gram, weight):
+        best = 0
+        for other in containers:
+            if len(other) > len(gram) and _contained(gram, other):
+                best = max(best, counts[other])
+        return weight - best
+
     mined = []
     # Deterministic candidate order: Counter.most_common ties
     # follow set-iteration order (hash-randomized per process),
@@ -417,6 +442,8 @@ def _mine_phrases(headlines, known_terms, top_n=10, min_weight=4):
         if weight < min_weight or len(mined) >= top_n:
             break
         if boilerplate.search(gram):
+            continue
+        if _independent(gram, weight) < min_weight:
             continue
         # Overlap dedupe on a hyphen/space-insensitive key, so a
         # mined "tech sell-off" cannot duplicate the lexicon's
