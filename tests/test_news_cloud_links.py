@@ -59,3 +59,19 @@ def test_linked_cloud_html_structure_and_mobile_style():
     assert "@media (max-width: 640px)" in html
     assert ".nc-topbar .t { font-size:12px" in html
     assert ".nc-cap { font-size:10.5px" in html
+
+
+def test_linked_cloud_html_topics_are_clickable():
+    from toolbox.DataZoo.market.news_cloud_links import linked_cloud_html
+    topics = [{"term": "Midterms", "weight": 18, "group": "macro",
+               "example_headline": "Midterms headline",
+               "link": "https://example.com/midterms"},
+              {"term": "Intel", "weight": 11, "group": "tech",
+               "example_headline": "Intel headline"}]
+    html = linked_cloud_html(topics, [], {"left": "As of test"})
+    assert ('<a href="https://example.com/midterms" '
+            'target="_blank"') in html
+    assert "<title>Midterms headline</title>" in html
+    # A topic without a link stays plain text — no empty anchor.
+    assert html.count("<a href=") == 1
+    assert "Select a topic to open a source article" in html

@@ -218,7 +218,7 @@ def linked_cloud_html(topics, edges, caption=None):
     texts = []
     for t in topics:
         n = nodes[t["term"]]
-        texts.append(
+        text_el = (
             '<text x="%.1f" y="%.1f" text-anchor="middle" '
             'dominant-baseline="central" font-size="%d" '
             'font-weight="%s" fill="url(#ncg-%s)" '
@@ -227,6 +227,19 @@ def linked_cloud_html(topics, edges, caption=None):
             % (n["x"], n["y"], sizes[t["term"]],
                700 if t["weight"] >= 8 else 600, t["group"],
                html_mod.escape(t["term"])))
+        link = t.get("link") or ""
+        if link:
+            # Clickable topic (user request 2026-11-01): the
+            # word links to its representative source article;
+            # the SVG <title> gives the headline as a tooltip.
+            text_el = ('<a href="%s" target="_blank" '
+                       'rel="noopener noreferrer"><title>%s</title>'
+                       '%s</a>'
+                       % (html_mod.escape(link, quote=True),
+                          html_mod.escape(
+                              t.get("example_headline", "")),
+                          text_el))
+        texts.append(text_el)
     svg = ('<svg viewBox="0 0 %d %d" style="width:100%%;height:auto;'
            'display:block" xmlns="http://www.w3.org/2000/svg">'
            '<defs>%s</defs>%s%s</svg>'
@@ -234,7 +247,8 @@ def linked_cloud_html(topics, edges, caption=None):
               "".join(paths), "".join(texts)))
     caption = dict(caption or {})
     caption["right"] = ("Lines link topics that share headlines · "
-                        "Size = distinct headlines mentioning the topic")
+                        "Size = distinct headlines mentioning the topic"
+                        " · Select a topic to open a source article")
     asof_row = ('<div class="nc-asof">%s</div>'
                 % caption.get("left", "")) if caption.get("left") else ""
     return ('<div style="width:100%%;font-family:Georgia,'
@@ -242,6 +256,8 @@ def linked_cloud_html(topics, edges, caption=None):
             "<style>%s"
             "svg text { font-family:Georgia,'Times New Roman',"
             "'DejaVu Serif',serif; }"
+            "svg a { cursor:pointer; }"
+            "svg a:hover { opacity:.68; }"
             ".nc-topbar { display:flex;"
             " justify-content:space-between; align-items:baseline;"
             " padding:0 2px 6px; margin-bottom:10px; }"

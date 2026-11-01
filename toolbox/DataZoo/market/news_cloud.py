@@ -123,10 +123,10 @@ LEXICON = [
     ("AI spending", ["ai spending", "ai capex", "ai ambitions",
                      "spending scare", "ai buildout", "ai trade"], "tech"),
     ("Amazon earnings", ["amazon"], "tech"),
-    ("AWS", ["aws", "amazon web services"], "tech"),
+    ("AWS", ["/\\baws\\b/", "amazon web services"], "tech"),
     ("Alphabet · Google", ["alphabet", "google"], "tech"),
     ("Microsoft · Azure", ["microsoft", "azure"], "tech"),
-    ("Intel", ["intel"], "tech"),
+    ("Intel", ["/\\bintel\\b/"], "tech"),
     ("Nvidia", ["nvidia"], "tech"),
     ("Meta", ["/\\bmeta\\b/"], "tech"),
     ("Apple", ["apple"], "tech"),
@@ -144,8 +144,8 @@ LEXICON = [
     ("Silver", ["silver"], "commodities"),
     ("Bitcoin", ["bitcoin", "/\\bbtc\\b/"], "crypto"),
     ("Binance", ["binance"], "crypto"),
-    ("Crypto", ["crypto", "ether", "solana", "/\\bxrp\\b/"], "crypto"),
-    ("Tech selloff", ["selloff", "sell-off", "rout", "futures fall",
+    ("Crypto", ["crypto", "/\\bether(eum)?\\b/", "solana", "/\\bxrp\\b/"], "crypto"),
+    ("Tech selloff", ["selloff", "sell-off", "/\\brout\\b/", "futures fall",
                       "futures drop", "stocks fall", "stocks drop",
                       "stocks slide", "nasdaq fall", "nasdaq drop"], "market"),
     ("Free cash flow", ["free cash flow", "cash flow"], "tech"),
@@ -298,6 +298,7 @@ def fetch_headlines(hours=24, now=None):
                 continue
             seen.add(key)
             headlines.append({"title": title, "source": name,
+                              "link": (_field("link") or "").strip(),
                               "published": published})
             source_counts[name] += 1
     return headlines, source_counts
@@ -379,7 +380,7 @@ def _mine_phrases(headlines, known_terms, top_n=10, min_weight=4):
     no entry for can still top the cloud, and one it has an entry
     for can't hide a second theme. Phrases overlapping a lexicon
     term (either direction) are dropped as duplicates of it."""
-    counts, example = Counter(), {}
+    counts, example, example_link = Counter(), {}, {}
     for h in headlines:
         words = _tokens(h["title"])
         grams = set()
@@ -400,6 +401,7 @@ def _mine_phrases(headlines, known_terms, top_n=10, min_weight=4):
         for gram in grams:
             counts[gram] += 1
             example.setdefault(gram, h["title"])
+            example_link.setdefault(gram, h.get("link", ""))
     # Template/boilerplate phrases are not topics: regional
     # editions carry formulaic headlines ("Q2 results 2026: X share
     # price ...") whose scaffolding would otherwise top the cloud.
@@ -461,6 +463,7 @@ def _mine_phrases(headlines, known_terms, top_n=10, min_weight=4):
         mined.append({"term": _display(gram.split(" ")),
                       "weight": weight,
                       "example_headline": example[gram],
+                      "link": example_link.get(gram, ""),
                       "group": _family_of(gram), "mined": True})
     return mined
 
@@ -477,6 +480,7 @@ def extract_topics(headlines, max_topics=30, min_weight=2):
             continue
         topics.append({"term": term, "weight": len(hits),
                        "example_headline": hits[0]["title"],
+                       "link": hits[0].get("link", ""),
                        "group": group})
     topics += _mine_phrases(headlines, [t["term"] for t in topics])
     topics.sort(key=lambda t: (-t["weight"], t["term"]))
@@ -546,6 +550,8 @@ _FRAME_CSS = """
 .nc-foot { border-top:1px solid #D8CBB6; padding-top:8px; font-size:13.5px;
   color:#6F6555; display:flex; justify-content:space-between; gap:16px; }
 .nc-hl { color:#FFB066; font-weight:700; }
+.nc-cloud a.nc-w { text-decoration:none; cursor:pointer; }
+.nc-cloud a.nc-w:hover { opacity:.72; }
 """
 
 
@@ -570,12 +576,25 @@ def _frame_html(topics, caption=None, max_px=60):
         # flow layout they collide with their neighbours.)
         if t["weight"] <= 5 and pos % 7 == 4:
             cls = "nc-w nc-tilt"
-        spans.append(
-            '<span class="%s" style="font-size:%dpx;font-weight:%s;'
-            'background-image:linear-gradient(178deg,%s 15%%,%s 85%%)">'
-            '%s</span>' % (cls, sizes[term],
-                           700 if t["weight"] >= 8 else 600,
-                           light, deep, html_mod.escape(term)))
+        style = ('font-size:%dpx;font-weight:%s;'
+                 'background-image:linear-gradient(178deg,%s 15%%,%s 85%%)'
+                 % (sizes[term], 700 if t["weight"] >= 8 else 600,
+                    light, deep))
+        label = html_mod.escape(term)
+        link = t.get("link") or ""
+        if link:
+            # Clickable topic (user request 2026-11-01): the
+            # word links to its representative source article.
+            spans.append(
+                '<a class="%s" style="%s" href="%s" target="_blank" '
+                'rel="noopener noreferrer" title="%s">%s</a>'
+                % (cls, style, html_mod.escape(link, quote=True),
+                   html_mod.escape(t.get("example_headline", ""),
+                                   quote=True),
+                   label))
+        else:
+            spans.append('<span class="%s" style="%s">%s</span>'
+                         % (cls, style, label))
     caption = caption or {}
     # Caption lines are trusted HTML (built by build_cloud from a
     # format string and integer counts — the date and counts carry
@@ -688,7 +707,8 @@ def build_cloud(png_path=DEFAULT_PNG, json_path=DEFAULT_JSON, hours=24):
         "caption": caption,
         "topics": [{"term": t["term"], "weight": t["weight"],
                     "group": t["group"],
-                    "example_headline": t["example_headline"]}
+                    "example_headline": t["example_headline"],
+                    "link": t.get("link", "")}
                    for t in topics],
     }
     with open(json_path, "w") as fh:

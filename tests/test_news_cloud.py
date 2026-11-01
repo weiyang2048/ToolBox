@@ -2,8 +2,10 @@
 mining, boilerplate filter), and the embeddable frame HTML.
 All offline — synthetic headlines only."""
 from toolbox.DataZoo.market.news_cloud import (
+    LEXICON,
     _display,
     _family_of,
+    _matches,
     _mine_phrases,
     _parse_date,
     _tokens,
@@ -167,3 +169,36 @@ def test_mining_keeps_bigram_with_independent_usage():
     # The trigram (weight 4) folds into the heavier bigram
     # (weight 8) via the overlap dedupe — one topic, not two.
     assert "Protests Turn Violent" not in mined
+
+
+def test_topics_carry_source_links():
+    heads = ([{"title": "Bitcoin rally lifts crypto sentiment",
+               "source": "Test", "link": "https://example.com/btc",
+               "published": None} for _ in range(3)]
+             + [{"title": "Jio Platforms unveils new data centre plan",
+                 "source": "Test", "link": "https://example.com/jio",
+                 "published": None} for _ in range(5)])
+    topics = {t["term"]: t for t in extract_topics(heads)}
+    # Lexicon topic: the first matching headline's article.
+    assert topics["Bitcoin"]["link"] == "https://example.com/btc"
+    # Mined topic: its example headline's article.
+    mined = [t for t in topics.values() if t.get("mined")]
+    assert any(t["link"] == "https://example.com/jio" for t in mined)
+
+
+def test_lexicon_patterns_respect_word_boundaries():
+    # Substring false friends (seen live 2026-11-01: "AWS"
+    # matched "lawsuit" and "withdrawals" and rendered as a
+    # cloud topic): short patterns are word-boundary regexes.
+    def hit(term, text):
+        pats = [p for t, p, _ in LEXICON if t == term][0]
+        return any(_matches(p, text.lower()) for p in pats)
+    assert hit("AWS", "AWS outage hits us-east")
+    assert not hit("AWS", "Judge dismisses DOJ lawsuit")
+    assert not hit("AWS", "Binance resumes withdrawals")
+    assert hit("Intel", "Intel unveils new chip")
+    assert not hit("Intel", "Market intelligence report")
+    assert hit("Crypto", "Ethereum rallies")
+    assert not hit("Crypto", "Whether the Fed cuts rates")
+    assert hit("Tech selloff", "Stocks rout deepens")
+    assert not hit("Tech selloff", "The usual route home")
