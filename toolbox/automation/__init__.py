@@ -4,6 +4,7 @@ AutomationBots
 A collection of automation bots for various tasks.
 """
 import sys
+
 from loguru import logger
 
 # Configure loguru

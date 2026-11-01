@@ -3,9 +3,10 @@ Tests for the optimizer module.
 """
 
 import unittest
+from unittest.mock import MagicMock, patch
+
 import numpy as np
 import pandas as pd
-from unittest.mock import patch, MagicMock
 import pyomo.environ as pe
 
 from energy_optimization_challenge.optimizer import OptimalBiddingStrategy

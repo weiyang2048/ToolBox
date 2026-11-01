@@ -2,13 +2,14 @@
 LinkedIn job scraper module.
 """
 
-from selenium.webdriver.common.by import By
+import random
 import time
 from collections import defaultdict
-import random
-from loguru import logger
-from toolbox.automation.SeleniumInitializer import initialize_selenium_driver
 
+from loguru import logger
+from selenium.webdriver.common.by import By
+
+from toolbox.automation.SeleniumInitializer import initialize_selenium_driver
 
 
 def open_linkedin(username, password):

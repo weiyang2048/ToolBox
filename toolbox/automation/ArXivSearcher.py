@@ -1,9 +1,10 @@
-from datetime import datetime
-from bs4 import BeautifulSoup
-import re
-from tkinter import simpledialog, messagebox  # pop-up window for user input
 import os
+import re
+from datetime import datetime
+from tkinter import messagebox, simpledialog  # pop-up window for user input
+
 import requests
+from bs4 import BeautifulSoup
 
 
 def downloadpath(topic, type):

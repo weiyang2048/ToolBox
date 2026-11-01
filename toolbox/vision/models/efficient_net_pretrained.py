@@ -1,9 +1,9 @@
+
 import timm
+import torch
 from torch import nn, optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-import torch
-from typing import Optional, List
 
 
 class EfficientNetModel:
@@ -22,10 +22,10 @@ class EfficientNetModel:
     def __init__(
         self,
         model_size: str = "b0",
-        num_classes: Optional[int] = None,
+        num_classes: int | None = None,
         pretrained: bool = True,
         learning_rate: float = 0.001,
-        device: Optional[torch.device] = None,
+        device: torch.device | None = None,
     ):
         """
         Initialize the EfficientNet model.
@@ -80,8 +80,8 @@ class EfficientNetModel:
         train_loader: DataLoader,
         val_loader: DataLoader,
         epochs: int,
-        save_path: Optional[str] = None,
-    ) -> List[dict]:
+        save_path: str | None = None,
+    ) -> list[dict]:
         """
         Train the model.
 

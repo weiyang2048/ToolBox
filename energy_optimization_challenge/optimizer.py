@@ -4,24 +4,25 @@ Optimization model for energy market bidding and offering.
 This module provides classes for optimizing bids and offers in day-ahead and real-time markets.
 """
 
+from typing import Any
+
 import numpy as np
 import pandas as pd
-from typing import Dict, Any
 import pyomo.environ as pe
 
-from energy_optimization_challenge.variable_definitions import (
-    create_price_quantity_variables,
+from energy_optimization_challenge.market_clearing import (
+    create_market_clearing_variables,
 )
 from energy_optimization_challenge.objective_functions import (
     calculate_scenario_revenue,
     create_expected_revenue_rule,
     create_objective_rule,
 )
-from energy_optimization_challenge.market_clearing import (
-    create_market_clearing_variables,
-)
 from energy_optimization_challenge.risk_management import (
     create_risk_mechanism,
+)
+from energy_optimization_challenge.variable_definitions import (
+    create_price_quantity_variables,
 )
 
 
@@ -64,7 +65,7 @@ class OptimalBiddingStrategy:
         # Extract dimensions
         self.num_samples, self.num_hours = wind_power.shape
 
-    def optimize_hour(self, hour: int) -> Dict[str, Any]:
+    def optimize_hour(self, hour: int) -> dict[str, Any]:
         """
         Optimize bids and offers for a given hour.
         goal : maximize the expected revenue while managing risk using CVaR

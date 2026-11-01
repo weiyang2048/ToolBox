@@ -8,10 +8,10 @@ The script recursively searches through all subfolders and sub-subfolders.
 """
 
 import os
-import random
-import sys
-import subprocess
 import platform
+import random
+import subprocess
+import sys
 
 
 def get_all_subfolders(root_path):

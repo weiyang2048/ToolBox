@@ -34,6 +34,21 @@ jobs:
       - name: Run tests
         run: python -m pytest -q
 
+  # Incremental ruff adoption (2026-11-01): enforces only the starter
+  # rule set declared in pyproject.toml [tool.ruff.lint].
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install ruff
+        run: pip install ruff==0.17.3
+      - name: Ruff (starter set)
+        run: ruff check
+
   # The vision/automation extras pull in torch and selenium, which are too
   # heavy for the full matrix above. This single-version job installs them
   # and runs the vision/automation tests for real; in the matrix job those

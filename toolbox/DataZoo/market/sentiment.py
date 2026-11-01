@@ -129,8 +129,8 @@ def chart_png(series):
     """The one-year banded sentiment chart as PNG bytes."""
     import matplotlib
     matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
     import matplotlib.dates as mdates
+    import matplotlib.pyplot as plt
 
     fig, ax = plt.subplots(figsize=(12, 5.6))
     x0 = min(s.index[0] for s in series.values())

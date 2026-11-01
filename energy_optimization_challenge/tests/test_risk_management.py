@@ -3,7 +3,9 @@ Tests for the risk_management module.
 """
 
 import unittest
+
 import pyomo.environ as pe
+
 from energy_optimization_challenge.risk_management import create_risk_mechanism
 
 

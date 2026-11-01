@@ -3,10 +3,16 @@ Tests for the market_clearing module.
 """
 
 import unittest
-import pyomo.environ as pe
+
 import numpy as np
-from energy_optimization_challenge.market_clearing import create_market_clearing_variables
-from energy_optimization_challenge.variable_definitions import create_price_quantity_variables
+import pyomo.environ as pe
+
+from energy_optimization_challenge.market_clearing import (
+    create_market_clearing_variables,
+)
+from energy_optimization_challenge.variable_definitions import (
+    create_price_quantity_variables,
+)
 
 
 class TestMarketClearing(unittest.TestCase):

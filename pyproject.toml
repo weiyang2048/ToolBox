@@ -87,3 +87,13 @@ testpaths = ["tests", "energy_optimization_challenge/tests"]
 [tool.ruff]
 line-length = 88
 target-version = "py310"
+
+# Incremental adoption (started 2026-11-01): only the starter set below
+# is enforced (CI lint job). Widen in small batches — UP031 next; the
+# behavior-sensitive E722/BLE001 narrowing goes per package, with tests.
+[tool.ruff.lint]
+select = ["F401", "F841", "I001", "UP006", "UP035", "UP045"]
+
+[tool.ruff.lint.per-file-ignores]
+# Intentional public re-exports (the energy package's API surface).
+"energy_optimization_challenge/__init__.py" = ["F401"]

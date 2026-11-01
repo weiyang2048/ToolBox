@@ -4,20 +4,20 @@ Data loader for the energy market optimization challenge.
 This module provides utilities for loading, preprocessing and visualizing sample data.
 """
 
-from matplotlib import pyplot as plt
-import numpy as np
-import os
 import logging
+import os
+
+import numpy as np
+from matplotlib import pyplot as plt
 
 # Import sample_data_generator - this is an internal utility module
 # that should be in the same directory or installed in the environment
 # If missing, create this module with data generation capabilities
 from energy_optimization_challenge.sample_data_generator import (
     generate_sample_data,
-    save_sample_data,
     load_sample_data,
+    save_sample_data,
 )
-
 
 logger = logging.getLogger(__name__)
 

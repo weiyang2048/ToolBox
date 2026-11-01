@@ -5,10 +5,11 @@ CLI interface for AutomationBots
 Provides command-line access to various automation tools.
 """
 
-import click
 import os
 import sys
 from pathlib import Path
+
+import click
 from loguru import logger
 
 # Add the parent directory to the path so we can import our modules

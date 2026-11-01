@@ -10,7 +10,9 @@ def _heads(title, n):
 
 def test_cooccurrence_edges_threshold():
     from toolbox.DataZoo.market.news_cloud_links import (
-        cooccurrence_edges, topic_members)
+        cooccurrence_edges,
+        topic_members,
+    )
     heads = (
         _heads("Bitcoin rally lifts crypto sentiment", 2)
         + _heads("Bitcoin and gold both climb today", 1)

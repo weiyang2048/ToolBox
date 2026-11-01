@@ -3,7 +3,9 @@ Tests for the variable_definitions module.
 """
 
 import unittest
+
 import pyomo.environ as pe
+
 from energy_optimization_challenge.variable_definitions import (
     create_price_quantity_variables,
 )

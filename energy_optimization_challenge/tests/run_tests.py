@@ -4,9 +4,9 @@ Test runner for the energy optimization challenge.
 This script discovers and runs all tests in the package.
 """
 
-import unittest
-import sys
 import os
+import sys
+import unittest
 
 
 def run_tests():

@@ -11,17 +11,17 @@ Each ensemble sample represents a possible scenario for the same 24-hour period.
 The output is a numpy array of shape (num_samples, num_hours, num_targets).
 """
 
+import os
+
 import numpy as np
 import pandas as pd
-import os
-from typing import Tuple, List
 
 
 def generate_sample_data(
     num_samples: int = 100,
     num_hours: int = 24,
     wind_capacity_mw: float = 150.0
-) -> Tuple[np.ndarray, List[str]]:
+) -> tuple[np.ndarray, list[str]]:
     """
     Generate synthetic energy market data for a single node with ensemble forecasts for the same day.
     
@@ -118,7 +118,7 @@ def generate_sample_data(
 
 def save_sample_data(
     data: np.ndarray, 
-    target_names: List[str],
+    target_names: list[str],
     output_dir: str = "./data", 
     filename: str = "energy_market_samples.npz"
 ) -> None:
@@ -209,7 +209,7 @@ def save_sample_data(
 
 def load_sample_data(
     filepath: str = "./data/energy_market_samples.npz"
-) -> Tuple[np.ndarray, List[str]]:
+) -> tuple[np.ndarray, list[str]]:
     """
     Load the sample data from a numpy npz file.
     
@@ -233,7 +233,7 @@ def load_sample_data(
 
 def display_sample(
     data: np.ndarray, 
-    target_names: List[str], 
+    target_names: list[str], 
     sample_idx: int = 0
 ) -> None:
     """

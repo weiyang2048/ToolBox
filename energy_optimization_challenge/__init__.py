@@ -16,10 +16,14 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Import main components for easier access
-from energy_optimization_challenge.variable_definitions import create_price_quantity_variables
+from energy_optimization_challenge.market_clearing import (
+    create_market_clearing_variables,
+)
 from energy_optimization_challenge.objective_functions import (
     calculate_scenario_revenue,
     create_expected_revenue_rule,
     create_objective_rule,
 )
-from energy_optimization_challenge.market_clearing import create_market_clearing_variables
+from energy_optimization_challenge.variable_definitions import (
+    create_price_quantity_variables,
+)

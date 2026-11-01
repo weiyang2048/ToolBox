@@ -3,13 +3,15 @@ Command-line interface for LinkedIn Job Tracker.
 """
 
 import argparse
-import os
 import getpass
+import os
+
 from loguru import logger
+
 from toolbox.automation.LinkedInHelper.scraper import (
-    open_linkedin,
     get_all_saved_jobs,
     open_applied_jobs,
+    open_linkedin,
 )
 
 

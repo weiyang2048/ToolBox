@@ -18,15 +18,14 @@ import math
 from datetime import datetime, timezone
 
 from toolbox.DataZoo.market.news_cloud import (
+    _FRAME_CSS,
     FAMILY_GRADIENTS,
     LEXICON,
-    _FRAME_CSS,
     _matches,
     _sizes,
     extract_topics,
     fetch_headlines,
 )
-
 
 # ------------------------------------------------------------------
 # Links: co-occurrence edges + the linked (SVG) rendering

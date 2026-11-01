@@ -7,10 +7,10 @@ tuples for each hour of the day.
 """
 
 import os
-import pandas as pd
-import numpy as np
+
 import matplotlib.pyplot as plt
-from typing import List, Tuple
+import numpy as np
+import pandas as pd
 
 from energy_optimization_challenge.data_loader import PriceGenData
 from energy_optimization_challenge.optimizer import OptimalBiddingStrategy
@@ -52,7 +52,7 @@ def run_optimization(data: PriceGenData, risk_aversion: float = 0.25) -> pd.Data
     return results
 
 
-def extract_price_quantity_tuples(results: pd.DataFrame) -> List[Tuple[float, float]]:
+def extract_price_quantity_tuples(results: pd.DataFrame) -> list[tuple[float, float]]:
     """
     Extract price-quantity tuples from the optimization results.
 
@@ -79,7 +79,7 @@ def extract_price_quantity_tuples(results: pd.DataFrame) -> List[Tuple[float, fl
 
 
 def plot_bid_offer_results(
-    price_quantity_tuples: List[Tuple[float, float]], action_type: List[str], risk_aversion: float = 0.25
+    price_quantity_tuples: list[tuple[float, float]], action_type: list[str], risk_aversion: float = 0.25
 ) -> str:
     """
     Create a simple plot showing bid/offer prices and quantities.

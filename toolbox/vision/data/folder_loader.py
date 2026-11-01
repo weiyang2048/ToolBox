@@ -1,5 +1,6 @@
 from pathlib import Path
 
+
 def get_image_paths_and_labels(base_dir):
     """
     Retrieves image file paths and their corresponding labels from a directory structure.

@@ -3,12 +3,14 @@ Tests for the objective_functions module.
 """
 
 import unittest
-import pyomo.environ as pe
+
 import numpy as np
+import pyomo.environ as pe
+
 from energy_optimization_challenge.objective_functions import (
     calculate_scenario_revenue,
     create_expected_revenue_rule,
-    create_objective_rule
+    create_objective_rule,
 )
 
 

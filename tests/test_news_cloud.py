@@ -2,8 +2,14 @@
 mining, boilerplate filter), and the embeddable frame HTML.
 All offline — synthetic headlines only."""
 from toolbox.DataZoo.market.news_cloud import (
-    _display, _family_of, _mine_phrases, _parse_date, _tokens,
-    cloud_html, extract_topics)
+    _display,
+    _family_of,
+    _mine_phrases,
+    _parse_date,
+    _tokens,
+    cloud_html,
+    extract_topics,
+)
 
 
 def _heads(title, n, source="Test"):
