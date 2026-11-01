@@ -30,6 +30,24 @@ def test_fetch_crypto_builds_on_canonical_entries(monkeypatch):
     assert out.tolist() == [30, 34]
 
 
+def test_fetch_gold_dates_bars_in_eastern(monkeypatch):
+    # Yahoo stamps GC=F daily bars at midnight ET (04:00 UTC). Dated in
+    # Eastern, the Friday bar stays Friday; a Chicago conversion would
+    # push it back to Thursday 11 PM and mislabel it.
+    import datetime
+
+    fri_et = datetime.datetime(2026, 10, 30, 4, tzinfo=datetime.timezone.utc)
+    thu_et = fri_et - datetime.timedelta(days=1)
+    payload = {"chart": {"result": [{
+        "timestamp": [int(thu_et.timestamp()), int(fri_et.timestamp())],
+        "indicators": {"quote": [{"close": [4031.4, 3898.9]}]},
+    }]}}
+    monkeypatch.setattr(sm, "_get_json", lambda url, headers=None: payload)
+    out = sm.fetch_gold()
+    assert [str(d.date()) for d in out.index] == ["2026-10-29", "2026-10-30"]
+    assert out.iloc[-1] == 3898.9
+
+
 def test_zone_boundaries():
     assert sm.zone(0) == "Extreme Fear"
     assert sm.zone(25) == "Extreme Fear"

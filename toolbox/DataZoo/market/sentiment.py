@@ -92,7 +92,11 @@ def fetch_gold():
     res = d["chart"]["result"][0]
     closes = res["indicators"]["quote"][0]["close"]
     idx = pd.to_datetime(res["timestamp"], unit="s", utc=True)
-    idx = idx.tz_convert("America/Chicago").tz_localize(None).normalize()
+    # Yahoo stamps futures daily bars at midnight Eastern (the start of
+    # the exchange day), so date them in the exchange's timezone: a
+    # Chicago conversion lands at 11 PM the prior day and normalize()
+    # would label every bar one day early (Friday's session as Thursday).
+    idx = idx.tz_convert("America/New_York").tz_localize(None).normalize()
     s = pd.Series(closes, index=idx).dropna()
     return s[~s.index.duplicated(keep="last")].sort_index()
 
