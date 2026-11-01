@@ -54,6 +54,28 @@ UA = {"User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                      "Chrome/120.0 Safari/537.36"),
       "Accept": "application/json"}
 
+# Spot FX for the dashboard's Currencies board (user direction
+# 2026-11-01: the board's FX lines are the spot currencies, not
+# the CME futures in GROUPS' "FX" — the futures group stays for
+# its other consumers). Uniform USD-per-currency quotes: every
+# XXXUSD=X symbol below was verified against Yahoo as the exact
+# mirror of its USDXXX=X pair, so a rising line always means
+# that currency strengthened, matching the board's semantics.
+SPOT_FX = [
+    ("DX-Y.NYB", "Dollar index (DXY)", 2),
+    ("EURUSD=X", "Euro (EUR)", 4),
+    ("GBPUSD=X", "Pound (GBP)", 4),
+    ("JPYUSD=X", "Yen (JPY)", 6),
+    ("CHFUSD=X", "Swiss franc (CHF)", 4),
+    ("AUDUSD=X", "Australian dollar (AUD)", 4),
+    ("NZDUSD=X", "New Zealand dollar (NZD)", 4),
+    ("CADUSD=X", "Canadian dollar (CAD)", 4),
+    ("SEKUSD=X", "Swedish krona (SEK)", 4),
+    ("NOKUSD=X", "Norwegian krone (NOK)", 4),
+    ("DKKUSD=X", "Danish krone (DKK)", 4),
+    ("CNYUSD=X", "Renminbi (CNY)", 4),
+]
+
 # (group, [(yahoo symbol, display label, decimals for Last)])
 GROUPS = [
     ("US Equity", [
@@ -159,6 +181,7 @@ CASH_GROUPS = [
         ("^BVSP", "Bovespa (Brazil)", None),
         ("^MXX", "IPC (Mexico)", None),
     ]),
+    ("Spot FX", SPOT_FX),
 ]
 
 # The iShares global sector suite, one ETF per GICS sector (user
@@ -200,8 +223,8 @@ def cash_dec(last):
 def all_groups():
     """The board's groups in order, kind carried per contract.
 
-    Returns [(group name, [(symbol, label, dec, kind)])] — 13
-    groups, 67 lines. US Equity carries only the four broad index
+    Returns [(group name, [(symbol, label, dec, kind)])] — 14
+    groups, 79 lines. US Equity carries only the four broad index
     futures; the cash groups (Global sectors, then Asia-Pacific,
     Europe, Americas) follow it, then the remaining futures
     groups (the Commodity board's six, then Rates and FX).

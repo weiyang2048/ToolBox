@@ -10,16 +10,22 @@ def test_board_layout():
     assert [g for g, _c in groups] == [
         "US Equity",
         "Global sectors",
-        "Asia-Pacific", "Europe", "Americas",
+        "Asia-Pacific", "Europe", "Americas", "Spot FX",
         "Crypto", "Metals", "Energy", "Grains & oilseeds",
         "Livestock", "Softs", "Rates", "FX",
     ]
-    assert sum(len(c) for _g, c in groups) == 67
+    assert sum(len(c) for _g, c in groups) == 79
     kinds = {k for _g, c in groups for _s, _l, _d, k in c}
     assert kinds == {"future", "cash"}
     us = dict(groups)["US Equity"]
     assert len(us) == 4
     assert all(k == "future" for *_x, k in us)
+    fx = dict(groups)["Spot FX"]
+    assert len(fx) == 12
+    assert fx[0][0] == "DX-Y.NYB"
+    assert all(k == "cash" for *_x, k in fx)
+    assert all(s.endswith("USD=X") or s == "DX-Y.NYB"
+               for s, *_x in fx)
     gs = dict(groups)["Global sectors"]
     assert len(gs) == 11
     assert all(k == "cash" for *_x, k in gs)
@@ -78,7 +84,7 @@ def test_fetch_board_assembly(monkeypatch):
     closes["ES=F"] = [100.0] * 299 + [110.0]   # +10% week, +10% day base
     del closes["ETH=F"]                        # unavailable -> null row
     rep = _fake_fetch_board(monkeypatch, closes)
-    assert rep["available"] == 66
+    assert rep["available"] == 78
     assert list(rep["data"]) == [g for g, _c in fb.all_groups()]
     es = rep["data"]["US Equity"][0]
     assert es["label"] == "S&P 500 (ES)"
@@ -112,7 +118,7 @@ def test_fetch_board_quote_fallback(monkeypatch):
     rmb = next(r for r in rep["data"]["FX"] if r["sym"] == "RMB=F")
     assert rmb["last"] == 101.0
     assert abs(rmb["pct"] - 1.0) < 1e-9     # 101 vs prior close 100
-    assert rep["available"] == 67
+    assert rep["available"] == 79
     assert any("RMB=F" in n for n in rep["notes"])
 
 
