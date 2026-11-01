@@ -78,3 +78,31 @@ def test_linked_cloud_html_topics_are_clickable():
     # A topic without a link stays plain text — no empty anchor.
     assert html.count("<a href=") == 1
     assert "Select a topic to open a source article" in html
+
+
+def test_low_visibility_families_render_gray():
+    from toolbox.DataZoo.market.news_cloud_links import (
+        _contrast_on_white, _effective_gradient)
+    # The current palette: gold and teal light stops wash out
+    # on the white panel; the rest read fine.
+    assert _contrast_on_white("#D9A821") < 2.6   # commodities
+    assert _contrast_on_white("#35B5A8") < 2.6   # tech
+    assert _contrast_on_white("#A78BFA") > 2.6   # crypto
+    assert _effective_gradient("commodities") == ("#A8A29E",
+                                                  "#57534E")
+    assert _effective_gradient("tech") == ("#A8A29E", "#57534E")
+    assert _effective_gradient("macro") == ("#5B8DC9", "#173F6E")
+    from toolbox.DataZoo.market.news_cloud_links import (
+        linked_cloud_html)
+    topics = [{"term": "Gold", "weight": 9, "group": "commodities",
+               "example_headline": "x"},
+              {"term": "Midterms", "weight": 18, "group": "macro",
+               "example_headline": "y"}]
+    html = linked_cloud_html(topics, [], caption=None)
+    # The rendered gradient defs carry the gray pair for the
+    # faint families and the true colors for the rest.
+    assert ('<linearGradient id="ncg-commodities" x1="0" y1="0" '
+            'x2="0" y2="1"><stop offset="15%" '
+            'stop-color="#A8A29E"/>') in html
+    assert "#D9A821" not in html
+    assert "#173F6E" in html  # macro keeps its deep blue

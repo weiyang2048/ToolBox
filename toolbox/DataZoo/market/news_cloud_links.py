@@ -34,6 +34,40 @@ LINK_MIN_SHARED = 2
 LINK_MAX_EDGES = 22
 LINK_PANEL_W, LINK_PANEL_H = 1124, 500
 
+# Low-visibility families render in gray (user direction
+# 2026-11-01, on a screenshot where the gold and teal words
+# washed out on the white panel): a family's gradient is
+# judged by its LIGHT stop — the top of every glyph, and most
+# of a small word — and a light stop under 2.6:1 contrast
+# against the panel white is replaced by a warm gray pair.
+# At the current palette that grays commodities (2.2:1) and
+# tech (2.5:1); crypto (2.7:1), macro, market and neutral
+# keep their colors.
+_GRAY_PAIR = ("#A8A29E", "#57534E")
+_GRAY_MIN_CONTRAST = 2.6
+
+
+def _contrast_on_white(hex_color):
+    """WCAG contrast ratio of a #RRGGBB color against white."""
+    h = hex_color.lstrip("#")
+    r, g, b = (int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
+
+    def _lin(c):
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+    lum = 0.2126 * _lin(r) + 0.7152 * _lin(g) + 0.0722 * _lin(b)
+    return 1.05 / (lum + 0.05)
+
+
+def _effective_gradient(family):
+    """The family's (light, deep) gradient stops as rendered:
+    the family's own colors, or the gray pair when its light
+    stop is too faint on the panel."""
+    light, deep = FAMILY_GRADIENTS[family]
+    if _contrast_on_white(light) < _GRAY_MIN_CONTRAST:
+        return _GRAY_PAIR
+    return (light, deep)
+
 
 def topic_members(topics, headlines):
     """term -> set of headline indexes mentioning it. Lexicon
@@ -189,7 +223,8 @@ def linked_cloud_html(topics, edges, caption=None):
     by_term = {t["term"]: t for t in topics}
     smax = max((s for _, _, s in triples), default=1)
     grads = []
-    for fam, (light, deep) in FAMILY_GRADIENTS.items():
+    for fam in FAMILY_GRADIENTS:
+        light, deep = _effective_gradient(fam)
         grads.append(
             '<linearGradient id="ncg-%s" x1="0" y1="0" x2="0" y2="1">'
             '<stop offset="15%%" stop-color="%s"/>'
@@ -207,7 +242,7 @@ def linked_cloud_html(topics, edges, caption=None):
         cx, cy = mx - dy / d * bend, my + dx / d * bend
         same = (by_term[a]["group"] == by_term[b]["group"]
                 and by_term[a]["group"] != "neutral")
-        color = (FAMILY_GRADIENTS[by_term[a]["group"]][1]
+        color = (_effective_gradient(by_term[a]["group"])[1]
                  if same else "#9A8A70")
         paths.append(
             '<path d="M %.1f %.1f Q %.1f %.1f %.1f %.1f" fill="none" '
