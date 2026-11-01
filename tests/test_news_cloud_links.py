@@ -88,9 +88,9 @@ def test_low_visibility_families_render_gray():
     assert _contrast_on_white("#D9A821") < 2.6   # commodities
     assert _contrast_on_white("#35B5A8") < 2.6   # tech
     assert _contrast_on_white("#A78BFA") > 2.6   # crypto
-    assert _effective_gradient("commodities") == ("#A8A29E",
-                                                  "#57534E")
-    assert _effective_gradient("tech") == ("#A8A29E", "#57534E")
+    assert _effective_gradient("commodities") == ("#9AA0A6",
+                                                  "#5F6368")
+    assert _effective_gradient("tech") == ("#9AA0A6", "#5F6368")
     assert _effective_gradient("macro") == ("#5B8DC9", "#173F6E")
     from toolbox.DataZoo.market.news_cloud_links import (
         linked_cloud_html)
@@ -103,6 +103,6 @@ def test_low_visibility_families_render_gray():
     # faint families and the true colors for the rest.
     assert ('<linearGradient id="ncg-commodities" x1="0" y1="0" '
             'x2="0" y2="1"><stop offset="15%" '
-            'stop-color="#A8A29E"/>') in html
+            'stop-color="#9AA0A6"/>') in html
     assert "#D9A821" not in html
     assert "#173F6E" in html  # macro keeps its deep blue

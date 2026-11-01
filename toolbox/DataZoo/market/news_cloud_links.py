@@ -39,11 +39,14 @@ LINK_PANEL_W, LINK_PANEL_H = 1124, 500
 # washed out on the white panel): a family's gradient is
 # judged by its LIGHT stop — the top of every glyph, and most
 # of a small word — and a light stop under 2.6:1 contrast
-# against the panel white is replaced by a warm gray pair.
-# At the current palette that grays commodities (2.2:1) and
-# tech (2.5:1); crypto (2.7:1), macro, market and neutral
-# keep their colors.
-_GRAY_PAIR = ("#A8A29E", "#57534E")
+# against the panel white is replaced by a gray pair. The
+# gray is the dashboard's canonical muted gray #9aa0a6 (the
+# footnote / as-of text color; the user picked it from a
+# footnote crop the same day), deepened for the gradient's
+# lower stop. At the current palette that grays commodities
+# (2.2:1) and tech (2.5:1); crypto (2.7:1), macro, market
+# and neutral keep their colors.
+_GRAY_PAIR = ("#9AA0A6", "#5F6368")
 _GRAY_MIN_CONTRAST = 2.6
 
 
