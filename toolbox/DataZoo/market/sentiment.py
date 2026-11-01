@@ -170,7 +170,7 @@ def chart_png(series):
         ax2.spines["top"].set_visible(False)
         ax2.scatter([g.index[-1]], [gn.iloc[-1]], color=GOLD_COLOR,
                     s=40, zorder=5, edgecolors="white", linewidths=1)
-        ax2.annotate(f"${g.iloc[-1]:,.0f}/oz",
+        ax2.annotate(f"${g.iloc[-1]:,.0f}/oz · {g.index[-1].strftime('%a %b %-d')}",
                      xy=(g.index[-1], gn.iloc[-1]),
                      xytext=(8, -18), textcoords="offset points",
                      fontsize=10, fontweight="bold", color=GOLD_COLOR,
@@ -182,7 +182,7 @@ def chart_png(series):
             v = s.iloc[-1]
             ax.scatter([s.index[-1]], [v], color=color, s=40, zorder=5,
                        edgecolors="white", linewidths=1)
-            ax.annotate(f"{v:.0f} · {zone(v)}", xy=(s.index[-1], v),
+            ax.annotate(f"{v:.0f} · {zone(v)} · {s.index[-1].strftime('%a %b %-d')}", xy=(s.index[-1], v),
                         xytext=(8, 8), textcoords="offset points",
                         fontsize=10, fontweight="bold", color=color,
                         bbox=dict(boxstyle="round,pad=0.3", fc="white",
