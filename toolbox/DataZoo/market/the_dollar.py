@@ -35,22 +35,7 @@ FX = [("EURUSD=X", "Euro"), ("GBPUSD=X", "British pound"),
       ("DKKUSD=X", "Danish krone"),
       ("CNYUSD=X", "Chinese renminbi")]
 
-
-def scale(v, d0, d1, r0, r1):
-    return r0 if d1 == d0 else r0 + (v - d0) / (d1 - d0) * (r1 - r0)
-
-
-def line_path(xs, ys):
-    return " ".join(
-        ("M" if i == 0 else "L") + " %.1f %.1f" % (x, y)
-        for i, (x, y) in enumerate(zip(xs, ys)))
-
-
-def svg_elems(w, h, body):
-    return ('<svg viewBox="0 0 %d %d" width="100%%" '
-            'xmlns="http://www.w3.org/2000/svg" '
-            'style="display:block;max-width:%dpx">%s</svg>'
-            % (w, h, w, body))
+from toolbox.DataZoo.market.svg_charts import line_path, scale, svg_elems
 
 
 def fetch_the_dollar():
