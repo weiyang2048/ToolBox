@@ -220,6 +220,145 @@ market markets today friday thursday wednesday week daily live""".split())
 
 
 # ------------------------------------------------------------------
+# Robustness gates for mined topics (user-approved 2026-11-02,
+# demoed on the live pool first: demos/news-cloud-fixes). The
+# mining layer's known junk classes each get the test designed
+# for them — a shape gate (fragments and bare quantities), an
+# outlet gate (single-outlet house style), template demotion
+# (rotating-entity headline skeletons) — and topic weights count
+# story clusters, not raw headlines.
+# ------------------------------------------------------------------
+# Possessive / demonstrative edges can never head a topic
+# ("Their Own" rendered as a topic on 2026-11-02). Question and
+# preposition edges are deliberately NOT here: the window fold
+# owns those ("What Is Behind The Move" is its adjudicated
+# output, pinned by its tests).
+_EDGE_JUNK = {"their", "his", "her", "our", "your", "my",
+              "this", "that", "these", "those"}
+# Common headline verbs / adjectives: a gram built only from
+# these has no noun head ("Make Final" — verb + adjective).
+_HEAD_VERBS = set("""make makes made get gets take takes see sees hit hits
+rise rises fall falls cut cuts raise raises drop drops gain gains lose
+loses surge surges plunge plunges jump jumps climb climbs slip slips
+soar soars tumble tumbles set sets put puts turn turns face faces show
+shows give gives lead leads hold holds keep keeps add adds end ends
+begin begins post posts beat beats miss misses warn warns""".split())
+_HEAD_ADJS = {"final", "own", "big", "large", "small", "high", "low",
+              "top", "first", "last", "next", "major", "key", "main",
+              "strong", "weak", "hot", "prime"}
+_NOMINAL_SUFFIXES = ("tion", "sion", "ness", "ment", "ity", "ism",
+                     "ist", "ship", "ance", "ence")
+_QUANTITY_WORDS = {"billion", "million", "trillion", "percent", "%"}
+
+
+def _noun_like(tok):
+    """A token that can head a noun phrase: protected tokens
+    (& $ % digits — S&P, 500), nominal-suffix words, and anything
+    that is not a known verb / adjective / function word."""
+    if any(c in tok for c in "&$%") or any(c.isdigit() for c in tok):
+        return True
+    if tok.endswith(_NOMINAL_SUFFIXES):
+        return True
+    return (tok not in _HEAD_VERBS and tok not in _HEAD_ADJS
+            and tok not in STOPWORDS and tok not in _EDGE_JUNK)
+
+
+def _shape_ok(canon):
+    """The shape gate on a candidate's canonical tokens: no
+    possessive/demonstrative edge, not a bare quantity ("$20
+    Billion" is a figure, not a topic), and at least one
+    noun-like token as the phrase's head."""
+    if canon[0] in _EDGE_JUNK or canon[-1] in _EDGE_JUNK:
+        return False
+    if all(re.fullmatch(r"\$?[\d,.]+", t) or t in _QUANTITY_WORDS
+           for t in canon):
+        return False
+    return any(_noun_like(t) for t in canon)
+
+
+def _skeleton(title):
+    """A headline's template skeleton: figures and currency
+    words -> <N>, capitalized tokens -> <E>, placeholder runs
+    collapsed (entity names vary in token length, prices carry
+    units — one template must give one skeleton)."""
+    out = []
+    for tok in title.replace(",", " ").split():
+        low = tok.lower().strip(".:;!?")
+        if re.fullmatch(r"\$?[\d][\d,.]*", tok) or low in {
+                "usd", "eur", "gbp", "jpy", "dollars", "dollar"}:
+            out.append("<N>")
+        elif tok[:1].isupper():
+            out.append("<E>")
+        else:
+            out.append(low)
+    collapsed = []
+    for tok in out:
+        if (not collapsed or tok != collapsed[-1]
+                or tok not in ("<E>", "<N>")):
+            collapsed.append(tok)
+    return " ".join(collapsed)
+
+
+def _template_bound(titles):
+    """True when a topic's headlines live inside ONE headline
+    skeleton with rotating entities — a wire/data template
+    ("<E> stock hits 52-week low at <N>" x 4 companies), not a
+    story. The rotating-entity count is the guard: a genuinely
+    repeated story keeps the same entities and is not demoted."""
+    if len(titles) < 3:
+        return False
+    skels = Counter(_skeleton(t) for t in titles)
+    top_skel, cnt = skels.most_common(1)[0]
+    if cnt < 0.8 * len(titles):
+        return False
+    fillers = {" ".join(tok for tok in t.replace(",", " ").split()
+                        if tok[:1].isupper())
+               for t in titles if _skeleton(t) == top_skel}
+    return len(fillers) >= 3
+
+
+# Two headlines tell the same story when their token sets are
+# close (the published headline story-linking operating point,
+# token Jaccard >= 0.55) AND they differ in no rare token: near
+# duplicates of one story differ in boilerplate, while template
+# siblings ("What Is Behind The Move In X Stock?" for two
+# different X) differ in exactly one rare entity token — the
+# rare-token veto keeps those apart.
+STORY_JACCARD = 0.55
+
+
+def _story_clusters(headlines):
+    """Union-find story clusters over the pool; returns a
+    cluster id per headline index."""
+    sets = [set(_tokens(h["title"])) for h in headlines]
+    df = Counter()
+    for s in sets:
+        df.update(s)
+    rare_df = max(2, int(0.01 * len(headlines)))
+    parent = list(range(len(headlines)))
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for i in range(len(headlines)):
+        for j in range(i + 1, len(headlines)):
+            a, b = sets[i], sets[j]
+            if not a or not b:
+                continue
+            if len(a & b) / len(a | b) < STORY_JACCARD:
+                continue
+            if any(df[t] <= rare_df for t in a ^ b):
+                continue
+            ri, rj = find(i), find(j)
+            if ri != rj:
+                parent[ri] = rj
+    return [find(i) for i in range(len(headlines))]
+
+
+# ------------------------------------------------------------------
 # Fetching
 # ------------------------------------------------------------------
 def _fetch(url):
@@ -437,6 +576,8 @@ def _mine_phrases(headlines, known_terms, top_n=10, min_weight=3):
     surface (the links layer matches on all of them)."""
     counts = Counter()
     surf_counts = {}
+    key_sources = {}
+    pool_outlets = len({h.get("source", "") for h in headlines})
     surf_example, surf_example_link = {}, {}
     surf_free, surf_free_link = {}, {}
     for h in headlines:
@@ -462,6 +603,8 @@ def _mine_phrases(headlines, known_terms, top_n=10, min_weight=3):
             per_key.setdefault(key, []).append(gram)
         for key, surfaces in per_key.items():
             counts[key] += 1
+            key_sources.setdefault(key, set()).add(
+                h.get("source", ""))
             sc = surf_counts.setdefault(key, Counter())
             for gram in surfaces:
                 sc[gram] += 1
@@ -520,6 +663,17 @@ def _mine_phrases(headlines, known_terms, top_n=10, min_weight=3):
             continue
         if _independent(key, weight) < min_weight:
             continue
+        # Shape gate: fragments and bare quantities are not
+        # topics, however often they repeat.
+        if not _shape_ok(key):
+            continue
+        # Outlet gate: in a multi-outlet pool, a phrase carried
+        # by a single outlet is that outlet's house style, not a
+        # market topic (the 2026-11-02 "Hits 52-Week Low" /
+        # "Hong Kong" cases, both one outlet). Vacuous in a
+        # single-outlet pool, where the concept has no meaning.
+        if pool_outlets >= 2 and len(key_sources[key]) < 2:
+            continue
         # Display surface: the key's most frequent surface form
         # (ties: shorter, then A-Z — deterministic).
         surface = sorted(surf_counts[key].items(),
@@ -546,7 +700,19 @@ def _mine_phrases(headlines, known_terms, top_n=10, min_weight=3):
                       "group": _family_of(surface), "mined": True,
                       "canon": key,
                       "surfaces": dict(surf_counts[key])})
-    return _fold_windows(mined, headlines, known_terms)
+    folded = _fold_windows(mined, headlines, known_terms)
+    # Template demotion: a mined phrase whose headlines live
+    # inside one rotating-entity skeleton is a data template,
+    # not a story. Window-fold products are exempt — the fold's
+    # own guards already adjudicated them (the Yahoo explainer
+    # case is pinned as a kept topic by its test).
+    if folded:
+        members = topic_member_sets(folded, headlines)
+        folded = [t for t in folded
+                  if "merged_from" in t or not _template_bound(
+                      [headlines[i]["title"] for i in
+                       members.get(t["term"], set())])]
+    return folded
 
 
 def _join_windows(a, b):
@@ -921,6 +1087,16 @@ def extract_topics(headlines, max_topics=30, min_weight=2):
     topics = _group_exact(topics, headlines)
     members = topic_member_sets(topics, headlines)
     topics = _fold_containment(topics, headlines, members)
+    # Story-cluster counting (2026-11-02): a topic's weight is
+    # the number of distinct STORIES carrying it, not the number
+    # of headlines — near-duplicate coverage of one story counts
+    # once. (The fold above weights by headline union; this
+    # recount is the final word.)
+    members = topic_member_sets(topics, headlines)
+    clusters = _story_clusters(headlines)
+    for t in topics:
+        t["weight"] = len({clusters[i]
+                           for i in members.get(t["term"], set())})
     topics.sort(key=lambda t: (-t["weight"], t["term"]))
     return topics[:max_topics]
 

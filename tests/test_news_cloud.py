@@ -13,6 +13,9 @@ from toolbox.DataZoo.market.news_cloud import (
     _mine_phrases,
     _parse_date,
     _paywalled,
+    _shape_ok,
+    _story_clusters,
+    _template_bound,
     _tokens,
     cloud_html,
     extract_topics,
@@ -34,7 +37,11 @@ def test_parse_date_formats():
 
 
 def test_lexicon_topics_and_groups():
-    heads = (_heads("Federal Reserve holds rates steady as inflation cools", 3)
+    # Distinct headlines per topic: since 2026-11-02 weights
+    # count story clusters, so identical headlines are one story.
+    heads = (_heads("Federal Reserve holds rates steady as inflation cools", 1)
+             + _heads("Federal Reserve officials signal patience on rate moves", 1)
+             + _heads("Markets rally after Federal Reserve decision surprises traders", 1)
              + _heads("Bitcoin slides below $100,000 in crypto selloff", 2))
     topics = {t["term"]: t for t in extract_topics(heads)}
     assert topics["Federal Reserve"]["group"] == "macro"
@@ -422,3 +429,81 @@ def test_window_fold_merges_live_template():
     assert topics["What Is Behind The Move"]["weight"] == 3
     assert "What Is Behind" not in topics
     assert "Behind The Move" not in topics
+
+
+# ------------------------------------------------------------------
+# Robustness gates (2026-11-02): shape, outlet, template, stories
+# ------------------------------------------------------------------
+
+def test_shape_gate_units():
+    assert not _shape_ok(("their", "own"))       # possessive edge
+    assert not _shape_ok(("make", "final"))      # verb + adjective
+    assert not _shape_ok(("$20", "billion"))     # bare quantity
+    assert _shape_ok(("oil", "prices"))
+    assert _shape_ok(("strait", "of", "hormuz"))  # interior stopword
+    # The window fold owns question/preposition edges: its
+    # adjudicated phrases must pass the gate.
+    assert _shape_ok(("behind", "the", "move"))
+
+
+def test_shape_gate_filters_mined_fragments():
+    heads = (_heads("Funds Make Final Push Into Bonds", 1)
+             + _heads("Banks Make Final Push Into Loans", 1)
+             + _heads("Funds Make Final Call On Bonds", 1)
+             + _heads("Insurers Hold Their Own Reserves", 3)
+             + _heads("Mega Fund Raises $20 Billion For Buyouts", 3)
+             + _heads("Chile Copper Exports Climb Again", 3))
+    terms = {t["term"] for t in _mine_phrases(heads, [])}
+    assert "Make Final" not in terms
+    assert "Their Own" not in terms
+    assert "$20 Billion" not in terms
+    # A headed noun phrase survives (the window fold may extend
+    # it to the maximal phrase).
+    assert any(t.startswith("Chile Copper") for t in terms)
+
+
+def test_outlet_gate():
+    one = _heads("Chile Copper Exports Climb", 3, source="A")
+    other = _heads("Local Bakery Wins Sourdough Award", 3,
+                   source="B")
+    terms = {t["term"] for t in _mine_phrases(one + other, [])}
+    assert not any("Chile Copper" in t for t in terms)  # 1 outlet
+    two = one + _heads("Chile Copper Exports Climb", 2, source="B")
+    terms = {t["term"] for t in _mine_phrases(two, [])}
+    assert any(t.startswith("Chile Copper") for t in terms)
+
+
+def test_template_demotion():
+    titles = ["Acme stock hits 52-week low at 10.00 USD",
+              "Beta Corp stock hits 52-week low at 22.50 USD",
+              "Gamma Inc stock hits 52-week low at 3.75 USD",
+              "Delta LLC stock hits 52-week low at 8.10 USD"]
+    assert _template_bound(titles)
+    heads = [{"title": t, "source": "Wire", "published": None}
+             for t in titles]
+    terms = {t["term"] for t in extract_topics(heads)}
+    assert "Hits 52-Week Low" not in terms
+    # A repeated story keeps its entities: not template-bound.
+    same_story = ["Fed cuts rates amid inflation fight",
+                  "Fed cuts rates amid inflation fight",
+                  "Fed cuts rates amid inflation fight"]
+    assert not _template_bound(same_story)
+
+
+def test_story_clusters_rare_token_veto():
+    pair = [{"title": "US Equity Indexes Rise Amid Sinking Crude "
+                      "Oil Treasury Yields", "source": "Y"},
+            {"title": "US Equity Indexes Rise Amid Sinking Crude "
+                      "Oil", "source": "Y"}]
+    siblings = [{"title": "What Is Behind The Move In Roblox "
+                          "Stock?", "source": "Y"},
+                {"title": "What Is Behind The Move In Kinross "
+                          "Gold Stock?", "source": "Y"}]
+    # Padding lifts the shared market vocabulary out of the
+    # rare band, as in a real pool.
+    padding = _heads("Treasury yields steady as investors await "
+                     "data", 12)
+    heads = pair + siblings + padding
+    clusters = _story_clusters(heads)
+    assert clusters[0] == clusters[1]   # one story, counted once
+    assert clusters[2] != clusters[3]   # template siblings stay apart
