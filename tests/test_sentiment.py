@@ -30,6 +30,24 @@ def test_fetch_crypto_builds_on_canonical_entries(monkeypatch):
     assert out.tolist() == [30, 34]
 
 
+def test_fetch_crypto_dates_values_in_eastern(monkeypatch):
+    # alternative.me stamps at 00:00 UTC: the 2026-11-02 stamp is
+    # 2026-11-01 19:00 in New York, so the value is dated Nov 1
+    # (user direction 2026-11-01: everything in the app in Eastern).
+    entries = [
+        {"timestamp": "1793491200", "value": "34",
+         "value_classification": "Fear"},
+        {"timestamp": "1793577600", "value": "37",
+         "value_classification": "Fear"},
+    ]
+    monkeypatch.setattr(
+        sm, "fetch_crypto_entries", lambda limit, timeout=30: entries)
+    out = sm.fetch_crypto()
+    assert [str(d.date()) for d in out.index] == ["2026-10-31",
+                                                  "2026-11-01"]
+    assert out.iloc[-1] == 37
+
+
 def test_fetch_gold_dates_bars_in_eastern(monkeypatch):
     # Yahoo stamps GC=F daily bars at midnight ET (04:00 UTC). Dated in
     # Eastern, the Friday bar stays Friday; a Chicago conversion would
@@ -76,7 +94,7 @@ def test_fetch_sentiment_degrades_per_source(monkeypatch):
     assert out["latest"]["cnn"] == {"value": 40.0, "zone": "Fear"}
     assert out["latest"]["gold"] == {"value": 3900.0}
     assert "crypto" not in out["latest"]
-    assert out["asof"].endswith(" CT")
+    assert out["asof"].endswith((" EST", " EDT"))
 
 
 def test_fetch_sentiment_none_when_all_fail(monkeypatch):

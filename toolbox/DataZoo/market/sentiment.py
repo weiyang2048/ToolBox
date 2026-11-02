@@ -28,16 +28,15 @@ import datetime
 import io
 import json
 import urllib.request
-from zoneinfo import ZoneInfo
 
 import pandas as pd
 
+from toolbox.DataZoo.market.eastern import ET, asof_stamp
 from toolbox.DataZoo.market.fear_greed import (
     fetch_cnn_graph,
     fetch_crypto_entries,
 )
 
-CT = ZoneInfo("America/Chicago")
 UA = {"User-Agent": "toolbox-sentiment"}
 
 CNN_COLOR = "#1a3c6e"
@@ -61,13 +60,26 @@ def _get_json(url, headers=None, timeout=30):
         return json.load(resp)
 
 
-def _daily_series(vals, epochs, unit):
-    dates = pd.to_datetime(epochs, unit=unit, utc=True).tz_convert(None)
+def _daily_series(vals, epochs, unit, tz=None):
+    """Daily series from epoch stamps. With ``tz``, the stamps are
+    instants and are dated in that zone; without it, the stamps are
+    day-keys whose UTC date is the day itself (see fetch_cnn)."""
+    dates = pd.to_datetime(epochs, unit=unit, utc=True)
+    if tz is None:
+        dates = dates.tz_convert(None)
+    else:
+        dates = dates.tz_convert(tz).tz_localize(None)
     return pd.Series(vals, index=dates.normalize())
 
 
 def fetch_cnn():
-    """CNN Fear & Greed (US stocks), last 365 days, trading days."""
+    """CNN Fear & Greed (US stocks), last 365 days, trading days.
+
+    CNN stamps each daily rating with its session date (historical
+    points at 00:00 UTC of the session date, the live point late
+    that same UTC day), so the UTC date IS the Eastern session
+    date — converting zones would misdate every point a day early.
+    The series therefore keeps its UTC day-keys."""
     d = fetch_cnn_graph(timeout=30)
     pts = d["fear_and_greed_historical"]["data"]
     cut = (datetime.datetime.now(datetime.timezone.utc)
@@ -78,10 +90,17 @@ def fetch_cnn():
 
 
 def fetch_crypto():
-    """Crypto Fear & Greed (alternative.me), 365 calendar days."""
+    """Crypto Fear & Greed (alternative.me), 365 calendar days.
+
+    alternative.me stamps each value at 00:00 UTC — an instant,
+    which falls on the prior Eastern evening, so the values are
+    dated in Eastern time like the app's other instant-stamped
+    daily series (the Nov 2 00:00 UTC value is Nov 1 in New York).
+    """
     rows = fetch_crypto_entries(365, timeout=30)
     return _daily_series([int(r["value"]) for r in rows],
-                         [int(r["timestamp"]) for r in rows], "s")
+                         [int(r["timestamp"]) for r in rows], "s",
+                         tz=ET)
 
 
 def fetch_gold():
@@ -124,9 +143,8 @@ def fetch_sentiment():
             latest[name] = {"value": v, "zone": zone(v)}
     if "gold" in series:
         latest["gold"] = {"value": float(series["gold"].iloc[-1])}
-    now = datetime.datetime.now(CT)
     return {"series": series, "latest": latest,
-            "asof": now.strftime("%a %b %-d, %-I:%M %p CT")}
+            "asof": asof_stamp()}
 
 
 def chart_png(series):

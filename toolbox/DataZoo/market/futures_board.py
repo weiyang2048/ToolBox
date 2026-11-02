@@ -46,9 +46,9 @@ import json
 import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
-from zoneinfo import ZoneInfo
 
-CT = ZoneInfo("America/Chicago")
+from toolbox.DataZoo.market.eastern import ET, asof_stamp
+
 UA = {"User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                      "AppleWebKit/537.36 (KHTML, like Gecko) "
                      "Chrome/120.0 Safari/537.36"),
@@ -268,7 +268,7 @@ def history(sym):
     with interval=1d returns true daily bars. 12y covers the
     2520-session 10Y lookback plus slack.
     """
-    now = datetime.datetime.now(CT)
+    now = datetime.datetime.now(ET)
     p2 = int(now.timestamp())
     p1 = int((now - datetime.timedelta(days=12 * 366)).timestamp())
     url = ("https://query1.finance.yahoo.com/v8/finance/chart/"
@@ -283,12 +283,12 @@ def history(sym):
     ts = result[0].get("timestamp") or []
     closes = (result[0].get("indicators", {}).get("quote") or [{}])[0] \
         .get("close") or []
-    today = datetime.datetime.now(CT).date()
+    today = datetime.datetime.now(ET).date()
     out = []
     for t, c in zip(ts, closes):
         if c is None:
             continue
-        d = datetime.datetime.fromtimestamp(t, CT).date()
+        d = datetime.datetime.fromtimestamp(t, ET).date()
         if d >= today:  # today's bar is still forming
             continue
         out.append(float(c))
@@ -379,11 +379,11 @@ def fetch_board(now=None, groups=None):
     (0x20, 20x50, 50x200) trend-state triple from ls_states() on the
     same completed closes the horizons use.
     """
-    now = now or datetime.datetime.now(CT)
-    # Same short format as the news cloud's stamp
-    # ("%a %b %-d, %-I:%M %p CT") — one as-of format
-    # across the Markets page (user direction 2026-10-31).
-    asof = now.strftime("%a %b %-d, %-I:%M %p CT")
+    now = now or datetime.datetime.now(ET)
+    # The shared Eastern as-of stamp (eastern.asof_stamp) — one
+    # format across the Markets page (user direction 2026-10-31
+    # for the shared format; 2026-11-01 for Eastern).
+    asof = asof_stamp(now)
     data, notes, available = {}, [], 0
     # The two HTTP requests per line (quote + 12y history) are
     # I/O-bound; fetch all lines concurrently. Futures are awaited
@@ -414,7 +414,7 @@ def fetch_board(now=None, groups=None):
                 row["pct"] = 100.0 * (last - settle) / settle
                 if mtime:
                     row["mtime"] = datetime.datetime.fromtimestamp(
-                        mtime, CT).strftime("%m-%d %H:%M CT")
+                        mtime, ET).strftime("%m-%d %H:%M %Z")
                 if dec is None:  # cash index: decimals from its level
                     row["dec"] = cash_dec(last)
                 available += 1

@@ -24,7 +24,6 @@ import datetime
 import io
 import math
 from concurrent.futures import ThreadPoolExecutor
-from zoneinfo import ZoneInfo
 
 import matplotlib
 
@@ -35,10 +34,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from toolbox.DataZoo.market.eastern import (
+    asof_stamp,
+    utc_index_to_et_dates,
+)
 from toolbox.DataZoo.market.yahoo_prices import fetch_json, with_retry, yahoo_daily
 
 UA = "toolbox-datazoo"
-CT = ZoneInfo("America/Chicago")
 GENESIS = datetime.date(2009, 1, 3)
 OZT_PER_TONNE = 32150.7
 # WGC end-2024 anchor: 216,265 t above-ground gold.
@@ -134,6 +136,21 @@ def fetch_powerlaw():
         btc, gld, spy, gold_oz, bdf, bmc = [f.result()
                                             for f in jobs]
 
+    # Dating (user direction 2026-11-01: everything in the app in
+    # Eastern): Yahoo stamps BTC-USD bars at 00:00 UTC, and the
+    # Nov 2 UTC bar opens Nov 1, 19:00 EST — so every DISPLAYED
+    # date of a bar is its Eastern date, converted at the surface
+    # (stats["btc_date"], the figure annotation). The series index
+    # itself deliberately keeps Yahoo's bar dates: a bar's
+    # close-to-close return ends on its stamp's Eastern day
+    # (19:00 ET), which is exactly what pairs it with the right
+    # GLD/SPY session in the correlations below — re-dating the
+    # index by a day moved corr_gold from +0.50 to +0.07 in
+    # testing, a values change, not a dating change. The
+    # blockchain.info series likewise keep their sampled dates:
+    # the fits and the ratio's "latest" date hang off those,
+    # exactly as served.
+
     # --- extended fit on 2010+ history ---
     t = days_since_genesis(bdf.index)
     b, lnA, sigma = fit_power_law(t, bdf["p"].values)
@@ -190,9 +207,8 @@ def fetch_powerlaw():
     last = c_gold.index[-1]
     floor = math.floor(
         min(c_gold.min(), c_spx.min(), eg.min(), es.min()) * 20) / 20
-    now_ct = datetime.datetime.now(CT)
     return {
-        "asof": now_ct.strftime("%a %b %-d, %-I:%M %p CT"),
+        "asof": asof_stamp(),
         "btc": btc, "early": early, "days": days, "trend": trend,
         "lo": lo, "hi": hi, "ratio": ratio, "r_days": r_days,
         "r_trend": r_trend, "r_lo": r_lo, "r_hi": r_hi,
@@ -202,7 +218,8 @@ def fetch_powerlaw():
             "slope": float(b), "sigma": float(sigma), "n_fit": n_fit,
             "end2029": p2029,
             "btc_last": float(btc.iloc[-1]),
-            "btc_date": btc.index[-1].date().isoformat(),
+            "btc_date": utc_index_to_et_dates(
+                btc.index[-1:])[0].date().isoformat(),
             "ratio_pct": ratio_now * 100,
             "ratio_date": ratio.index[-1].date().isoformat(),
             "ratio_slope": float(b_r),
@@ -253,7 +270,10 @@ def chart_png(data):
     _lp_x, _lp_y = btc.index[-1], float(btc.iloc[-1])
     ax1.plot([_lp_x], [_lp_y], marker="o", ms=6, color="#b3543f",
              markeredgecolor="white", markeredgewidth=1.0, zorder=7)
-    ax1.annotate(f"${_lp_y:,.0f}\n{_lp_x.date().isoformat()}",
+    # The annotation dates the point in Eastern (stats["btc_date"],
+    # the bar's Eastern date) — the series coordinate itself keeps
+    # Yahoo's bar date; at this axis span the day is sub-pixel.
+    ax1.annotate(f"${_lp_y:,.0f}\n{st['btc_date']}",
                  xy=(_lp_x, _lp_y), xytext=(-8, -30),
                  textcoords="offset points", ha="right", va="top",
                  fontsize=8.5, color="#b3543f", fontweight="bold",
@@ -263,8 +283,11 @@ def chart_png(data):
     ax1.axhline(300000, color="#2e7d32", ls=":", lw=1.3)
     ax1.text(datetime.datetime(2030, 12, 31), 345000, "$300,000 ",
              color="#2e7d32", fontsize=9, ha="right")
-    ax1.axvline(last, color="#b3543f", ls="--", lw=1.2)
-    ax1.text(last + pd.Timedelta(days=8), 40000, "today",
+    # The "today" line marks the annotated last point — the shared
+    # `last` (the correlations' data end) sat days away from the
+    # point it labelled.
+    ax1.axvline(_lp_x, color="#b3543f", ls="--", lw=1.2)
+    ax1.text(_lp_x + pd.Timedelta(days=8), 40000, "today",
              color="#b3543f", fontsize=9, va="top")
     ax1.set_ylabel("BTC-USD (log scale)", color="#1f3a5f")
     ax1.tick_params(axis="y", colors="#1f3a5f")

@@ -76,3 +76,51 @@ def test_with_retry_does_not_retry_permanent_http_errors():
     with pytest.raises(RuntimeError, match="leg-z"):
         bp._with_retry(gone, "leg-z")
     assert calls["n"] == 1
+
+
+def test_fetch_powerlaw_dates_btc_in_eastern(monkeypatch):
+    # Yahoo stamps BTC-USD bars at 00:00 UTC: the last bar below is
+    # stamped 2026-11-02 but starts 2026-11-01 19:00 EST, so the
+    # surfaced date must be 2026-11-01 (user direction 2026-11-01:
+    # everything in the app in Eastern). The conversion happens at
+    # the surface: the internal index keeps Yahoo's bar dates,
+    # because a bar's close-to-close return ends on its stamp's
+    # Eastern day, which is what pairs it with the right equity
+    # session in the correlations — the values must not move.
+    btc_idx = pd.date_range("2026-05-01", "2026-11-02", freq="D")
+    wig = 1.0 + 0.05 * np.sin(np.arange(len(btc_idx)) / 3.0)
+    btc = pd.Series(np.exp(np.linspace(9.0, 11.3, len(btc_idx))) * wig,
+                    index=btc_idx)
+    bus = pd.bdate_range("2010-01-04", "2026-10-30")
+    wig_b = 1.0 + 0.03 * np.sin(np.arange(len(bus)) / 5.0)
+    gld = pd.Series(np.exp(np.linspace(4.5, 5.6, len(bus))) * wig_b,
+                    index=bus)
+    spy = pd.Series(
+        np.exp(np.linspace(5.0, 6.4, len(bus)))
+        * (1.0 + 0.04 * np.cos(np.arange(len(bus)) / 4.0)), index=bus)
+    gold_idx = pd.bdate_range("2013-01-01", "2026-10-30")
+    gold = pd.Series(np.linspace(1200.0, 3900.0, len(gold_idx)),
+                     index=gold_idx)
+
+    def fake_yahoo(ticker, p1=0, p2=None, include_partial=False):
+        return {"BTC-USD": btc, "GLD": gld, "SPY": spy,
+                "GC=F": gold}[ticker]
+
+    bdf_idx = pd.date_range("2010-07-17", "2026-10-31", freq="4D")
+    bdf = pd.DataFrame(
+        {"p": np.exp(np.linspace(0.0, 11.3, len(bdf_idx)))
+         * (1.0 + 0.2 * np.sin(np.arange(len(bdf_idx)) / 2.0))},
+        index=bdf_idx)
+    cap_idx = pd.date_range("2013-01-01", "2026-10-27", freq="6D")
+    bmc = pd.DataFrame(
+        {"mc": np.exp(np.linspace(15.0, 21.0, len(cap_idx)))},
+        index=cap_idx)
+    monkeypatch.setattr(bp, "yahoo_daily", fake_yahoo)
+    monkeypatch.setattr(bp, "blockchain_btc", lambda: bdf)
+    monkeypatch.setattr(bp, "blockchain_marketcap", lambda: bmc)
+
+    out = bp.fetch_powerlaw()
+    assert str(out["btc"].index[-1].date()) == "2026-11-02"
+    assert out["stats"]["btc_date"] == "2026-11-01"
+    assert out["stats"]["btc_last"] == float(btc.iloc[-1])
+    assert out["asof"].endswith((" EST", " EDT"))

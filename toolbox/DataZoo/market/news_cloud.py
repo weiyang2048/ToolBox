@@ -942,9 +942,8 @@ def build_cloud(png_path=DEFAULT_PNG, json_path=DEFAULT_JSON, hours=24):
     headlines, source_counts = fetch_headlines(hours=hours, now=now)
     topics = extract_topics(headlines)
     try:
-        from zoneinfo import ZoneInfo
-        asof = now.astimezone(ZoneInfo("America/Chicago")).strftime(
-            "%a %b %-d, %-I:%M %p CT")
+        from toolbox.DataZoo.market.eastern import asof_stamp
+        asof = asof_stamp(now)
     except Exception:
         asof = now.strftime("%Y-%m-%d %H:%M UTC")
     caption = {

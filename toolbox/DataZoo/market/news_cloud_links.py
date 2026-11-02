@@ -300,9 +300,8 @@ def build_linked_cloud_html(hours=24):
     if not topics:
         return ""
     try:
-        from zoneinfo import ZoneInfo
-        asof = now.astimezone(ZoneInfo("America/Chicago")).strftime(
-            "%a %b %-d, %-I:%M %p CT")
+        from toolbox.DataZoo.market.eastern import asof_stamp
+        asof = asof_stamp(now)
     except Exception:
         asof = now.strftime("%Y-%m-%d %H:%M UTC")
     caption = {
