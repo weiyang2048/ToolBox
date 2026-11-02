@@ -7,6 +7,8 @@ from toolbox.DataZoo.market.news_cloud import (
     _display,
     _family_of,
     _fold_containment,
+    _fold_windows,
+    _join_windows,
     _matches,
     _mine_phrases,
     _parse_date,
@@ -345,3 +347,78 @@ def test_fold_merges_at_the_80_percent_boundary():
     out = _fold_pair({0, 1, 2, 3, 4}, {0, 1, 2, 3, 5}, wx=5, wy=5)
     assert len(out) == 1
     assert out[0]["weight"] == 6
+
+
+def test_join_windows_overlap_only():
+    assert _join_windows(("what", "is", "behind"),
+                         ("behind", "the", "move")) == (
+        "what", "is", "behind", "the", "move")
+    # Reverse orientation joins the same way.
+    assert _join_windows(("behind", "the", "move"),
+                         ("what", "is", "behind")) == (
+        "what", "is", "behind", "the", "move")
+    # Pure containment is not a window join (the containment
+    # fold owns it): the join would not extend the longer gram.
+    assert _join_windows(("midterm",), ("midterm", "election")) is None
+    # No shared edge token: no join.
+    assert _join_windows(("senate", "race"), ("wall", "street")) is None
+
+
+def _window_topics():
+    return [
+        {"term": "Silver Lining", "weight": 3, "group": "neutral",
+         "canon": ("silver", "lining"), "mined": True,
+         "example_headline": "", "link": "",
+         "surfaces": {"silver lining": 3}},
+        {"term": "Lining Up", "weight": 3, "group": "neutral",
+         "canon": ("lining", "up"), "mined": True,
+         "example_headline": "", "link": "",
+         "surfaces": {"lining up": 3}},
+    ]
+
+
+def test_window_fold_merges_template_fragments():
+    # Every headline carries both windows, joined contiguously:
+    # one topic, the joined phrase, weight = the union.
+    heads = _heads("The Silver Lining Up North", 3)
+    out = _fold_windows(_window_topics(), heads, [])
+    assert [t["term"] for t in out] == ["Silver Lining Up"]
+    assert out[0]["weight"] == 3
+    assert set(out[0]["merged_from"]) == {"Silver Lining", "Lining Up"}
+    assert "silver lining up" in out[0]["surfaces"]
+
+
+def test_window_fold_blocked_below_containment():
+    # The windows share only 3 of their 5 headlines each (60% <
+    # the 80% guard): token overlap alone must not merge them.
+    heads = (_heads("Silver Lining Up For Grabs", 3)
+             + _heads("Silver Lining For Miners", 2)
+             + _heads("Lining Up For Tickets", 2))
+    out = _fold_windows(_window_topics(), heads, [])
+    assert {t["term"] for t in out} == {"Silver Lining", "Lining Up"}
+
+
+def test_window_fold_blocked_when_not_contiguous():
+    # Identical headline sets, but the joined phrase never
+    # occurs contiguously — the two grams are separate phrases
+    # that merely share a word: no fold.
+    heads = _heads("Silver Lining Appears While Lining Up Forms", 3)
+    out = _fold_windows(_window_topics(), heads, [])
+    assert {t["term"] for t in out} == {"Silver Lining", "Lining Up"}
+
+
+def test_window_fold_merges_live_template():
+    # The live 2026-11-01 case end to end: Yahoo's explainer
+    # template mined as two overlapping windows of one phrase.
+    heads = [
+        {"title": "What Is Behind The Move In Cameco Stock?",
+         "source": "Yahoo ^GSPC", "published": None},
+        {"title": "What Is Behind The Move In Robinhood Stock?",
+         "source": "Yahoo ^GSPC", "published": None},
+        {"title": "What Is Behind The Move In Global Payments Stock?",
+         "source": "Yahoo ^GSPC", "published": None},
+    ]
+    topics = {t["term"]: t for t in extract_topics(heads)}
+    assert topics["What Is Behind The Move"]["weight"] == 3
+    assert "What Is Behind" not in topics
+    assert "Behind The Move" not in topics

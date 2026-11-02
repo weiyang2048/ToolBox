@@ -546,7 +546,178 @@ def _mine_phrases(headlines, known_terms, top_n=10, min_weight=3):
                       "group": _family_of(surface), "mined": True,
                       "canon": key,
                       "surfaces": dict(surf_counts[key])})
-    return mined
+    return _fold_windows(mined, headlines, known_terms)
+
+
+def _join_windows(a, b):
+    """Join two canonical token tuples into one phrase when a
+    suffix of one is a prefix of the other (overlap >= 1 token)
+    and the join is strictly longer than both — i.e. the two
+    grams are overlapping windows of a single longer phrase.
+    Largest overlap wins; returns the joined tuple or None.
+    Pure containment (one gram inside the other) is not a
+    window join — the containment fold owns that case."""
+    for k in range(min(len(a), len(b)), 0, -1):
+        if a[len(a) - k:] == b[:k]:
+            joined = a + b[k:]
+            if len(joined) > max(len(a), len(b)):
+                return joined
+        if b[len(b) - k:] == a[:k]:
+            joined = b + a[k:]
+            if len(joined) > max(len(a), len(b)):
+                return joined
+    return None
+
+
+# Stopwords that may sit INSIDE a genuine phrase — determiners
+# and copula/auxiliaries ("what IS behind", "behind THE move").
+# Any other stopword inside a gram ("violent IN france",
+# "falls AS megacap") heads an adjunct: the gram crosses a
+# phrase boundary, and window-joining through it would extend
+# a topic into a trailing clause.
+_WINDOW_OK_INTERNAL = {"the", "a", "an", "is", "are", "was",
+                       "were", "be", "been"}
+
+
+def _fold_windows(mined, headlines, known_terms):
+    """Window fold: two mined grams that are overlapping windows
+    of one recurring headline phrase render as two topics for a
+    single story template (seen live 2026-11-01: Yahoo's
+    explainer template "What Is Behind The Move In X Stock?"
+    mined as both "What Is Behind" and "Behind The Move" —
+    identical headline sets, neither gram containing the
+    other's tokens, so the containment fold could not see
+    them). The evidence bar is deliberately strict — a miss
+    leaves the status quo, an over-merge invents a phrase no
+    headline contains. A pair folds into the joined phrase
+    iff ALL of: the grams have equal canonical length (two
+    windows of one stem, not a topic and its tail); their
+    member sets are IDENTICAL (co-extensive — one window
+    living inside a larger topic's headlines is that topic's
+    business, not a window); the joined phrase occurs
+    contiguously in >= 80% of the shared headlines (the
+    containment fold's guard constant); and neither gram
+    carries an adjunct-heading stopword inside it (see
+    _WINDOW_OK_INTERNAL — "protests turn violent" must never
+    extend into "violent in France"). The survivor's label
+    is the joined phrase itself — a real headline substring,
+    taken from an actual headline's token span; its weight
+    is the member set's size, and its surfaces pool both
+    grams' surfaces plus the joined one, so member matching
+    keeps counting every form. Two more exclusions: only a
+    gram's INTERNAL tokens are judged for the stopword rule
+    (edges are content by mining construction, so a bigram
+    has no internal token to judge); and a gram carrying an
+    ampersand is an entity name the tokenizer deliberately
+    kept whole ("Procter & Gamble", "S&P 500") — entities
+    are complete topics, never template windows, and never
+    fold."""
+    if len(mined) < 2:
+        return mined
+    titles = [" ".join(h["title"].lower().replace("-", " ").split())
+              for h in headlines]
+    streams = [_canon_tokens(_tokens(h["title"])) for h in headlines]
+    raw_streams = [_tokens(h["title"]) for h in headlines]
+
+    def _members(topic):
+        hits = set()
+        grams = topic.get("surfaces") or {topic["term"].lower(): 1}
+        for gram in grams:
+            g = gram.lower().replace("-", " ")
+            for i, title in enumerate(titles):
+                if g in title:
+                    hits.add(i)
+        return hits
+
+    def _contains(stream, seq):
+        stream, seq = list(stream), list(seq)
+        return any(stream[i:i + len(seq)] == seq
+                   for i in range(len(stream) - len(seq) + 1))
+
+    def _overlaps(term, others):
+        dk = term.lower().replace("-", "").replace(" ", "")
+        for other in others:
+            k = other.lower().replace("-", "").replace(" ", "")
+            if dk in k or k in dk:
+                return True
+        return False
+
+    topics = [dict(t) for t in mined]
+    changed = True
+    while changed:
+        changed = False
+        members = {t["term"]: _members(t) for t in topics}
+        topics.sort(key=lambda t: (t["weight"], t["term"]))
+        for i, x in enumerate(topics):
+            if changed:
+                break
+            for y in topics[i + 1:]:
+                if len(x["canon"]) != len(y["canon"]):
+                    continue
+                if any("&" in tok
+                       for tok in x["canon"] + y["canon"]):
+                    continue
+                if any(tok in STOPWORDS
+                       and tok not in _WINDOW_OK_INTERNAL
+                       for tok in x["canon"][1:-1]
+                       + y["canon"][1:-1]):
+                    continue
+                joined = _join_windows(x["canon"], y["canon"])
+                if joined is None:
+                    continue
+                mx, my = members[x["term"]], members[y["term"]]
+                if not mx or mx != my:
+                    continue
+                contig = [j for j in sorted(mx)
+                          if _contains(streams[j], joined)]
+                if not contig or len(contig) < \
+                        FOLD_MIN_CONTAINMENT * len(mx):
+                    continue
+                # The joined surface, verbatim from the first
+                # headline whose token stream carries it.
+                j0 = contig[0]
+                stream = list(streams[j0])
+                pos = next(p for p in range(
+                    len(stream) - len(joined) + 1)
+                    if stream[p:p + len(joined)] == list(joined))
+                surface = " ".join(raw_streams[j0][pos:pos + len(joined)])
+                surfaces = dict(x.get("surfaces") or {})
+                for s, c in (y.get("surfaces") or {}).items():
+                    surfaces[s] = surfaces.get(s, 0) + c
+                surfaces[surface] = len(contig)
+                union = mx | my
+                hits = [headlines[j] for j in sorted(union)]
+                rep = _representative(hits)
+                merged = {
+                    "term": _display(surface.split(" ")),
+                    "weight": len(union),
+                    "example_headline": rep["title"],
+                    "link": rep.get("link", ""),
+                    "group": (x if x["weight"] >= y["weight"]
+                              else y)["group"],
+                    "mined": True, "canon": joined,
+                    "surfaces": surfaces,
+                    "merged_from":
+                        (x.get("merged_from") or [x["term"]]) +
+                        (y.get("merged_from") or [y["term"]])}
+                others = [t["term"] for t in topics
+                          if t is not x and t is not y]
+                if _overlaps(merged["term"], known_terms):
+                    # The joined phrase is a lexicon topic's
+                    # territory: both windows are fragments of
+                    # it — consume them, keep no mined copy.
+                    topics = [t for t in topics
+                              if t is not x and t is not y]
+                elif _overlaps(merged["term"], others):
+                    continue
+                else:
+                    topics = [t for t in topics
+                              if t is not x and t is not y]
+                    topics.append(merged)
+                changed = True
+                break
+    topics.sort(key=lambda t: (-t["weight"], t["term"]))
+    return topics
 
 
 # ------------------------------------------------------------------
