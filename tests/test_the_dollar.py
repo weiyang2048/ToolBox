@@ -34,6 +34,11 @@ def test_dollar_math_on_synthetic():
     out = render_the_dollar(p)
     assert out.count("<svg") == 3
     assert "11 of 11" in out
+    # Centered block (2026-11-02): the whole tab output sits
+    # in the 1120px auto-margin wrapper, as demoed.
+    assert out.startswith(
+        '<div style="max-width:1120px;margin:0 auto">')
+    assert out.endswith("</div>")
     # Freshness (2026-11-02): per-panel last dates are exposed
     # and the note takes the lag pill for a later board date.
     assert p["last_date"] == IDX[-1].strftime("%Y-%m-%d")

@@ -43,6 +43,11 @@ def test_shift_math_on_synthetic():
     assert "US vs ex-US" not in out  # title lives in the tab
     assert "Shift tape" in out and "-4.0 pts" in out
     assert out.count("<svg") == 3
+    # Centered block (2026-11-02): the whole tab output sits
+    # in the 1120px auto-margin wrapper, as demoed.
+    assert out.startswith(
+        '<div style="max-width:1120px;margin:0 auto">')
+    assert out.endswith("</div>")
     # Freshness (2026-11-02): the payload carries its own last
     # date; a board date one session later adds the lag pill.
     assert p["last_date"] == IDX[-1].strftime("%Y-%m-%d")

@@ -297,10 +297,14 @@ def _spread_panel(frame):
 
 
 def render_us_xus(p, board_date=None):
-    """Chips + the three panels + the honest footnote. With
-    `board_date`, the as-of note carries the freshness pill
-    (canonical toolbox.DataZoo.market.freshness) marking any
-    lag behind the board date."""
+    """Chips + the three panels + the honest footnote, wrapped
+    in one centered block (max-width 1120px, the panels' own
+    width, margin auto — user direction 2026-11-02: the tab
+    sat left on the wide page while the page's other blocks
+    center). With `board_date`, the as-of note carries the
+    freshness pill (canonical
+    toolbox.DataZoo.market.freshness) marking any lag behind
+    the board date."""
     from toolbox.DataZoo.market.freshness import lag_pill_html
 
     pill = lag_pill_html(board_date, p.get("last_date"))
@@ -356,7 +360,8 @@ def render_us_xus(p, board_date=None):
         'year; the claim "a shift is under way" needs the tape '
         'positive AND the ratio above its 200-day average — '
         'the chips report both, live.</div>')
-    return (note
+    return ('<div style="max-width:1120px;margin:0 auto">'
+            + note
             + '<div style="display:flex;gap:8px;flex-wrap:wrap;'
               'margin-bottom:12px">' + chip_html + "</div>"
-            + p1 + p2 + p3 + foot)
+            + p1 + p2 + p3 + foot + "</div>")
