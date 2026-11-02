@@ -833,6 +833,163 @@ def asset_stats(prices: pd.DataFrame, benchmark: pd.Series | None = None) -> pd.
     return pd.DataFrame(rows).T
 
 
+def _ema_state(s: pd.Series, fast: int, slow: int | None) -> bool | None:
+    """One EMA trend state at a series' last close — the briefs'
+    convention (movement-tracker's px_ema20 / ema_signal /
+    ema_regime): pandas ewm(span=N, adjust=False) final values on
+    the full history handed in; ``slow=None`` compares the last
+    close itself against the fast EMA. None when the series holds
+    fewer sessions than the slower span requires."""
+    s = s.dropna()
+    need = fast if slow is None else slow
+    if len(s) < need:
+        return None
+    e_fast = s.ewm(span=fast, adjust=False).mean().iloc[-1]
+    if slow is None:
+        return bool(s.iloc[-1] > e_fast)
+    e_slow = s.ewm(span=slow, adjust=False).mean().iloc[-1]
+    return bool(e_fast > e_slow)
+
+
+def _weekly_win_rate(w: pd.Series, bench: pd.Series) -> float:
+    """Share of calendar weeks (W-FRI, per-period return from the
+    available trading days, edges partial — winrate.py's
+    period_returns) in which ``w``'s return beat ``bench``'s, over
+    the weeks both series span inside ``w``'s window."""
+    b = bench.dropna()
+    b = b[(b.index >= w.index[0]) & (b.index <= w.index[-1])]
+    if len(b) < 2 or len(w) < 2:
+        return float("nan")
+
+    def _period(s: pd.Series) -> pd.Series:
+        g = s.groupby(pd.Grouper(freq="W-FRI"))
+        return g.last() / g.first() - 1.0
+
+    a, v = _period(w).align(_period(b), join="inner")
+    valid = a.notna() & v.notna()
+    n = int(valid.sum())
+    return float((a[valid] > v[valid]).mean()) if n else float("nan")
+
+
+def merged_stats(prices: pd.DataFrame,
+                 benchmark: pd.Series | None = None,
+                 win_benchmarks: pd.DataFrame | None = None,
+                 rf_annual_pct: pd.Series | None = None) -> pd.DataFrame:
+    """The one merged per-asset stats table (user direction
+    2026-11-02): the union of the Strategies page's table
+    (:func:`asset_stats`, plus the page's Rebased column) and the
+    briefs' panel stats table (panel-stats.py / movement-tracker),
+    ALL columns from both, computed once here so the dashboard and
+    the briefs can never drift apart. Column removals are a later
+    decision; nothing is dropped.
+
+    Bases — where the two source tables disagreed, both statistics
+    are kept under their source names rather than choosing one:
+
+    - Full passed frame, per ticker (asset_stats basis): ``last``,
+      ``mu_ann``, ``vol_ann`` (annualised log-return mean/vol),
+      ``sharpe0`` (Sharpe of log returns at rf = 0),
+      ``momentum_12_1``, ``max_dd``, ``beta`` (vs ``benchmark``'s
+      simple returns, when supplied), ``n_obs``.
+    - ``rebased`` follows the Strategies page's arithmetic (user
+      direction 2026-11-02, test-pinned): 100 × last / first valid
+      print of the passed frame. (The briefs' rebased is the same
+      formula on their ~1y window frame — pass a 1y frame and the
+      two agree.)
+    - Trailing min(252, available) observations per ticker (the
+      briefs' ~1y window basis): ``day_chg``, ``wk_chg`` (5),
+      ``mo_chg`` (21), ``q_chg`` (63) trailing-session changes,
+      ``ytd_chg`` (vs the last close of the prior calendar year
+      inside the window; NaN when the window holds none), ``vol``
+      (annualised log-return vol over the window), ``sharpe``
+      (daily SIMPLE returns in excess of the contemporaneous
+      ^IRX-style yield — ``rf_annual_pct`` converted daily exactly
+      as the briefs do, (1 + y/100)**(1/252) − 1, forward-filled;
+      rf = 0 when no yield series is supplied), ``ulcer`` (sqrt of
+      the mean squared drawdown from the running peak), ``dd``
+      (current drawdown from the window maximum), ``dd_q``
+      (quantile of the current drawdown within the window's
+      running-drawdown history — a deeper current drawdown reads
+      a higher quantile; the briefs' (hist >= last).mean() on the
+      non-positive drawdown series).
+    - Trend states on the FULL passed history (the briefs'
+      convention): ``px_ema20`` (close > EMA20), ``ema_long``
+      (EMA20 > EMA50), ``ema_regime`` (EMA50 > EMA200); True = L,
+      False = S, None when the history is too short.
+    - ``win_rate``: mean over VT / VEA / VWO of the weekly win
+      rate against that benchmark over the trailing window (the
+      briefs' definition), from the ``win_benchmarks`` closes;
+      NaN when no benchmark frame is supplied.
+
+    Units: every rate-like column is a FRACTION (the briefs store
+    percents — divide-by-100 is the only unit change); ``rebased``
+    is index points (start = 100), ``last`` is price units, the
+    trend states are bool / None.
+    """
+    base = asset_stats(prices, benchmark)
+    rows = {}
+    for t in base.index:
+        px = prices[t].dropna().sort_index()
+        w = px.iloc[-TRADING_DAYS:]
+        row = {k: base.loc[t, k] for k in base.columns}
+        row["rebased"] = float(px.iloc[-1] / px.iloc[0] * 100.0)
+        v = w.values
+        row["day_chg"] = float(v[-1] / v[-2] - 1.0) if len(v) >= 2 \
+            else float("nan")
+
+        def _trail(k: int) -> float:
+            return float(v[-1] / v[-k - 1] - 1.0) if len(v) >= k + 1 \
+                else float("nan")
+        row["wk_chg"], row["mo_chg"], row["q_chg"] = (
+            _trail(5), _trail(21), _trail(63))
+        ytd_cut = pd.Timestamp(year=w.index[-1].year - 1, month=12, day=31)
+        prior = w[w.index <= ytd_cut]
+        row["ytd_chg"] = (float(w.iloc[-1] / prior.iloc[-1] - 1.0)
+                          if len(prior) else float("nan"))
+        row["px_ema20"] = _ema_state(px, 20, None)
+        row["ema_long"] = _ema_state(px, 20, 50)
+        row["ema_regime"] = _ema_state(px, 50, 200)
+        lr = np.log(w / w.shift(1)).dropna()
+        row["vol"] = (float(lr.std() * np.sqrt(TRADING_DAYS))
+                      if len(lr) >= 2 else 0.0)
+        dd_hist = w / w.cummax() - 1.0
+        row["dd"] = float(dd_hist.iloc[-1])
+        row["dd_q"] = float((dd_hist >= dd_hist.iloc[-1]).mean())
+        if len(w) >= 3:
+            row["ulcer"] = float(np.sqrt(np.mean(dd_hist.values ** 2)))
+            rets = (w / w.shift(1) - 1.0).dropna()
+            if rf_annual_pct is not None and len(rf_annual_pct):
+                ya = (rf_annual_pct.reindex(
+                    rf_annual_pct.index.union(rets.index))
+                    .ffill().reindex(rets.index))
+                excess = rets - ((1.0 + ya / 100.0) ** (1.0 / 252.0)
+                                 - 1.0).fillna(0.0)
+            else:
+                excess = rets
+            sd = float(excess.std())
+            row["sharpe"] = (float(excess.mean() / sd
+                                   * np.sqrt(TRADING_DAYS))
+                             if sd > 0 else 0.0)
+        else:
+            row.update({"ulcer": 0.0, "sharpe": 0.0})
+        if win_benchmarks is not None:
+            rates = [_weekly_win_rate(w, win_benchmarks[b])
+                     for b in ("VT", "VEA", "VWO")
+                     if b in win_benchmarks.columns]
+            rates = [r for r in rates if pd.notna(r)]
+            row["win_rate"] = float(np.mean(rates)) if rates \
+                else float("nan")
+        else:
+            row["win_rate"] = float("nan")
+        rows[t] = row
+    cols = ["last", "rebased", "day_chg", "wk_chg", "mo_chg", "q_chg",
+            "ytd_chg", "px_ema20", "ema_long", "ema_regime", "mu_ann",
+            "vol_ann", "vol", "sharpe0", "sharpe", "momentum_12_1",
+            "ulcer", "win_rate", "dd", "dd_q", "max_dd", "beta", "n_obs"]
+    out = pd.DataFrame(rows).T
+    return out.reindex(columns=cols)
+
+
 # ---------------------------------------------------------------------------
 # Walk-forward backtest
 # ---------------------------------------------------------------------------
