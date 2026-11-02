@@ -1,4 +1,6 @@
 """Offline tests for the Bitcoin power-law math (no network)."""
+import datetime
+
 import numpy as np
 import pandas as pd
 
@@ -78,15 +80,9 @@ def test_with_retry_does_not_retry_permanent_http_errors():
     assert calls["n"] == 1
 
 
-def test_fetch_powerlaw_dates_btc_in_eastern(monkeypatch):
-    # Yahoo stamps BTC-USD bars at 00:00 UTC: the last bar below is
-    # stamped 2026-11-02 but starts 2026-11-01 19:00 EST, so the
-    # surfaced date must be 2026-11-01 (user direction 2026-11-01:
-    # everything in the app in Eastern). The conversion happens at
-    # the surface: the internal index keeps Yahoo's bar dates,
-    # because a bar's close-to-close return ends on its stamp's
-    # Eastern day, which is what pairs it with the right equity
-    # session in the correlations — the values must not move.
+def _powerlaw_fixture(monkeypatch):
+    """Fake the six sources; the BTC series' last bar is stamped
+    2026-11-02 (00:00 UTC). Returns the fake BTC series."""
     btc_idx = pd.date_range("2026-05-01", "2026-11-02", freq="D")
     wig = 1.0 + 0.05 * np.sin(np.arange(len(btc_idx)) / 3.0)
     btc = pd.Series(np.exp(np.linspace(9.0, 11.3, len(btc_idx))) * wig,
@@ -118,9 +114,54 @@ def test_fetch_powerlaw_dates_btc_in_eastern(monkeypatch):
     monkeypatch.setattr(bp, "yahoo_daily", fake_yahoo)
     monkeypatch.setattr(bp, "blockchain_btc", lambda: bdf)
     monkeypatch.setattr(bp, "blockchain_marketcap", lambda: bmc)
+    return btc
+
+
+def _freeze_clock(monkeypatch, when_utc):
+    monkeypatch.setattr(bp, "_utcnow", lambda: when_utc)
+
+
+def test_fetch_powerlaw_dates_btc_in_eastern(monkeypatch):
+    # Yahoo stamps BTC-USD bars at 00:00 UTC: the fixture's last
+    # bar is stamped 2026-11-02 but starts 2026-11-01 19:00 EST.
+    # With the clock frozen three days past it, that bar is
+    # COMPLETED, so the surfaced date is its Eastern conversion,
+    # 2026-11-01 (user direction 2026-11-01: everything in the
+    # app in Eastern). The conversion happens at the surface:
+    # the internal index keeps Yahoo's bar dates, because a
+    # bar's close-to-close return ends on its stamp's Eastern
+    # day, which is what pairs it with the right equity session
+    # in the correlations — the values must not move.
+    btc = _powerlaw_fixture(monkeypatch)
+    _freeze_clock(monkeypatch, datetime.datetime(
+        2026, 11, 5, 12, 0, tzinfo=datetime.timezone.utc))
 
     out = bp.fetch_powerlaw()
     assert str(out["btc"].index[-1].date()) == "2026-11-02"
     assert out["stats"]["btc_date"] == "2026-11-01"
     assert out["stats"]["btc_last"] == float(btc.iloc[-1])
     assert out["asof"].endswith((" EST", " EDT"))
+
+
+def test_fetch_powerlaw_in_progress_bar_gets_et_today(monkeypatch):
+    # The same fixture, but the clock frozen inside the last
+    # bar's UTC day (2026-11-02 19:45 UTC = 14:45 EST): the bar
+    # is still trading, so it carries today's Eastern date,
+    # 2026-11-02 (user decision 2026-11-02 — the Eastern
+    # conversion would read 2026-11-01 all day). The relabel is
+    # display-only: same index, same last price, and the fit —
+    # computed off the untouched series — is bit-identical to
+    # the completed-bar run.
+    _powerlaw_fixture(monkeypatch)
+    _freeze_clock(monkeypatch, datetime.datetime(
+        2026, 11, 5, 12, 0, tzinfo=datetime.timezone.utc))
+    done = bp.fetch_powerlaw()
+    _freeze_clock(monkeypatch, datetime.datetime(
+        2026, 11, 2, 19, 45, tzinfo=datetime.timezone.utc))
+    live = bp.fetch_powerlaw()
+
+    assert done["stats"]["btc_date"] == "2026-11-01"
+    assert live["stats"]["btc_date"] == "2026-11-02"
+    assert live["btc"].index.equals(done["btc"].index)
+    assert live["stats"]["btc_last"] == done["stats"]["btc_last"]
+    assert live["stats"]["slope"] == done["stats"]["slope"]

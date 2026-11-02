@@ -35,6 +35,7 @@ import numpy as np
 import pandas as pd
 
 from toolbox.DataZoo.market.eastern import (
+    ET,
     asof_stamp,
     utc_index_to_et_dates,
 )
@@ -110,6 +111,37 @@ def roll_corr(a, b_, win=63, minp=8):
 _with_retry = with_retry
 
 
+def _utcnow():
+    """The current instant in UTC — the module's one clock seam.
+
+    fetch_powerlaw stamps its fetch window from it and the
+    in-progress test in _btc_display_date reads it, so a test
+    can freeze both through a single monkeypatch.
+    """
+    return datetime.datetime.now(datetime.timezone.utc)
+
+
+def _btc_display_date(last_stamp):
+    """The date the dashboard shows for the last BTC bar.
+
+    One policy (user directions 2026-11-01 and 2026-11-02): a
+    completed bar carries its Eastern date — Yahoo stamps bars
+    at 00:00 UTC, the prior Eastern evening (19:00 EST), so the
+    Eastern conversion is the bar's own day. The in-progress
+    bar — stamped with today's UTC date, still trading —
+    instead carries today's Eastern date: its Eastern
+    conversion reads yesterday all day, which mislabels a
+    live price. Display only: the series index keeps Yahoo's
+    bar dates (see fetch_powerlaw's dating note), so no
+    value, fit or correlation moves with the label.
+    """
+    now = _utcnow()
+    if last_stamp.date() == now.date():
+        return now.astimezone(ET).date().isoformat()
+    return utc_index_to_et_dates(
+        pd.DatetimeIndex([last_stamp]))[0].date().isoformat()
+
+
 def fetch_powerlaw():
     """Fetch all six sources and compute the chart payload + stats.
 
@@ -118,7 +150,7 @@ def fetch_powerlaw():
     a final failure raises a RuntimeError naming the leg — the
     caller isolates it.
     """
-    p2 = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
+    p2 = int(_utcnow().timestamp())
     # BTC trades 24/7: keep Yahoo's in-progress UTC-day bar
     # (the shared equity-session truncation would end the
     # series a day early, and two days early on weekends).
@@ -136,12 +168,16 @@ def fetch_powerlaw():
         btc, gld, spy, gold_oz, bdf, bmc = [f.result()
                                             for f in jobs]
 
-    # Dating (user direction 2026-11-01: everything in the app in
-    # Eastern): Yahoo stamps BTC-USD bars at 00:00 UTC, and the
-    # Nov 2 UTC bar opens Nov 1, 19:00 EST — so every DISPLAYED
-    # date of a bar is its Eastern date, converted at the surface
-    # (stats["btc_date"], the figure annotation). The series index
-    # itself deliberately keeps Yahoo's bar dates: a bar's
+    # Dating (user directions 2026-11-01 and 2026-11-02:
+    # everything in the app in Eastern): Yahoo stamps BTC-USD
+    # bars at 00:00 UTC, and the Nov 2 UTC bar opens Nov 1,
+    # 19:00 EST. DISPLAYED dates are Eastern, assigned at the
+    # surface by _btc_display_date (stats["btc_date"], the
+    # figure annotation): a completed bar carries its Eastern
+    # conversion, while the in-progress bar carries today's
+    # Eastern date — its conversion would read yesterday all
+    # day (user decision 2026-11-02). The series index itself
+    # deliberately keeps Yahoo's bar dates: a bar's
     # close-to-close return ends on its stamp's Eastern day
     # (19:00 ET), which is exactly what pairs it with the right
     # GLD/SPY session in the correlations below — re-dating the
@@ -218,8 +254,7 @@ def fetch_powerlaw():
             "slope": float(b), "sigma": float(sigma), "n_fit": n_fit,
             "end2029": p2029,
             "btc_last": float(btc.iloc[-1]),
-            "btc_date": utc_index_to_et_dates(
-                btc.index[-1:])[0].date().isoformat(),
+            "btc_date": _btc_display_date(btc.index[-1]),
             "ratio_pct": ratio_now * 100,
             "ratio_date": ratio.index[-1].date().isoformat(),
             "ratio_slope": float(b_r),
@@ -270,9 +305,12 @@ def chart_png(data):
     _lp_x, _lp_y = btc.index[-1], float(btc.iloc[-1])
     ax1.plot([_lp_x], [_lp_y], marker="o", ms=6, color="#b3543f",
              markeredgecolor="white", markeredgewidth=1.0, zorder=7)
-    # The annotation dates the point in Eastern (stats["btc_date"],
-    # the bar's Eastern date) — the series coordinate itself keeps
-    # Yahoo's bar date; at this axis span the day is sub-pixel.
+    # The annotation's date TEXT is stats["btc_date"] (the
+    # displayed Eastern date, _btc_display_date) — only the
+    # text rides on it: the point's coordinate and the "today"
+    # line below both sit on the series' own last index value,
+    # which keeps Yahoo's bar date; at this axis span the day
+    # is sub-pixel.
     ax1.annotate(f"${_lp_y:,.0f}\n{st['btc_date']}",
                  xy=(_lp_x, _lp_y), xytext=(-8, -30),
                  textcoords="offset points", ha="right", va="top",
