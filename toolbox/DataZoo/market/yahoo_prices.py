@@ -14,12 +14,20 @@ this layer: the dashboard's multi-leg fetchers (power law, the dollar,
 US vs ex-US) wrap each leg in it, so a transient HTTP 429/5xx from
 Yahoo's rate limiter is absorbed with backoff instead of failing a
 whole tab on a single leg.
+
+:func:`chart_payload` is the shared raw-response cache under both
+price paths (and under futures_board's history bars): one chart
+fetch per symbol per TTL serves every consumer in the process, so
+a dashboard section's board and tabs render from a single pull of
+each history instead of each fetching its own copy.
 """
 
 from __future__ import annotations
 
 import datetime
 import json
+import threading
+import time
 import urllib.request
 from zoneinfo import ZoneInfo
 
@@ -87,6 +95,17 @@ def _strip_timezone(prices: pd.DataFrame) -> pd.DataFrame:
 
 _USER_AGENT = "toolbox-datazoo"
 
+# The browser user agent the chart cache fetches with — the same
+# string futures_board has always sent (its UA dict now builds on
+# this constant). Yahoo's chart endpoint rate-limits by IP and
+# fingerprint in bursts (the dashboard's 2026-11-01/02 tab
+# outages); the plain API agent above drew 429s on a morning when
+# this browser agent was served normally, so the shared chart
+# fetches go out under it.
+YAHOO_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0 Safari/537.36")
+
 
 def fetch_json(url, timeout=30, user_agent=None):
     """GET ``url`` and parse the JSON body. Closes the response handle."""
@@ -123,6 +142,66 @@ def with_retry(fn, leg, attempts=3):
             raise RuntimeError("{}: {}".format(leg, e)) from e
 
 
+# The shared chart cache: ticker -> (window start fetched,
+# monotonic fetch time, raw payload). One entry per symbol — the
+# widest fresh window serves every narrower request, because
+# consumers slice the raw bars to their own [p1, p2] exactly.
+_CHART_TTL_SECONDS = 900  # matches the dashboard's page cache TTL
+_chart_cache = {}
+_chart_inflight = {}
+_chart_lock = threading.Lock()
+
+
+def chart_payload(ticker, p1=0, p2=None):
+    """The raw v8 chart payload for ``ticker`` over [p1, p2]
+    (interval=1d, adjclose events), shared process-wide.
+
+    A fresh entry (at most _CHART_TTL_SECONDS old) whose window
+    starts at or before ``p1`` is served as-is — its p2 was "now"
+    when fetched, so the TTL bounds its staleness the same way
+    the dashboard's own page cache does. Otherwise the payload
+    is fetched once: concurrent callers for the same symbol
+    wait for the in-flight fetch instead of stampeding Yahoo
+    (single-flight), and a failed fetch is never cached — the
+    error propagates, and one waiter takes over as the next
+    fetcher. The response carries both the raw quote closes and
+    the adjclose series, so daily-close readers and adjusted-
+    close readers share the one pull.
+    """
+    if p2 is None:  # fetch through "now", as in yahoo_daily
+        p2 = int(datetime.datetime.now(
+            datetime.timezone.utc).timestamp())
+    while True:
+        with _chart_lock:
+            entry = _chart_cache.get(ticker)
+            if (entry is not None and entry[0] <= p1
+                    and time.monotonic() - entry[1]
+                    <= _CHART_TTL_SECONDS):
+                return entry[2]
+            event = _chart_inflight.get(ticker)
+            if event is None:
+                event = threading.Event()
+                _chart_inflight[ticker] = event
+                owner = True
+            else:
+                owner = False
+        if not owner:
+            event.wait()
+            continue
+        try:
+            url = (f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
+                   f"?period1={p1}&period2={p2}&interval=1d&events=adjclose")
+            payload = fetch_json(url, 30, user_agent=YAHOO_UA)
+            with _chart_lock:
+                _chart_cache[ticker] = (
+                    p1, time.monotonic(), payload)
+            return payload
+        finally:
+            with _chart_lock:
+                _chart_inflight.pop(ticker, None)
+            event.set()
+
+
 def yahoo_daily(ticker, p1=0, p2=None, include_partial=False):
     """Daily adjusted closes for one ticker from Yahoo's v8 chart API.
 
@@ -139,14 +218,19 @@ def yahoo_daily(ticker, p1=0, p2=None, include_partial=False):
     """
     if p2 is None:  # fetch through "now"; a fixed stamp would silently go stale
         p2 = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
-    url = (f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
-           f"?period1={p1}&period2={p2}&interval=1d&events=adjclose")
-    d = fetch_json(url, 30)
+    d = chart_payload(ticker, p1, p2)
     r = d["chart"]["result"][0]
-    ts, closes = r["timestamp"], r["indicators"]["adjclose"][0]["adjclose"]
+    ts_all, closes_all = (r["timestamp"],
+                          r["indicators"]["adjclose"][0]["adjclose"])
+    # A cache hit may hold a wider window than requested; slice
+    # the raw bars to exactly the requested [p1, p2], as a direct
+    # fetch of this window would have returned.
+    pairs = [(t, c) for t, c in zip(ts_all, closes_all)
+             if p1 <= t <= p2]
     s = pd.Series(
-        closes,
-        index=pd.to_datetime(ts, unit="s", utc=True).tz_convert(None).normalize(),
+        [c for _t, c in pairs],
+        index=pd.to_datetime([t for t, _c in pairs], unit="s",
+                             utc=True).tz_convert(None).normalize(),
     ).dropna()
     if include_partial:
         return s

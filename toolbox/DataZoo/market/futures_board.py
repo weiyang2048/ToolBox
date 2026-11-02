@@ -48,11 +48,9 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
 from toolbox.DataZoo.market.eastern import ET, asof_stamp
+from toolbox.DataZoo.market.yahoo_prices import YAHOO_UA, chart_payload
 
-UA = {"User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                     "AppleWebKit/537.36 (KHTML, like Gecko) "
-                     "Chrome/120.0 Safari/537.36"),
-      "Accept": "application/json"}
+UA = {"User-Agent": YAHOO_UA, "Accept": "application/json"}
 
 # Spot FX for the dashboard's Currencies board (user direction
 # 2026-11-01: the board's FX lines are the spot currencies, not
@@ -279,12 +277,13 @@ def _history_bars(sym):
     now = datetime.datetime.now(ET)
     p2 = int(now.timestamp())
     p1 = int((now - datetime.timedelta(days=12 * 366)).timestamp())
-    url = ("https://query1.finance.yahoo.com/v8/finance/chart/"
-           + urllib.parse.quote(sym, safe="")
-           + "?period1={}&period2={}&interval=1d".format(p1, p2))
-    req = urllib.request.Request(url, headers=UA)
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        payload = json.load(resp)
+    # The shared chart cache (yahoo_prices.chart_payload): this
+    # history is the same pull the dashboard's tabs make, so a
+    # symbol is fetched once per process per TTL, not once per
+    # consumer. The cached response also carries adjclose events
+    # (the closes read below are the raw quote closes, as
+    # before — the extra indicator changes nothing here).
+    payload = chart_payload(sym, p1, p2)
     result = payload.get("chart", {}).get("result") or []
     if not result:
         return []

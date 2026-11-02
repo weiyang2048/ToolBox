@@ -137,7 +137,7 @@ def _chart_payload():
 def test_yahoo_daily_parses_adjclose_drops_nan(monkeypatch):
     seen = {}
 
-    def fake_fetch(url, timeout):
+    def fake_fetch(url, timeout, user_agent=None):
         seen["url"] = url
         return _chart_payload()
 
