@@ -30,10 +30,12 @@ def test_fetch_crypto_builds_on_canonical_entries(monkeypatch):
     assert out.tolist() == [30, 34]
 
 
-def test_fetch_crypto_dates_values_in_eastern(monkeypatch):
-    # alternative.me stamps at 00:00 UTC: the 2026-11-02 stamp is
-    # 2026-11-01 19:00 in New York, so the value is dated Nov 1
-    # (user direction 2026-11-01: everything in the app in Eastern).
+def test_fetch_crypto_dates_values_by_index_day(monkeypatch):
+    # alternative.me stamps at 00:00 UTC of the index day — a
+    # day-key: the 2026-11-02 stamp IS the Nov 2 reading, as the
+    # source itself presents it. (Dating it in Eastern, as an
+    # instant, labelled the current reading as yesterday's —
+    # reversed 2026-11-02 after the user caught it.)
     entries = [
         {"timestamp": "1793491200", "value": "34",
          "value_classification": "Fear"},
@@ -43,8 +45,8 @@ def test_fetch_crypto_dates_values_in_eastern(monkeypatch):
     monkeypatch.setattr(
         sm, "fetch_crypto_entries", lambda limit, timeout=30: entries)
     out = sm.fetch_crypto()
-    assert [str(d.date()) for d in out.index] == ["2026-10-31",
-                                                  "2026-11-01"]
+    assert [str(d.date()) for d in out.index] == ["2026-11-01",
+                                                  "2026-11-02"]
     assert out.iloc[-1] == 37
 
 

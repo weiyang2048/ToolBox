@@ -31,7 +31,7 @@ import urllib.request
 
 import pandas as pd
 
-from toolbox.DataZoo.market.eastern import ET, asof_stamp
+from toolbox.DataZoo.market.eastern import asof_stamp
 from toolbox.DataZoo.market.fear_greed import (
     fetch_cnn_graph,
     fetch_crypto_entries,
@@ -92,15 +92,19 @@ def fetch_cnn():
 def fetch_crypto():
     """Crypto Fear & Greed (alternative.me), 365 calendar days.
 
-    alternative.me stamps each value at 00:00 UTC — an instant,
-    which falls on the prior Eastern evening, so the values are
-    dated in Eastern time like the app's other instant-stamped
-    daily series (the Nov 2 00:00 UTC value is Nov 1 in New York).
+    alternative.me stamps each value at 00:00 UTC of the day the
+    index belongs to — a day-key, not an instant: the source
+    itself presents the 2026-11-02 stamp as the Nov 2 (current)
+    reading. The series therefore keeps its UTC day-keys, like
+    CNN's. (From 2026-11-01 to 2026-11-02 the stamps were dated
+    in Eastern as instants, which labelled every value a day
+    early — the current reading showed as yesterday's; the user
+    caught it. Day-keyed daily series keep their source day;
+    the app's Eastern rule governs true instants.)
     """
     rows = fetch_crypto_entries(365, timeout=30)
     return _daily_series([int(r["value"]) for r in rows],
-                         [int(r["timestamp"]) for r in rows], "s",
-                         tz=ET)
+                         [int(r["timestamp"]) for r in rows], "s")
 
 
 def fetch_gold():
