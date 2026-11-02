@@ -31,10 +31,10 @@ A_COLS = ["last", "mu_ann", "vol_ann", "sharpe0", "momentum_12_1",
 ALL_COLS = ["rebased", "day_chg", "wk_chg", "mo_chg", "q_chg",
             "ytd_chg", "px_ema20", "ema_long", "ema_regime", "mu_ann",
             "vol_ann", "vol", "sharpe0", "sharpe",
-            "ulcer", "win_rate", "dd", "dd_q", "max_dd", "beta", "n_obs"]
-# asset_stats columns the merged table drops (removal pass 1,
+            "ulcer", "win_rate", "dd", "dd_q", "max_dd", "beta"]
+# asset_stats columns the merged table drops (removal passes 1-2,
 # user direction 2026-11-02).
-DROPPED = ["last", "momentum_12_1"]
+DROPPED = ["last", "momentum_12_1", "n_obs"]
 
 _FLACO_MB = (Path.home() / "workspace" / "flaco-repo" / "scripts"
              / "morning-briefing")

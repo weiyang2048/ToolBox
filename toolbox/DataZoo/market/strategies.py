@@ -880,9 +880,9 @@ def merged_stats(prices: pd.DataFrame,
     (:func:`asset_stats`, plus the page's Rebased column) and the
     briefs' panel stats table (panel-stats.py / movement-tracker),
     ALL columns from both, computed once here so the dashboard and
-    the briefs can never drift apart. Removal pass 1 (user
-    direction 2026-11-02): ``last`` and ``momentum_12_1`` are
-    dropped from the merged table — Rebased carries the price
+    the briefs can never drift apart. Removal passes (user
+    direction 2026-11-02): ``last`` and ``momentum_12_1`` dropped
+    in pass 1, ``n_obs`` in pass 2 — Rebased carries the price
     level on the chart's own basis.
 
     Bases — where the two source tables disagreed, both statistics
@@ -891,9 +891,9 @@ def merged_stats(prices: pd.DataFrame,
     - Full passed frame, per ticker (asset_stats basis):
       ``mu_ann``, ``vol_ann`` (annualised log-return mean/vol),
       ``sharpe0`` (Sharpe of log returns at rf = 0), ``max_dd``,
-      ``beta`` (vs ``benchmark``'s simple returns, when supplied),
-      ``n_obs``. (asset_stats also computes ``last`` and
-      ``momentum_12_1``; the merged table drops both, above.)
+      ``beta`` (vs ``benchmark``'s simple returns, when supplied).
+      (asset_stats also computes ``last``, ``momentum_12_1`` and
+      ``n_obs``; the merged table drops all three, above.)
     - ``rebased`` follows the Strategies page's arithmetic (user
       direction 2026-11-02, test-pinned): 100 × last / first valid
       print of the passed frame. (The briefs' rebased is the same
@@ -988,7 +988,7 @@ def merged_stats(prices: pd.DataFrame,
     cols = ["rebased", "day_chg", "wk_chg", "mo_chg", "q_chg",
             "ytd_chg", "px_ema20", "ema_long", "ema_regime", "mu_ann",
             "vol_ann", "vol", "sharpe0", "sharpe",
-            "ulcer", "win_rate", "dd", "dd_q", "max_dd", "beta", "n_obs"]
+            "ulcer", "win_rate", "dd", "dd_q", "max_dd", "beta"]
     out = pd.DataFrame(rows).T
     return out.reindex(columns=cols)
 
