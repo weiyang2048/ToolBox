@@ -374,15 +374,71 @@ def _display(tokens):
     return " ".join(words)
 
 
-def _mine_phrases(headlines, known_terms, top_n=10, min_weight=4):
+# ------------------------------------------------------------------
+# Canonical keys: lemmatization-lite for headline phrases. A
+# topic's canonical key is the tuple of its singularized
+# lowercase tokens; surface variants of one phrase ("senate
+# race" / "senate races", "midterm" / "midterm elections")
+# share a key family, so counting and merging can pool them.
+# Keys are merge-only — display labels are always real surface
+# forms, so an imperfect key (endorses -> endors) can at worst
+# fail to merge, never print a mangled word.
+# ------------------------------------------------------------------
+NEVER_SINGULARIZE = {
+    # Not plurals despite the trailing s.
+    "news", "jones", "reuters", "houthis", "wales", "andes",
+    "series", "species", "politics", "economics", "athletics",
+    "business",  # ends in ss anyway; listed for clarity
+}
+
+
+def singularize(tok):
+    """One token -> its canonical (singular) form. Protections:
+    tokens carrying meaning-bearing punctuation (& $ % .) or
+    digits are never touched (S&P, AT&T, M&A, 500); a small
+    never-list of proper nouns / mass nouns; ss/us/is endings
+    are not plurals."""
+    if (any(c in tok for c in "&$%.") or any(c.isdigit() for c in tok)
+            or tok in NEVER_SINGULARIZE or len(tok) <= 3):
+        return tok
+    if tok.endswith(("ss", "us", "is")):
+        return tok
+    if tok.endswith("ies") and len(tok) > 4:
+        return tok[:-3] + "y"
+    if tok.endswith(("ses", "xes", "zes", "ches", "shes")):
+        return tok[:-2]
+    if tok.endswith("s"):
+        return tok[:-1]
+    return tok
+
+
+def _canon_tokens(tokens):
+    return tuple(singularize(t) for t in tokens)
+
+
+def _canon_of_term(term):
+    """Canonical key of a topic's display term."""
+    toks = term.lower().replace("-", " ").replace("·", " ").split()
+    return _canon_tokens(toks)
+
+
+def _mine_phrases(headlines, known_terms, top_n=10, min_weight=3):
     """Frequent bigrams/trigrams across ALL headlines — the neutral
     discovery layer, co-equal with the lexicon: it runs on the whole
     sample (not just lexicon leftovers), so a story the lexicon has
-    no entry for can still top the cloud, and one it has an entry
+    no name for can still top the cloud, and one it has an entry
     for can't hide a second theme. Phrases overlapping a lexicon
-    term (either direction) are dropped as duplicates of it."""
-    counts, example, example_link = Counter(), {}, {}
-    free_example, free_example_link = {}, {}
+    term (either direction) are dropped as duplicates of it.
+
+    Grams are counted by CANONICAL KEY, so surface variants of
+    one phrase pool their headlines before the min_weight cut
+    and the ranking; the display label is the key's most
+    frequent surface form, and the topic records every pooled
+    surface (the links layer matches on all of them)."""
+    counts = Counter()
+    surf_counts = {}
+    surf_example, surf_example_link = {}, {}
+    surf_free, surf_free_link = {}, {}
     for h in headlines:
         words = _tokens(h["title"])
         grams = set()
@@ -400,18 +456,25 @@ def _mine_phrases(headlines, known_terms, top_n=10, min_weight=4):
                 if any(len(w) == 1 and w.isalpha() for w in gram):
                     continue
                 grams.add(" ".join(gram))
+        per_key = {}
         for gram in grams:
-            counts[gram] += 1
-            example.setdefault(gram, h["title"])
-            example_link.setdefault(gram, h.get("link", ""))
-            # The first NON-paywalled example is tracked
-            # alongside: a mined topic's link prefers it (the
-            # representative rule in _representative, applied
-            # here at collection time).
-            if not _paywalled(h.get("source", "")):
-                free_example.setdefault(gram, h["title"])
-                free_example_link.setdefault(gram,
-                                             h.get("link", ""))
+            key = _canon_tokens(gram.split(" "))
+            per_key.setdefault(key, []).append(gram)
+        for key, surfaces in per_key.items():
+            counts[key] += 1
+            sc = surf_counts.setdefault(key, Counter())
+            for gram in surfaces:
+                sc[gram] += 1
+                surf_example.setdefault(gram, h["title"])
+                surf_example_link.setdefault(gram, h.get("link", ""))
+                # The first NON-paywalled example per surface is
+                # tracked alongside: a mined topic's link prefers
+                # it (the representative rule in _representative,
+                # applied here at collection time).
+                if not _paywalled(h.get("source", "")):
+                    surf_free.setdefault(gram, h["title"])
+                    surf_free_link.setdefault(gram,
+                                               h.get("link", ""))
     # Template/boilerplate phrases are not topics: regional
     # editions carry formulaic headlines ("Q2 results 2026: X share
     # price ...") whose scaffolding would otherwise top the cloud.
@@ -429,17 +492,16 @@ def _mine_phrases(headlines, known_terms, top_n=10, min_weight=4):
     # if its count outside every longer container still clears
     # min_weight on its own.
     def _contained(short, long_):
-        s, l = short.split(" "), long_.split(" ")
-        return any(l[i:i + len(s)] == s
-                   for i in range(len(l) - len(s) + 1))
+        return any(long_[i:i + len(short)] == short
+                   for i in range(len(long_) - len(short) + 1))
 
-    containers = [g for g, w in counts.items()
-                  if w >= 2 and not boilerplate.search(g)]
+    containers = [k for k, w in counts.items()
+                  if w >= 2 and not boilerplate.search(" ".join(k))]
 
-    def _independent(gram, weight):
+    def _independent(key, weight):
         best = 0
         for other in containers:
-            if len(other) > len(gram) and _contained(gram, other):
+            if len(other) > len(key) and _contained(key, other):
                 best = max(best, counts[other])
         return weight - best
 
@@ -449,34 +511,41 @@ def _mine_phrases(headlines, known_terms, top_n=10, min_weight=4):
     # which made overlapping variants (bigram vs trigram of the
     # same phrase) win at random. Sort by weight, then prefer
     # the shorter, cleaner gram.
-    ranked = sorted(counts.items(), key=lambda kv: (-kv[1], len(kv[0]), kv[0]))
-    for gram, weight in ranked[:60]:
+    ranked = sorted(counts.items(),
+                    key=lambda kv: (-kv[1], len(kv[0]), kv[0]))
+    for key, weight in ranked[:60]:
         if weight < min_weight or len(mined) >= top_n:
             break
-        if boilerplate.search(gram):
+        if boilerplate.search(" ".join(key)):
             continue
-        if _independent(gram, weight) < min_weight:
+        if _independent(key, weight) < min_weight:
             continue
+        # Display surface: the key's most frequent surface form
+        # (ties: shorter, then A-Z — deterministic).
+        surface = sorted(surf_counts[key].items(),
+                         key=lambda kv: (-kv[1], len(kv[0]), kv[0]))[0][0]
         # Overlap dedupe on a hyphen/space-insensitive key, so a
         # mined "tech sell-off" cannot duplicate the lexicon's
         # "Tech selloff" (seen live 2026-10-30: both rendered).
-        key = gram.replace("-", "").replace(" ", "")
+        dkey = surface.replace("-", "").replace(" ", "")
 
-        def _overlaps(term):
+        def _overlaps(term, _dkey=dkey):
             k = term.lower().replace("-", "").replace(" ", "")
-            return key in k or k in key
+            return _dkey in k or k in _dkey
 
         if any(_overlaps(t) for t in known_terms):
             continue
         if any(_overlaps(t["term"]) for t in mined):
             continue
-        mined.append({"term": _display(gram.split(" ")),
+        mined.append({"term": _display(surface.split(" ")),
                       "weight": weight,
-                      "example_headline": free_example.get(
-                          gram, example[gram]),
-                      "link": free_example_link.get(
-                          gram, example_link.get(gram, "")),
-                      "group": _family_of(gram), "mined": True})
+                      "example_headline": surf_free.get(
+                          surface, surf_example[surface]),
+                      "link": surf_free_link.get(
+                          surface, surf_example_link.get(surface, "")),
+                      "group": _family_of(surface), "mined": True,
+                      "canon": key,
+                      "surfaces": dict(surf_counts[key])})
     return mined
 
 
@@ -513,10 +582,158 @@ def _representative(hits):
     return hits[0]
 
 
+def topic_member_sets(topics, headlines):
+    """term -> set of headline indexes mentioning it, with
+    canonical matching: lexicon topics match by their patterns
+    (plus the patterns of any lexicon topic merged into them,
+    recorded in merged_from); a mined topic matches by EVERY
+    pooled surface form, not just its display form — so a
+    merged topic's member set is the full union its weight
+    counts. (news_cloud_links.topic_members is this function;
+    member matching lives here because extraction itself —
+    grouping and the containment fold — runs on member sets.)"""
+    lex = {term: patterns for term, patterns, _ in LEXICON}
+    titles = [" ".join(h["title"].lower().replace("-", " ").split())
+              for h in headlines]
+    members = {}
+    for t in topics:
+        term = t["term"]
+        hits = set()
+        pat_terms = [term] + [m for m in (t.get("merged_from") or [])
+                              if m != term]
+        for pt in pat_terms:
+            for p in lex.get(pt, ()):
+                for i, h in enumerate(headlines):
+                    if _matches(p, h["title"].lower()):
+                        hits.add(i)
+        surfaces = t.get("surfaces")
+        if surfaces:
+            grams = set(surfaces)
+        elif term not in lex:
+            grams = {term}
+        else:
+            grams = set()
+        for gram in grams:
+            g = gram.lower().replace("-", " ")
+            for i, title in enumerate(titles):
+                if g in title:
+                    hits.add(i)
+        members[term] = hits
+    return members
+
+
+def _group_exact(topics, headlines):
+    """Merge topics sharing an exact canonical key: weight =
+    size of the UNION of their member sets (never a sum — a
+    headline carrying both variants counts once); label = the
+    highest-weight constituent's term (a lexicon constituent
+    wins ties over a mined one)."""
+    members = topic_member_sets(topics, headlines)
+    by_key = {}
+    for t in topics:
+        by_key.setdefault(t["canon"], []).append(t)
+    out = []
+    for key, group in by_key.items():
+        if len(group) == 1:
+            out.append(group[0])
+            continue
+        union = set()
+        surfaces = {}
+        for t in group:
+            union |= members[t["term"]]
+            for s, c in (t.get("surfaces") or {}).items():
+                surfaces[s] = surfaces.get(s, 0) + c
+        label_t = sorted(group, key=lambda t: (
+            -t["weight"], bool(t.get("mined")), t["term"]))[0]
+        hits = [headlines[i] for i in sorted(union)]
+        rep = _representative(hits)
+        merged = {"term": label_t["term"], "weight": len(union),
+                  "example_headline": rep["title"],
+                  "link": rep.get("link", ""),
+                  "group": label_t["group"],
+                  "mined": any(t.get("mined") for t in group),
+                  "canon": key,
+                  "merged_from": [t["term"] for t in group]}
+        if surfaces:
+            merged["surfaces"] = surfaces
+        out.append(merged)
+    return out
+
+
+# The containment fold fires only when the headline evidence
+# backs the token evidence: at least this share of the SMALLER
+# topic's headlines must sit inside the larger's.
+FOLD_MIN_CONTAINMENT = 0.80
+
+
+def _fold_containment(topics, headlines, members):
+    """Containment fold: topic X folds into topic Y iff X's
+    canonical token set is a strict subset of Y's AND >= 80% of
+    the smaller topic's headlines are contained in the larger's
+    (the guard — token-set inclusion alone would one day
+    swallow a general topic into a narrow phrase that merely
+    shares its words; the live case, the mined "Midterm
+    Elections" fragment of the lexicon's "Midterms", passes at
+    100%). The survivor keeps Y's canonical key, takes the
+    higher-weight constituent's term as its label, and its
+    weight becomes the size of the union of the two member
+    sets. Folds iterate to a fixpoint, smallest topics first."""
+    members = dict(members)
+    topics = [dict(t) for t in topics]
+    changed = True
+    while changed:
+        changed = False
+        topics.sort(key=lambda t: (len(set(t["canon"])), t["weight"]))
+        for x in list(topics):
+            xs = set(x["canon"])
+            supersets = [y for y in topics if y is not x
+                         and xs < set(y["canon"])]
+            if not supersets:
+                continue
+            y = sorted(supersets, key=lambda t: (
+                -t["weight"], len(set(t["canon"])), t["term"]))[0]
+            mx, my = members[x["term"]], members[y["term"]]
+            smaller = min(len(mx), len(my))
+            if (smaller == 0
+                    or len(mx & my) < FOLD_MIN_CONTAINMENT * smaller):
+                continue
+            union = mx | my
+            own = [(y["term"], y["weight"]), (x["term"], x["weight"])]
+            label_t = sorted(own, key=lambda tw: (-tw[1], tw[0]))[0][0]
+            label_group = y["group"] if label_t == y["term"] \
+                else x["group"]
+            hits = [headlines[i] for i in sorted(union)]
+            rep = _representative(hits)
+            surfaces = dict(y.get("surfaces") or {})
+            for s, c in (x.get("surfaces") or {}).items():
+                surfaces[s] = surfaces.get(s, 0) + c
+            y.update({"weight": len(union),
+                      "example_headline": rep["title"],
+                      "link": rep.get("link", ""),
+                      "merged_from":
+                          (y.get("merged_from") or [y["term"]]) +
+                          (x.get("merged_from") or [x["term"]])})
+            if surfaces:
+                y["surfaces"] = surfaces
+            members[label_t] = union
+            if label_t != y["term"]:
+                y["term"] = label_t
+                y["group"] = label_group
+            topics.remove(x)
+            changed = True
+            break
+    topics.sort(key=lambda t: (-t["weight"], t["term"]))
+    return topics
+
+
 def extract_topics(headlines, max_topics=30, min_weight=2):
     """Weight lexicon topics by distinct-headline mentions, merged
     with phrases mined from the whole sample on equal footing.
-    Returns topic dicts sorted by weight desc."""
+    Mined surface variants pool by canonical key, exact-key
+    duplicates merge on headline unions, and a guarded
+    containment fold absorbs a topic into a strict token
+    superset when their headline sets agree. Returns topic
+    dicts sorted by weight desc."""
     topics = []
     for term, patterns, group in LEXICON:
         hits = [h for h in headlines
@@ -527,8 +744,12 @@ def extract_topics(headlines, max_topics=30, min_weight=2):
         topics.append({"term": term, "weight": len(hits),
                        "example_headline": rep["title"],
                        "link": rep.get("link", ""),
-                       "group": group})
+                       "group": group,
+                       "canon": _canon_of_term(term)})
     topics += _mine_phrases(headlines, [t["term"] for t in topics])
+    topics = _group_exact(topics, headlines)
+    members = topic_member_sets(topics, headlines)
+    topics = _fold_containment(topics, headlines, members)
     topics.sort(key=lambda t: (-t["weight"], t["term"]))
     return topics[:max_topics]
 

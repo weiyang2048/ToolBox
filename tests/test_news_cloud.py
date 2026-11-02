@@ -3,8 +3,10 @@ mining, boilerplate filter), and the embeddable frame HTML.
 All offline — synthetic headlines only."""
 from toolbox.DataZoo.market.news_cloud import (
     LEXICON,
+    _canon_of_term,
     _display,
     _family_of,
+    _fold_containment,
     _matches,
     _mine_phrases,
     _parse_date,
@@ -12,6 +14,7 @@ from toolbox.DataZoo.market.news_cloud import (
     _tokens,
     cloud_html,
     extract_topics,
+    singularize,
 )
 
 
@@ -252,3 +255,93 @@ def test_mined_links_prefer_non_paywalled_sources():
     mined = _mine_phrases(heads, known_terms=[])
     jio = [m for m in mined if m["term"].startswith("Jio Platforms")]
     assert jio and jio[0]["link"] == "https://example.com/bbc-jio"
+
+
+def test_singularize_rules_and_protections():
+    # Regular plurals fold to the singular.
+    assert singularize("midterms") == "midterm"
+    assert singularize("elections") == "election"
+    assert singularize("tariffs") == "tariff"
+    assert singularize("rallies") == "rally"
+    assert singularize("dismisses") == "dismiss"
+    # Meaning-bearing tokens are never touched: entities and
+    # figures keep their exact form (S&P 500 stays S&P 500).
+    assert singularize("s&p") == "s&p"
+    assert singularize("at&t") == "at&t"
+    assert singularize("m&a") == "m&a"
+    assert singularize("500") == "500"
+    # Not plurals despite the trailing s; too-short tokens are
+    # left alone as well.
+    assert singularize("news") == "news"
+    assert singularize("business") == "business"
+    assert singularize("gas") == "gas"
+
+
+def test_canon_key_protects_sp_500():
+    assert _canon_of_term("S&P 500") == ("s&p", "500")
+    assert _canon_of_term("Midterms") == ("midterm",)
+    assert _canon_of_term("Treasury yields") == ("treasury", "yield")
+
+
+def test_mining_pools_plural_surface_variants():
+    heads = (_heads("Senate race tightens in Michigan", 1)
+             + _heads("Senate race draws millions", 1)
+             + _heads("Senate races heat up", 1))
+    topics = {t["term"]: t for t in extract_topics(heads)}
+    # One topic for both surface forms: the weight is the union
+    # of their headlines, the label the most frequent surface.
+    assert topics["Senate Race"]["weight"] == 3
+    assert topics["Senate Race"]["surfaces"] == {
+        "senate race": 2, "senate races": 1}
+    assert "Senate Races" not in topics
+
+
+def test_containment_fold_merges_midterm_fragment():
+    heads = (_heads("Midterm elections draw record turnout", 1)
+             + _heads("Midterm elections reshape Congress", 1)
+             + _heads("Midterm elections test both parties", 1)
+             + _heads("Midterms could flip the House", 1))
+    topics = extract_topics(heads)
+    # The mined "Midterm Elections" (3 headlines, every one of
+    # them inside the lexicon topic's 4) folds into "Midterms":
+    # one topic, weight = the union (4), not the sum (7).
+    assert [t["term"] for t in topics] == ["Midterms"]
+    assert topics[0]["weight"] == 4
+    assert set(topics[0]["merged_from"]) == {
+        "Midterms", "Midterm Elections"}
+
+
+def _fold_pair(members_x, members_y, wx=10, wy=7):
+    topics = [
+        {"term": "Midterms", "weight": wx, "group": "macro",
+         "canon": ("midterm",), "example_headline": "", "link": ""},
+        {"term": "Midterm Elections", "weight": wy, "group": "neutral",
+         "canon": ("midterm", "election"),
+         "example_headline": "", "link": ""},
+    ]
+    heads = [{"title": "H%d" % i, "source": "Test", "link": "",
+              "published": None} for i in range(12)]
+    members = {"Midterms": members_x, "Midterm Elections": members_y}
+    return _fold_containment(topics, heads, members)
+
+
+def test_fold_guard_blocks_low_containment():
+    # Token-subset pair, but only 5 of the smaller topic's 7
+    # headlines sit inside the larger's (71% < 80%): no fold —
+    # token inclusion alone must not swallow a topic.
+    out = _fold_pair(set(range(10)), {0, 1, 2, 3, 4, 10, 11})
+    assert [t["term"] for t in out] == [
+        "Midterms", "Midterm Elections"]
+
+
+def test_fold_merges_at_full_containment():
+    out = _fold_pair(set(range(10)), set(range(7)))
+    assert [t["term"] for t in out] == ["Midterms"]
+    assert out[0]["weight"] == 10  # the union, not 10 + 7
+
+
+def test_fold_merges_at_the_80_percent_boundary():
+    # Exactly 80% of the smaller set (4 of 5) contained: folds.
+    out = _fold_pair({0, 1, 2, 3, 4}, {0, 1, 2, 3, 5}, wx=5, wy=5)
+    assert len(out) == 1
+    assert out[0]["weight"] == 6

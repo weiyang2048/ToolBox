@@ -95,6 +95,26 @@ def test_word_gradients_carry_the_family_colors():
     assert 'stop-color="#173F6E"' in html  # macro deep
 
 
+def test_topic_members_match_all_pooled_surfaces():
+    from toolbox.DataZoo.market.news_cloud_links import topic_members
+    heads = [
+        {"title": "Senate race tightens in Michigan", "source": "T",
+         "link": "", "published": None},
+        {"title": "Senate race draws millions", "source": "T",
+         "link": "", "published": None},
+        {"title": "Senate races heat up", "source": "T",
+         "link": "", "published": None},
+    ]
+    topics = extract_topics(heads)
+    members = topic_members(topics, heads)
+    # The display surface is "Senate Race", but the third
+    # headline carries only the plural surface — canonical
+    # member matching counts it (display-only matching
+    # undercounted a merged topic's link set on 2026-11-01:
+    # 10 of a true 12 shared headlines).
+    assert members["Senate Race"] == {0, 1, 2}
+
+
 def test_cloud_caption_text_uses_the_footnote_gray():
     from toolbox.DataZoo.market.news_cloud_links import linked_cloud_html
     topics = [{"term": "Gold", "weight": 9, "group": "commodities",

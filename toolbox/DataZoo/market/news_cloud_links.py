@@ -20,11 +20,10 @@ from datetime import datetime, timezone
 from toolbox.DataZoo.market.news_cloud import (
     _FRAME_CSS,
     FAMILY_GRADIENTS,
-    LEXICON,
-    _matches,
     _sizes,
     extract_topics,
     fetch_headlines,
+    topic_member_sets,
 )
 
 # ------------------------------------------------------------------
@@ -37,25 +36,13 @@ LINK_PANEL_W, LINK_PANEL_H = 1124, 500
 def topic_members(topics, headlines):
     """term -> set of headline indexes mentioning it. Lexicon
     topics match by their patterns; mined phrases by their words
-    appearing, in order, in the headline."""
-    lex = {term: patterns for term, patterns, _ in LEXICON}
-    members = {}
-    for t in topics:
-        term = t["term"]
-        hits = set()
-        if term in lex:
-            pats = lex[term]
-            for i, h in enumerate(headlines):
-                if any(_matches(p, h["title"].lower()) for p in pats):
-                    hits.add(i)
-        else:
-            gram = term.lower().replace("-", " ")
-            for i, h in enumerate(headlines):
-                title = " ".join(h["title"].lower().replace("-", " ").split())
-                if gram in title:
-                    hits.add(i)
-        members[term] = hits
-    return members
+    appearing, in order, in the headline — canonically: a mined
+    topic matches on every surface form pooled into it, so a
+    merged topic's member set is the full union its weight
+    counts. The implementation is canonical in news_cloud
+    (topic_member_sets), where extraction itself — grouping
+    and the containment fold — runs on the same sets."""
+    return topic_member_sets(topics, headlines)
 
 
 def cooccurrence_edges(topics, members, min_shared=LINK_MIN_SHARED,
