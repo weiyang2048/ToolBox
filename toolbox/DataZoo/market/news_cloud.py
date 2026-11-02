@@ -1294,7 +1294,7 @@ def build_cloud(png_path=DEFAULT_PNG, json_path=DEFAULT_JSON, hours=24):
                 '<span class="nc-hl">{}</span> distinct headlines, '
                 '<span class="nc-hl">{}</span> sources'
                 .format(asof, len(headlines), len(source_counts)),
-        "right": "Size = distinct headlines mentioning the topic",
+        "right": "Size = distinct stories mentioning the topic",
     }
     # Rendering the PNG is best-effort: embedders (the Futures
     # page) consume topics + caption and render HTML themselves,
