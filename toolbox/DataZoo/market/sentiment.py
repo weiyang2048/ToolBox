@@ -181,7 +181,7 @@ def chart_png(series):
         ax2 = ax.twinx()
         ax2.plot(g.index, gn.values, color=GOLD_COLOR, linewidth=1.6,
                  label="Gold futures (GC=F, $/oz)", alpha=0.95)
-        ax2.set_ylim(0, 100)
+        ax2.set_ylim(0, 115)
         ax2.set_ylabel("Gold price ($/oz)", fontsize=11,
                        color=GOLD_COLOR)
         ax2.set_yticks([0, 25, 50, 75, 100])
@@ -194,7 +194,7 @@ def chart_png(series):
                     s=40, zorder=5, edgecolors="white", linewidths=1)
         ax2.annotate(f"${g.iloc[-1]:,.0f}/oz · {g.index[-1].strftime('%a %b %-d')}",
                      xy=(g.index[-1], gn.iloc[-1]),
-                     xytext=(8, -18), textcoords="offset points",
+                     xytext=(8, 10), textcoords="offset points",
                      fontsize=10, fontweight="bold", color=GOLD_COLOR,
                      bbox=dict(boxstyle="round,pad=0.3", fc="white",
                                ec=GOLD_COLOR, alpha=0.9))
@@ -209,7 +209,12 @@ def chart_png(series):
                         fontsize=10, fontweight="bold", color=color,
                         bbox=dict(boxstyle="round,pad=0.3", fc="white",
                                   ec=color, alpha=0.9))
-    ax.set_ylim(0, 100)
+    # Headroom (2026-11-02 live fix): both axes run to 115 so a
+    # series max at 100 (the gold line normalizes its peak to
+    # exactly 100) renders inside the plot instead of clipping
+    # at the top edge, and endpoint labels sit clear of the
+    # axes. The zone bands themselves stay 0-100 (axhspan above).
+    ax.set_ylim(0, 115)
     ax.set_ylabel("Index (0–100)", fontsize=11)
     ax.grid(axis="y", alpha=0.25, linestyle="--")
     for spine in ("top", "right"):

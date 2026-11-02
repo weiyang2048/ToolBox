@@ -107,7 +107,8 @@ def _compute(df):
                   for k in ("SPY", "EFA", "EEM", "ACWX")},
         "spread_now": round(float(spread.iloc[-1]), 1),
         "corr_dxy": round(corr, 2),
-        "asof": df.index[-1].strftime("%a %b %-d, %Y")}
+        "asof": df.index[-1].strftime("%a %b %-d, %Y"),
+        "last_date": df.index[-1].strftime("%Y-%m-%d")}
 
 
 def _panel(dates, series, colors, labels, title, ylabel,
@@ -295,8 +296,14 @@ def _spread_panel(frame):
     return svg_elems(w, h, "".join(body))
 
 
-def render_us_xus(p):
-    """Chips + the three panels + the honest footnote."""
+def render_us_xus(p, board_date=None):
+    """Chips + the three panels + the honest footnote. With
+    `board_date`, the as-of note carries the freshness pill
+    (canonical toolbox.DataZoo.market.freshness) marking any
+    lag behind the board date."""
+    from toolbox.DataZoo.market.freshness import lag_pill_html
+
+    pill = lag_pill_html(board_date, p.get("last_date"))
     f, s = p["frame"], p["snap"]
     r1, r1m = p["ret1y"], p["ret1m"]
     chips = [
@@ -337,8 +344,8 @@ def render_us_xus(p):
     note = (
         '<div style="font-size:12px;color:%s;margin:2px 0 10px">'
         'As of <span style="color:%s;font-weight:700">%s close'
-        '</span> &middot; total-return ETF proxies</div>'
-        % (_MUTE, _ACCENT, html.escape(p["asof"])))
+        '</span>%s &middot; total-return ETF proxies</div>'
+        % (_MUTE, _ACCENT, html.escape(p["asof"]), pill))
     foot = (
         '<div style="font-size:11.5px;color:#8A8378;margin-top:8px">'
         'Proxies: SPY (US), EFA (developed ex-US), EEM '

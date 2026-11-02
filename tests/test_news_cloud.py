@@ -446,6 +446,22 @@ def test_shape_gate_units():
     assert _shape_ok(("behind", "the", "move"))
 
 
+def test_shape_gate_fragment_shapes_2026_11_02():
+    # The three fragment topics that rendered live on
+    # 2026-11-02, checked on their canonical forms.
+    from toolbox.DataZoo.market.news_cloud import _canon_of_term
+    assert not _shape_ok(_canon_of_term("Least 24"))   # number tail
+    assert not _shape_ok(_canon_of_term("Some Facts"))  # determiner
+    assert not _shape_ok(_canon_of_term("30 Years"))   # bare duration
+    assert not _shape_ok(("least", "24"))
+    assert not _shape_ok(("some", "fact"))
+    assert not _shape_ok(("30", "year"))
+    # Headed phrases with numbers/durations inside survive.
+    assert _shape_ok(("s&p", "500"))          # & head, number tail
+    assert _shape_ok(("10", "year", "yield"))  # duration + noun head
+    assert _shape_ok(("30", "year", "treasury"))
+
+
 def test_shape_gate_filters_mined_fragments():
     heads = (_heads("Funds Make Final Push Into Bonds", 1)
              + _heads("Banks Make Final Push Into Loans", 1)

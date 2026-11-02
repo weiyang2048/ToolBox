@@ -34,6 +34,14 @@ def test_dollar_math_on_synthetic():
     out = render_the_dollar(p)
     assert out.count("<svg") == 3
     assert "11 of 11" in out
+    # Freshness (2026-11-02): per-panel last dates are exposed
+    # and the note takes the lag pill for a later board date.
+    assert p["last_date"] == IDX[-1].strftime("%Y-%m-%d")
+    assert p["dxy_last_date"] == p["last_date"]
+    assert p["vol_last_date"] <= p["last_date"]
+    nxt = IDX[-1] + pd.tseries.offsets.BDay(1)
+    out = render_the_dollar(p, board_date=nxt.date())
+    assert "1 session behind the board" in out
 
 
 def test_fetch_survives_a_transient_429_on_one_leg(monkeypatch):

@@ -250,6 +250,17 @@ _HEAD_ADJS = {"final", "own", "big", "large", "small", "high", "low",
 _NOMINAL_SUFFIXES = ("tion", "sion", "ness", "ment", "ity", "ism",
                      "ist", "ship", "ance", "ence")
 _QUANTITY_WORDS = {"billion", "million", "trillion", "percent", "%"}
+# Fragment shapes caught live 2026-11-02, after the first gates
+# shipped ("Least 24", "Some Facts", "30 Years" all rendered):
+# determiner edges that head no noun phrase, quantity adjectives
+# that cannot serve as a noun head before a number tail, and
+# bare durations (a number + a time unit is a span, not a topic).
+_DETERMINER_EDGES = {"some", "any", "all", "each", "every",
+                      "another"}
+_QUANTITY_ADJS = {"least", "most", "more", "less", "fewer",
+                  "few", "many", "much"}
+_TIME_UNITS = {"year", "month", "week", "day", "hour", "minute",
+               "decade"}
 
 
 def _noun_like(tok):
@@ -274,6 +285,24 @@ def _shape_ok(canon):
     if all(re.fullmatch(r"\$?[\d,.]+", t) or t in _QUANTITY_WORDS
            for t in canon):
         return False
+    # Determiner-initial fragments ("Some Facts"): a determiner
+    # edge heads no topic, like the possessive edges above.
+    if canon[0] in _DETERMINER_EDGES:
+        return False
+    # Bare duration ("30 Years"): number + time unit is a span.
+    if (len(canon) == 2 and canon[1] in _TIME_UNITS
+            and re.fullmatch(r"\$?[\d,.]+", canon[0])):
+        return False
+    # Number tail ("Least 24"): a phrase ending in a bare number
+    # needs a genuine noun head before the tail — a token that
+    # is noun-like on its own letters, not via its digits, and
+    # not a quantity adjective. ("S&P 500" keeps its head: the
+    # & token is noun-like without any digit.)
+    if re.fullmatch(r"\$?[\d,.]+", canon[-1]):
+        return any(_noun_like(t) and not any(c.isdigit()
+                                             for c in t)
+                   and t not in _QUANTITY_ADJS
+                   for t in canon[:-1])
     return any(_noun_like(t) for t in canon)
 
 

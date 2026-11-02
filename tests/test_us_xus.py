@@ -43,6 +43,14 @@ def test_shift_math_on_synthetic():
     assert "US vs ex-US" not in out  # title lives in the tab
     assert "Shift tape" in out and "-4.0 pts" in out
     assert out.count("<svg") == 3
+    # Freshness (2026-11-02): the payload carries its own last
+    # date; a board date one session later adds the lag pill.
+    assert p["last_date"] == IDX[-1].strftime("%Y-%m-%d")
+    nxt = IDX[-1] + pd.tseries.offsets.BDay(1)
+    out = render_us_xus(p, board_date=nxt.date())
+    assert "1 session behind the board" in out
+    out = render_us_xus(p, board_date=IDX[-1].date())
+    assert "current" in out
 
 
 def test_fetch_survives_a_transient_429_on_one_leg(monkeypatch):

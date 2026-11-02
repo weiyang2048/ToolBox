@@ -93,7 +93,10 @@ def _compute(dxy, usd):
         "vol_pct": round(float(
             (avg_vol < avg_vol.iloc[-1]).mean() * 100), 0),
         "vol_med": round(float(avg_vol.median()), 1),
-        "asof": usd.index[-1].strftime("%a %b %-d, %Y")}
+        "asof": usd.index[-1].strftime("%a %b %-d, %Y"),
+        "last_date": usd.index[-1].strftime("%Y-%m-%d"),
+        "dxy_last_date": dxy.index[-1].strftime("%Y-%m-%d"),
+        "vol_last_date": avg_vol.index[-1].strftime("%Y-%m-%d")}
 
 
 def _ordinal(n):
@@ -224,7 +227,14 @@ def _bars_panel(p):
     return svg_elems(w, h, "".join(body))
 
 
-def render_the_dollar(p):
+def render_the_dollar(p, board_date=None):
+    """Chips + panels + footnote. With `board_date`, the as-of
+    note carries the freshness pill (canonical
+    toolbox.DataZoo.market.freshness) marking any lag behind
+    the board date."""
+    from toolbox.DataZoo.market.freshness import lag_pill_html
+
+    pill = lag_pill_html(board_date, p.get("last_date"))
     chips = [
         "DXY &nbsp;<b>%.1f</b> · %+.1f%% vs 200-day · %+.1f%% "
         "from the 10y high" % (p["dxy_last"], p["dxy_vs200"],
@@ -258,9 +268,9 @@ def render_the_dollar(p):
         dash=("5y median",), y_lo=0.0)
     note = ('<div style="font-size:12px;color:%s;margin:2px 0 '
             '10px">As of <span style="color:%s;font-weight:700">'
-            '%s close</span> &middot; every series measured '
+            '%s close</span>%s &middot; every series measured '
             'against USD</div>' % (_MUTE, _ACCENT,
-                                   html.escape(p["asof"])))
+                                   html.escape(p["asof"]), pill))
     foot = ('<div style="font-size:11.5px;color:#8A8378;'
             'margin-top:8px">Spot quotes (Yahoo), each currency '
             'as its USD value, so a positive bar always means '

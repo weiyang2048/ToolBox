@@ -113,3 +113,27 @@ def test_chart_png_renders():
     png = sm.chart_png(series)
     assert png[:8] == b"\x89PNG\r\n\x1a\n"
     assert len(png) > 20000
+
+
+def test_chart_png_headroom_above_100(monkeypatch):
+    # Live fix 2026-11-02: a series max at 100 (gold normalizes
+    # its peak to exactly 100) clipped at the plot's top edge.
+    # Both axes run to 115; the zone bands stay 0-100.
+    import matplotlib.pyplot as plt
+
+    captured = {}
+    orig = plt.subplots
+
+    def fake(*a, **k):
+        fig, ax = orig(*a, **k)
+        captured["fig"] = fig
+        return fig, ax
+
+    monkeypatch.setattr(plt, "subplots", fake)
+    series = {"cnn": _series([20 + i % 50 for i in range(120)]),
+              "crypto": _series([30 + i % 40 for i in range(120)]),
+              "gold": _series([3000 + i * 5 for i in range(120)])}
+    sm.chart_png(series)
+    axes = captured["fig"].axes
+    assert axes[0].get_ylim() == (0.0, 115.0)
+    assert axes[1].get_ylim() == (0.0, 115.0)

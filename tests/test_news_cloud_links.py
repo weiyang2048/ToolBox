@@ -77,7 +77,8 @@ def test_linked_cloud_html_topics_are_clickable():
     assert 'class="nc-link-line"' not in html
     # A topic without a link stays plain text — no empty anchor.
     assert html.count("<a href=") == 1
-    assert "Select a topic to open a source article" in html
+    assert "The headlines below link to the source articles" in html
+    assert "Select a topic" not in html
 
 
 def test_word_gradients_carry_the_family_colors():

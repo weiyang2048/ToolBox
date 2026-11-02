@@ -236,7 +236,8 @@ def linked_cloud_html(topics, edges, caption=None):
     caption = dict(caption or {})
     caption["right"] = ("Lines link topics that share headlines · "
                         "Size = distinct stories mentioning the topic"
-                        " · Select a topic to open a source article")
+                        " · The headlines below link to the source "
+                        "articles")
     asof_row = ('<div class="nc-asof">{}</div>'.format(caption.get("left", ""))) if caption.get("left") else ""
     return ('<div style="width:100%;font-family:Georgia,'
             "'Times New Roman','DejaVu Serif',serif;\">"
