@@ -88,12 +88,20 @@ testpaths = ["tests", "energy_optimization_challenge/tests"]
 line-length = 88
 target-version = "py310"
 
-# Incremental adoption (started 2026-11-01): only the starter set below
-# is enforced (CI lint job). Widen in small batches — UP031 next; the
+# Incremental adoption (started 2026-11-01): only the set below is
+# enforced (CI lint job). Widen in small batches; the
 # behavior-sensitive E722/BLE001 narrowing goes per package, with tests.
+# UP031 added 2026-11-02 for the modules converted that day.
 [tool.ruff.lint]
-select = ["F401", "F841", "I001", "UP006", "UP035", "UP045"]
+select = ["F401", "F841", "I001", "UP006", "UP035", "UP045", "UP031"]
 
 [tool.ruff.lint.per-file-ignores]
 # Intentional public re-exports (the energy package's API surface).
 "energy_optimization_challenge/__init__.py" = ["F401"]
+# Percent-format stays in the two SVG renderers: their templates are
+# dense with literal % / %% escapes and CSS braces, where %-formatting
+# is the clearer, safer spelling; and in the stdlib-only proxy script,
+# which must stay directly executable (restyle is cosmetic there).
+"toolbox/DataZoo/market/the_dollar.py" = ["UP031"]
+"toolbox/DataZoo/market/us_xus.py" = ["UP031"]
+"toolbox/net/ssh_proxy_connect.py" = ["UP031"]

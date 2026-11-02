@@ -177,10 +177,9 @@ def linked_cloud_html(topics, edges, caption=None):
     grads = []
     for fam, (light, deep) in FAMILY_GRADIENTS.items():
         grads.append(
-            '<linearGradient id="ncg-%s" x1="0" y1="0" x2="0" y2="1">'
-            '<stop offset="15%%" stop-color="%s"/>'
-            '<stop offset="85%%" stop-color="%s"/></linearGradient>'
-            % (fam, light, deep))
+            '<linearGradient id="ncg-{}" x1="0" y1="0" x2="0" y2="1">'
+            '<stop offset="15%" stop-color="{}"/>'
+            '<stop offset="85%" stop-color="{}"/></linearGradient>'.format(fam, light, deep))
     paths = []
     for k, (a, b, s) in enumerate(triples):
         if a not in nodes or b not in nodes:
@@ -196,23 +195,22 @@ def linked_cloud_html(topics, edges, caption=None):
         color = (FAMILY_GRADIENTS[by_term[a]["group"]][1]
                  if same else "#9A8A70")
         paths.append(
-            '<path d="M %.1f %.1f Q %.1f %.1f %.1f %.1f" fill="none" '
-            'stroke="%s" stroke-opacity="%.2f" stroke-width="%.1f" '
-            'stroke-linecap="round"/>'
-            % (na["x"], na["y"], cx, cy, nb["x"], nb["y"], color,
+            '<path d="M {:.1f} {:.1f} Q {:.1f} {:.1f} {:.1f} {:.1f}" fill="none" '
+            'stroke="{}" stroke-opacity="{:.2f}" stroke-width="{:.1f}" '
+            'stroke-linecap="round"/>'.format(na["x"], na["y"], cx, cy, nb["x"], nb["y"], color,
                0.16 + 0.30 * (s / smax), 1.0 + 2.4 * (s / smax)))
     texts = []
     for t in topics:
         n = nodes[t["term"]]
         text_el = (
-            '<text x="%.1f" y="%.1f" text-anchor="middle" '
-            'dominant-baseline="central" font-size="%d" '
-            'font-weight="%s" fill="url(#ncg-%s)" '
+            '<text x="{:.1f}" y="{:.1f}" text-anchor="middle" '
+            'dominant-baseline="central" font-size="{}" '
+            'font-weight="{}" fill="url(#ncg-{})" '
             'style="paint-order:stroke;stroke:#FBF7EE;stroke-width:5px">'
-            '%s</text>'
-            % (n["x"], n["y"], sizes[t["term"]],
-               700 if t["weight"] >= 8 else 600, t["group"],
-               html_mod.escape(t["term"])))
+            '{}</text>'
+            .format(n["x"], n["y"], sizes[t["term"]],
+                    700 if t["weight"] >= 8 else 600, t["group"],
+                    html_mod.escape(t["term"])))
         link = t.get("link") or ""
         if link:
             # Clickable topic (user request 2026-11-01): the
@@ -223,68 +221,65 @@ def linked_cloud_html(topics, edges, caption=None):
             # an underline shipped earlier the same day was
             # removed at the user's direction ("I dont want to
             # see underlines in the word cloud").
-            text_el = ('<a href="%s" target="_blank" '
-                       'rel="noopener noreferrer"><title>%s</title>'
-                       '%s</a>'
-                       % (html_mod.escape(link, quote=True),
+            text_el = ('<a href="{}" target="_blank" '
+                       'rel="noopener noreferrer"><title>{}</title>'
+                       '{}</a>'.format(html_mod.escape(link, quote=True),
                           html_mod.escape(
                               t.get("example_headline", "")),
                           text_el))
         texts.append(text_el)
-    svg = ('<svg viewBox="0 0 %d %d" style="width:100%%;height:auto;'
+    svg = ('<svg viewBox="0 0 {} {}" style="width:100%;height:auto;'
            'display:block" xmlns="http://www.w3.org/2000/svg">'
-           '<defs>%s</defs>%s%s</svg>'
-           % (LINK_PANEL_W, LINK_PANEL_H, "".join(grads),
-              "".join(paths), "".join(texts)))
+           '<defs>{}</defs>{}{}</svg>'
+           .format(LINK_PANEL_W, LINK_PANEL_H, "".join(grads),
+                   "".join(paths), "".join(texts)))
     caption = dict(caption or {})
     caption["right"] = ("Lines link topics that share headlines · "
                         "Size = distinct headlines mentioning the topic"
                         " · Select a topic to open a source article")
-    asof_row = ('<div class="nc-asof">%s</div>'
-                % caption.get("left", "")) if caption.get("left") else ""
-    return ('<div style="width:100%%;font-family:Georgia,'
+    asof_row = ('<div class="nc-asof">{}</div>'.format(caption.get("left", ""))) if caption.get("left") else ""
+    return ('<div style="width:100%;font-family:Georgia,'
             "'Times New Roman','DejaVu Serif',serif;\">"
-            "<style>%s"
-            "svg text { font-family:Georgia,'Times New Roman',"
-            "'DejaVu Serif',serif; }"
-            "svg a { cursor:pointer; }"
-            "svg a:hover { opacity:.68; }"
-            ".nc-topbar { display:flex;"
+            "<style>{}"
+            "svg text {{ font-family:Georgia,'Times New Roman',"
+            "'DejaVu Serif',serif; }}"
+            "svg a {{ cursor:pointer; }}"
+            "svg a:hover {{ opacity:.68; }}"
+            ".nc-topbar {{ display:flex;"
             " justify-content:space-between; align-items:baseline;"
-            " padding:0 2px 6px; margin-bottom:10px; }"
-            ".nc-topbar .t { font-size:15px; letter-spacing:2.6px;"
+            " padding:0 2px 6px; margin-bottom:10px; }}"
+            ".nc-topbar .t {{ font-size:15px; letter-spacing:2.6px;"
             " color:#1D4E89; font-variant:small-caps;"
-            " font-weight:700; }"
-            ".nc-topbar .w { font-size:12px; color:#9AA0A6;"
-            " font-style:italic; }"
-            ".nc-asof { padding:0 2px 8px; font-size:12px;"
-            " color:#9AA0A6; }"
-            ".nc-asof .nc-hl { color:#FFB066; font-weight:700; }"
-            ".nc-cap { display:flex;"
+            " font-weight:700; }}"
+            ".nc-topbar .w {{ font-size:12px; color:#9AA0A6;"
+            " font-style:italic; }}"
+            ".nc-asof {{ padding:0 2px 8px; font-size:12px;"
+            " color:#9AA0A6; }}"
+            ".nc-asof .nc-hl {{ color:#FFB066; font-weight:700; }}"
+            ".nc-cap {{ display:flex;"
             " justify-content:space-between; gap:16px;"
-            " padding:7px 2px 0; font-size:12px; color:#9AA0A6; }"
+            " padding:7px 2px 0; font-size:12px; color:#9AA0A6; }}"
             # Compact text on phones (user-approved 2026-10-30):
             # smaller head/caption type and tighter frame
             # padding at <=640px; desktop untouched.
-            "@media (max-width: 640px) {"
-            " .nc-frame { padding:10px 12px 8px;"
-            " border-radius:12px; }"
-            " .nc-topbar .t { font-size:12px;"
-            " letter-spacing:.14em; }"
-            " .nc-topbar .w { font-size:10.5px; }"
-            " .nc-asof { font-size:10.5px; }"
-            " .nc-cap { font-size:10.5px; line-height:1.5; }"
-            " }</style>"
+            "@media (max-width: 640px) {{"
+            " .nc-frame {{ padding:10px 12px 8px;"
+            " border-radius:12px; }}"
+            " .nc-topbar .t {{ font-size:12px;"
+            " letter-spacing:.14em; }}"
+            " .nc-topbar .w {{ font-size:10.5px; }}"
+            " .nc-asof {{ font-size:10.5px; }}"
+            " .nc-cap {{ font-size:10.5px; line-height:1.5; }}"
+            " }}</style>"
             '<div class="nc-topbar"><div class="t">What the '
             'market is talking about</div><div class="w">'
             'past 24 hours</div></div>'
-            '%s'
+            '{}'
             '<div class="nc-frame" '
-            'style="width:100%%;padding:14px 18px;">'
-            '<div style="padding:2px 0;">%s</div></div>'
-            '<div class="nc-cap"><div></div><div>%s</div></div>'
-            "</div>"
-            % (_FRAME_CSS, asof_row, svg,
+            'style="width:100%;padding:14px 18px;">'
+            '<div style="padding:2px 0;">{}</div></div>'
+            '<div class="nc-cap"><div></div><div>{}</div></div>'
+            "</div>".format(_FRAME_CSS, asof_row, svg,
                caption.get("right", "")))
 
 
@@ -305,10 +300,10 @@ def build_linked_cloud_html(hours=24):
     except Exception:
         asof = now.strftime("%Y-%m-%d %H:%M UTC")
     caption = {
-        "left": 'As of <span class="nc-hl">%s</span> · '
-                '<span class="nc-hl">%d</span> distinct headlines, '
-                '<span class="nc-hl">%d</span> sources'
-                % (asof, len(headlines), len(source_counts)),
+        "left": 'As of <span class="nc-hl">{}</span> · '
+                '<span class="nc-hl">{}</span> distinct headlines, '
+                '<span class="nc-hl">{}</span> sources'
+                .format(asof, len(headlines), len(source_counts)),
     }
     edges = cooccurrence_edges(topics, topic_members(topics, headlines))
     return linked_cloud_html(topics, edges, caption)

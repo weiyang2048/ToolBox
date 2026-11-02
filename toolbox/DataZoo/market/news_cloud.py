@@ -1014,35 +1014,32 @@ def _frame_html(topics, caption=None, max_px=60):
         # flow layout they collide with their neighbours.)
         if t["weight"] <= 5 and pos % 7 == 4:
             cls = "nc-w nc-tilt"
-        style = ('font-size:%dpx;font-weight:%s;'
-                 'background-image:linear-gradient(178deg,%s 15%%,%s 85%%)'
-                 % (sizes[term], 700 if t["weight"] >= 8 else 600,
-                    light, deep))
+        style = ('font-size:{}px;font-weight:{};'
+                 'background-image:linear-gradient(178deg,{} 15%,{} 85%)'
+                 .format(sizes[term], 700 if t["weight"] >= 8 else 600,
+                         light, deep))
         label = html_mod.escape(term)
         link = t.get("link") or ""
         if link:
             # Clickable topic (user request 2026-11-01): the
             # word links to its representative source article.
             spans.append(
-                '<a class="%s" style="%s" href="%s" target="_blank" '
-                'rel="noopener noreferrer" title="%s">%s</a>'
-                % (cls, style, html_mod.escape(link, quote=True),
+                '<a class="{}" style="{}" href="{}" target="_blank" '
+                'rel="noopener noreferrer" title="{}">{}</a>'.format(cls, style, html_mod.escape(link, quote=True),
                    html_mod.escape(t.get("example_headline", ""),
                                    quote=True),
                    label))
         else:
-            spans.append('<span class="%s" style="%s">%s</span>'
-                         % (cls, style, label))
+            spans.append('<span class="{}" style="{}">{}</span>'.format(cls, style, label))
     caption = caption or {}
     # Caption lines are trusted HTML (built by build_cloud from a
     # format string and integer counts — the date and counts carry
     # .nc-hl accent spans), so they are inserted unescaped.
-    return ("<style>%s</style>"
+    return ("<style>{}</style>"
             '<div class="nc-head"><div class="nc-title">What the market '
             'is talking about</div><div class="nc-window">past 24 hours'
-            '</div></div><div class="nc-cloud">%s</div>'
-            '<div class="nc-foot"><div>%s</div><div>%s</div></div>'
-            % (_FRAME_CSS, "\n".join(spans),
+            '</div></div><div class="nc-cloud">{}</div>'
+            '<div class="nc-foot"><div>{}</div><div>{}</div></div>'.format(_FRAME_CSS, "\n".join(spans),
                caption.get("left", ""), caption.get("right", "")))
 
 
@@ -1062,11 +1059,10 @@ def render_html(topics, png_path, caption=None):
     1200x600, screenshotted with headless Chromium (demo / offline
     use; the live page embeds cloud_html() instead)."""
     page = """<!doctype html><html><head><meta charset="utf-8"><style>
-* { margin:0; padding:0; box-sizing:border-box; }
-body { background:#FFFFFF; }
+* {{ margin:0; padding:0; box-sizing:border-box; }}
+body {{ background:#FFFFFF; }}
 </style></head><body><div class="nc-frame"
-style="width:1200px;height:600px;">%s</div></body></html>""" % (
-        _frame_html(topics, caption, max_px=76))
+style="width:1200px;height:600px;">{}</div></body></html>""".format(_frame_html(topics, caption, max_px=76))
     if not os.path.exists(CHROMIUM):
         return False
     with tempfile.NamedTemporaryFile("w", suffix=".html",
@@ -1118,10 +1114,10 @@ def build_cloud(png_path=DEFAULT_PNG, json_path=DEFAULT_JSON, hours=24):
     except Exception:
         asof = now.strftime("%Y-%m-%d %H:%M UTC")
     caption = {
-        "left": 'As of <span class="nc-hl">%s</span> · '
-                '<span class="nc-hl">%d</span> distinct headlines, '
-                '<span class="nc-hl">%d</span> sources'
-                % (asof, len(headlines), len(source_counts)),
+        "left": 'As of <span class="nc-hl">{}</span> · '
+                '<span class="nc-hl">{}</span> distinct headlines, '
+                '<span class="nc-hl">{}</span> sources'
+                .format(asof, len(headlines), len(source_counts)),
         "right": "Size = distinct headlines mentioning the topic",
     }
     # Rendering the PNG is best-effort: embedders (the Futures
@@ -1137,7 +1133,7 @@ def build_cloud(png_path=DEFAULT_PNG, json_path=DEFAULT_JSON, hours=24):
     except Exception:
         renderer = "none"
     summary = {
-        "window": "past %d hours ending %s" % (hours, now.isoformat()),
+        "window": "past {} hours ending {}".format(hours, now.isoformat()),
         "headlines": len(headlines),
         "sources": dict(source_counts),
         "renderer": renderer,
@@ -1158,11 +1154,11 @@ def main(argv=None):
     png = args[0] if len(args) > 0 else DEFAULT_PNG
     js = args[1] if len(args) > 1 else DEFAULT_JSON
     summary = build_cloud(png, js)
-    print("headlines: %d from %d sources | renderer: %s"
-          % (summary["headlines"], len(summary["sources"]),
-             summary["renderer"]))
+    print("headlines: {} from {} sources | renderer: {}"
+          .format(summary["headlines"], len(summary["sources"]),
+                  summary["renderer"]))
     for t in summary["topics"][:12]:
-        print("  %3d  %s" % (t["weight"], t["term"]))
+        print("  {:3d}  {}".format(t["weight"], t["term"]))
     print("wrote", png, "and", js)
     return 0
 

@@ -281,7 +281,7 @@ def _history_bars(sym):
     p1 = int((now - datetime.timedelta(days=12 * 366)).timestamp())
     url = ("https://query1.finance.yahoo.com/v8/finance/chart/"
            + urllib.parse.quote(sym, safe="")
-           + "?period1=%d&period2=%d&interval=1d" % (p1, p2))
+           + "?period1={}&period2={}&interval=1d".format(p1, p2))
     req = urllib.request.Request(url, headers=UA)
     with urllib.request.urlopen(req, timeout=30) as resp:
         payload = json.load(resp)
@@ -429,7 +429,7 @@ def fetch_board(now=None, groups=None):
                 row[key] = None
             got, closes, last_bar_date = futs[sym].result()
             if isinstance(got, Exception):  # 404, timeout, bad JSON...
-                notes.append("futures: %s unavailable (%s)" % (sym, got))
+                notes.append("futures: {} unavailable ({})".format(sym, got))
                 got = None
             if got is not None:
                 last, settle, mtime = got
@@ -453,8 +453,7 @@ def fetch_board(now=None, groups=None):
             elif dec is None:
                 row["dec"] = cash_dec(None)
             if isinstance(closes, Exception):  # horizons degrade to null
-                notes.append("futures: %s history unavailable (%s)"
-                             % (sym, closes))
+                notes.append("futures: {} history unavailable ({})".format(sym, closes))
                 closes = []
             if got is None and len(closes) >= 2 and closes[-2]:
                 # No live quote but a usable history (Yahoo serves
@@ -475,8 +474,8 @@ def fetch_board(now=None, groups=None):
                 if dec is None:  # cash index: decimals from its level
                     row["dec"] = cash_dec(row["last"])
                 available += 1
-                notes.append("futures: %s quote unavailable; last/day "
-                             "from completed closes" % sym)
+                notes.append("futures: {} quote unavailable; last/day "
+                             "from completed closes".format(sym))
             row["ls"] = ls_states(closes)
             for key, n in HORIZONS:
                 if len(closes) > n:
@@ -532,7 +531,7 @@ def shade_zero(v, scale):
     if v is None or scale in (None, 0):
         return "FFFFFF"
     t = min(abs(v) / scale, 1.0)
-    return "%02X%02X%02X" % _lerp(_WHITE, _GREEN if v >= 0 else _RED, t)
+    return "{:02X}{:02X}{:02X}".format(*_lerp(_WHITE, _GREEN if v >= 0 else _RED, t))
 
 
 def board_scales(data):

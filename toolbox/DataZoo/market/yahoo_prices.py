@@ -116,11 +116,11 @@ def with_retry(fn, leg, attempts=3):
         except HTTPError as e:
             if (e.code not in (429, 500, 502, 503, 504)
                     or k == attempts - 1):
-                raise RuntimeError("%s: %s" % (leg, e)) from e
+                raise RuntimeError("{}: {}".format(leg, e)) from e
             _time.sleep(delay)
             delay *= 2.5
         except Exception as e:
-            raise RuntimeError("%s: %s" % (leg, e)) from e
+            raise RuntimeError("{}: {}".format(leg, e)) from e
 
 
 def yahoo_daily(ticker, p1=0, p2=None, include_partial=False):

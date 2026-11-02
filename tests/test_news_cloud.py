@@ -321,7 +321,7 @@ def _fold_pair(members_x, members_y, wx=10, wy=7):
          "canon": ("midterm", "election"),
          "example_headline": "", "link": ""},
     ]
-    heads = [{"title": "H%d" % i, "source": "Test", "link": "",
+    heads = [{"title": "H{}".format(i), "source": "Test", "link": "",
               "published": None} for i in range(12)]
     members = {"Midterms": members_x, "Midterm Elections": members_y}
     return _fold_containment(topics, heads, members)
