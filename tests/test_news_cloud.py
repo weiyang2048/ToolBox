@@ -507,3 +507,16 @@ def test_story_clusters_rare_token_veto():
     clusters = _story_clusters(heads)
     assert clusters[0] == clusters[1]   # one story, counted once
     assert clusters[2] != clusters[3]   # template siblings stay apart
+
+
+def test_ahead_of_earnings_is_scaffolding_not_a_topic():
+    # 2026-11-02, user-caught on the live cloud: "ahead" was
+    # missing from STOPWORDS, so the trailing PP of earnings-
+    # preview headlines ("... on Apple ahead of earnings")
+    # formed a gram and rendered as a topic.
+    heads = (_heads("Acme Shares Drop Ahead of Earnings", 2,
+                    source="A")
+             + _heads("Beta Stock Slides Ahead of Earnings", 1,
+                      source="B"))
+    terms = {t["term"] for t in _mine_phrases(heads, [])}
+    assert not any("Ahead" in t for t in terms)

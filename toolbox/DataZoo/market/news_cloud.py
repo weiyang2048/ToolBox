@@ -216,7 +216,8 @@ STOPWORDS = set("""the a an and or of to in on for as at by with from after
 before over under amid among its it is are was were be been has have had
 not no new now says say said will would can could may might than then
 more most other into out up down off per via s u.s. us stocks stock
-market markets today friday thursday wednesday week daily live""".split())
+market markets today friday thursday wednesday week daily live
+ahead""".split())
 
 
 # ------------------------------------------------------------------
