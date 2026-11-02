@@ -28,10 +28,13 @@ SECTORS = ["EXI", "IXC", "IXG", "IXJ", "IXN", "IXP",
            "JXI", "KXI", "MXI", "REET", "RXI"]
 A_COLS = ["last", "mu_ann", "vol_ann", "sharpe0", "momentum_12_1",
           "max_dd", "beta", "n_obs"]
-ALL_COLS = ["last", "rebased", "day_chg", "wk_chg", "mo_chg", "q_chg",
+ALL_COLS = ["rebased", "day_chg", "wk_chg", "mo_chg", "q_chg",
             "ytd_chg", "px_ema20", "ema_long", "ema_regime", "mu_ann",
-            "vol_ann", "vol", "sharpe0", "sharpe", "momentum_12_1",
+            "vol_ann", "vol", "sharpe0", "sharpe",
             "ulcer", "win_rate", "dd", "dd_q", "max_dd", "beta", "n_obs"]
+# asset_stats columns the merged table drops (removal pass 1,
+# user direction 2026-11-02).
+DROPPED = ["last", "momentum_12_1"]
 
 _FLACO_MB = (Path.home() / "workspace" / "flaco-repo" / "scripts"
              / "morning-briefing")
@@ -52,6 +55,8 @@ def test_merged_stats_shape_offline():
          for t in ("AAA", "BBB")}, index=idx)
     out = merged_stats(px)
     assert list(out.columns) == ALL_COLS
+    for dropped in DROPPED:
+        assert dropped not in out.columns
     assert list(out.index) == ["AAA", "BBB"]
     assert pd.isna(out.loc["AAA", "win_rate"])  # no benchmark frame
     assert pd.isna(out.loc["AAA", "beta"])      # no benchmark series
@@ -71,7 +76,7 @@ def test_a_columns_match_asset_stats(sectors_10y):
     bench = sectors_10y["SPY"]
     merged = merged_stats(frame, benchmark=bench)
     base = asset_stats(frame, bench)
-    for col in A_COLS:
+    for col in [c for c in A_COLS if c not in DROPPED]:
         np.testing.assert_allclose(
             merged[col].astype(float), base[col].astype(float),
             rtol=0, atol=1e-9, err_msg=col)

@@ -880,17 +880,20 @@ def merged_stats(prices: pd.DataFrame,
     (:func:`asset_stats`, plus the page's Rebased column) and the
     briefs' panel stats table (panel-stats.py / movement-tracker),
     ALL columns from both, computed once here so the dashboard and
-    the briefs can never drift apart. Column removals are a later
-    decision; nothing is dropped.
+    the briefs can never drift apart. Removal pass 1 (user
+    direction 2026-11-02): ``last`` and ``momentum_12_1`` are
+    dropped from the merged table — Rebased carries the price
+    level on the chart's own basis.
 
     Bases — where the two source tables disagreed, both statistics
     are kept under their source names rather than choosing one:
 
-    - Full passed frame, per ticker (asset_stats basis): ``last``,
+    - Full passed frame, per ticker (asset_stats basis):
       ``mu_ann``, ``vol_ann`` (annualised log-return mean/vol),
-      ``sharpe0`` (Sharpe of log returns at rf = 0),
-      ``momentum_12_1``, ``max_dd``, ``beta`` (vs ``benchmark``'s
-      simple returns, when supplied), ``n_obs``.
+      ``sharpe0`` (Sharpe of log returns at rf = 0), ``max_dd``,
+      ``beta`` (vs ``benchmark``'s simple returns, when supplied),
+      ``n_obs``. (asset_stats also computes ``last`` and
+      ``momentum_12_1``; the merged table drops both, above.)
     - ``rebased`` follows the Strategies page's arithmetic (user
       direction 2026-11-02, test-pinned): 100 × last / first valid
       print of the passed frame. (The briefs' rebased is the same
@@ -923,8 +926,8 @@ def merged_stats(prices: pd.DataFrame,
 
     Units: every rate-like column is a FRACTION (the briefs store
     percents — divide-by-100 is the only unit change); ``rebased``
-    is index points (start = 100), ``last`` is price units, the
-    trend states are bool / None.
+    is index points (start = 100), the trend states are bool /
+    None.
     """
     base = asset_stats(prices, benchmark)
     rows = {}
@@ -982,9 +985,9 @@ def merged_stats(prices: pd.DataFrame,
         else:
             row["win_rate"] = float("nan")
         rows[t] = row
-    cols = ["last", "rebased", "day_chg", "wk_chg", "mo_chg", "q_chg",
+    cols = ["rebased", "day_chg", "wk_chg", "mo_chg", "q_chg",
             "ytd_chg", "px_ema20", "ema_long", "ema_regime", "mu_ann",
-            "vol_ann", "vol", "sharpe0", "sharpe", "momentum_12_1",
+            "vol_ann", "vol", "sharpe0", "sharpe",
             "ulcer", "win_rate", "dd", "dd_q", "max_dd", "beta", "n_obs"]
     out = pd.DataFrame(rows).T
     return out.reindex(columns=cols)
