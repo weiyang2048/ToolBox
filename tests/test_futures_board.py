@@ -69,11 +69,14 @@ def _fake_fetch_board(monkeypatch, closes_by_sym):
             return None
         return closes[-1] * 1.01, closes[-1], 1_700_000_000
 
-    def fake_history(sym):
-        return closes_by_sym.get(sym) or []
+    def fake_bars(sym):
+        # Completed bars under one fixed session date; fetch_board
+        # reads the closes and the last bar's date off them.
+        return [(datetime.date(2026, 10, 28), c)
+                for c in closes_by_sym.get(sym) or []]
 
     monkeypatch.setattr(fb, "fetch", fake_fetch)
-    monkeypatch.setattr(fb, "history", fake_history)
+    monkeypatch.setattr(fb, "_history_bars", fake_bars)
     return fb.fetch_board(now=datetime.datetime(2026, 10, 29, 12, 0))
 
 
@@ -113,13 +116,84 @@ def test_fetch_board_quote_fallback(monkeypatch):
         return c[-1] * 1.01, c[-1], 1_700_000_000
 
     monkeypatch.setattr(fb, "fetch", fake_fetch)
-    monkeypatch.setattr(fb, "history", lambda sym: closes.get(sym) or [])
+    monkeypatch.setattr(fb, "_history_bars",
+                        lambda sym: [(datetime.date(2026, 10, 28), c)
+                                     for c in closes.get(sym) or []])
     rep = fb.fetch_board(now=datetime.datetime(2026, 10, 29, 12, 0))
     rmb = next(r for r in rep["data"]["FX"] if r["sym"] == "RMB=F")
     assert rmb["last"] == 101.0
     assert abs(rmb["pct"] - 1.0) < 1e-9     # 101 vs prior close 100
     assert rep["available"] == 79
     assert any("RMB=F" in n for n in rep["notes"])
+
+
+def test_history_is_the_closes_view_of_history_bars(monkeypatch):
+    """history() keeps its public contract (completed closes only)
+    as the closes view of _history_bars."""
+    bars = [(datetime.date(2026, 10, 27), 1.0),
+            (datetime.date(2026, 10, 28), 2.0)]
+    monkeypatch.setattr(fb, "_history_bars", lambda sym: bars)
+    assert fb.history("ES=F") == [1.0, 2.0]
+
+
+def test_row_date_is_the_market_times_eastern_date(monkeypatch):
+    """A quoted row's "date" is the Eastern calendar date of its
+    market time — the same instant the mtime string renders, in
+    machine-usable form (user direction 2026-11-01: renderers
+    gray a day % whose data is not from today). The probe instant
+    is Fri 2026-10-30 16:00 EDT: Oct 30 in Eastern, already
+    Oct 31 in Tokyo."""
+    closes = {sym: [100.0] * 300
+              for _g, contracts in fb.all_groups()
+              for sym, _l, _d, _k in contracts}
+    epoch = int(datetime.datetime(
+        2026, 10, 30, 16, 0,
+        tzinfo=datetime.timezone(datetime.timedelta(hours=-4)),
+    ).timestamp())
+
+    def fake_fetch(sym):
+        c = closes[sym]
+        return c[-1] * 1.01, c[-1], epoch
+
+    monkeypatch.setattr(fb, "fetch", fake_fetch)
+    monkeypatch.setattr(fb, "_history_bars",
+                        lambda sym: [(datetime.date(2026, 10, 29), c)
+                                     for c in closes.get(sym) or []])
+    rep = fb.fetch_board(now=datetime.datetime(2026, 11, 1, 12, 0))
+    es = rep["data"]["US Equity"][0]
+    assert es["date"] == "2026-10-30"
+    assert es["mtime"].startswith("10-30")
+
+
+def test_row_date_fallback_and_null(monkeypatch):
+    """A quote-less fallback row (the RMB=F pattern) takes its
+    data date from its last completed bar — the only date its
+    data has; a fully null row's date stays None."""
+    closes = {sym: [100.0] * 300
+              for _g, contracts in fb.all_groups()
+              for sym, _l, _d, _k in contracts}
+
+    def fake_fetch(sym):
+        if sym in ("RMB=F", "ETH=F"):
+            return None
+        c = closes[sym]
+        return c[-1] * 1.01, c[-1], 1_700_000_000
+
+    def fake_bars(sym):
+        if sym == "ETH=F":
+            return []
+        last = (datetime.date(2026, 10, 27) if sym == "RMB=F"
+                else datetime.date(2026, 10, 28))
+        return [(last, c) for c in closes.get(sym) or []]
+
+    monkeypatch.setattr(fb, "fetch", fake_fetch)
+    monkeypatch.setattr(fb, "_history_bars", fake_bars)
+    rep = fb.fetch_board(now=datetime.datetime(2026, 10, 29, 12, 0))
+    rmb = next(r for r in rep["data"]["FX"] if r["sym"] == "RMB=F")
+    assert rmb["pct"] is not None
+    assert rmb["date"] == "2026-10-27"
+    eth = next(r for r in rep["data"]["Crypto"] if r["sym"] == "ETH=F")
+    assert eth["pct"] is None and eth["date"] is None
 
 
 def test_fetch_board_subset_groups(monkeypatch):

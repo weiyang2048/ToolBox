@@ -260,13 +260,21 @@ def fetch(sym):
     return last, settle, meta.get("regularMarketTime")
 
 
-def history(sym):
-    """Completed daily closes (oldest..newest), in-progress bar dropped.
+def _history_bars(sym):
+    """Completed daily bars as (Eastern date, close), oldest..newest.
 
     Explicit period1/period2 is required: range=max makes Yahoo
     silently downgrade to weekly/monthly bars, while a period window
     with interval=1d returns true daily bars. 12y covers the
     2520-session 10Y lookback plus slack.
+
+    The completed-bar rule is the board's own dating: each bar is
+    dated by its timestamp in Eastern (the convention eastern.py
+    fixed for futures, whose bars Yahoo stamps at 04:00 UTC =
+    00:00 ET of the trade date), and a bar dated today or later is
+    still forming, so it is dropped. :func:`history` is the
+    closes-only view of these bars; fetch_board also reads the
+    last bar's date as a fallback row's data date.
     """
     now = datetime.datetime.now(ET)
     p2 = int(now.timestamp())
@@ -291,8 +299,13 @@ def history(sym):
         d = datetime.datetime.fromtimestamp(t, ET).date()
         if d >= today:  # today's bar is still forming
             continue
-        out.append(float(c))
+        out.append((d, float(c)))
     return out
+
+
+def history(sym):
+    """Completed daily closes (oldest..newest), in-progress bar dropped."""
+    return [c for _d, c in _history_bars(sym)]
 
 
 def _ema_last(closes, span):
@@ -332,21 +345,28 @@ def ls_states(closes):
 
 
 def _fetch_row(sym):
-    """(fetch(sym), history(sym)) for one contract.
+    """(fetch(sym), history closes, last completed bar date).
 
     Each call's exceptions are returned in its slot (not raised), so
     the caller degrades the same way for every consumer: a failed
     quote is a null row, a failed history leaves the horizons null.
+    The third element is the Eastern date of the last completed
+    bar (None when the history is empty or failed) — the data
+    date of a row whose quote failed and falls back to completed
+    closes.
     """
     try:
         got = fetch(sym)
     except Exception as exc:  # 404, timeout, bad JSON...
         got = exc
     try:
-        closes = history(sym)
+        bars = _history_bars(sym)
+        closes = [c for _d, c in bars]
+        last_date = bars[-1][0] if bars else None
     except Exception as exc:  # horizons degrade to null, no crash
         closes = exc
-    return got, closes
+        last_date = None
+    return got, closes, last_date
 
 
 def group_year_average(rows):
@@ -368,7 +388,7 @@ def fetch_board(now=None, groups=None):
 
     Returns {asof, source, available, data, notes}: data maps each
     group name to its rows ({sym, label, dec, kind, last, chg, pct,
-    mtime, week..y10, ls}); rows within each group are sorted by the
+    mtime, date, week..y10, ls}); rows within each group are sorted by the
     Year % column (CAGR) descending, rows without a year value last
     (user request 2026-10-30), and the groups themselves are
     ordered by their average Year % CAGR descending, year-less
@@ -377,7 +397,11 @@ def fetch_board(now=None, groups=None):
     below); notes carries one human-readable line per
     degraded contract, for callers that log. Each row's "ls" is the
     (0x20, 20x50, 50x200) trend-state triple from ls_states() on the
-    same completed closes the horizons use.
+    same completed closes the horizons use. Each row's "date" is
+    its data date (Eastern, ISO): for a quoted row, the calendar
+    date of its market time (the instant "mtime" renders); for a
+    completed-close fallback row, the date of its last completed
+    bar; None when neither is known (a null row).
     """
     now = now or datetime.datetime.now(ET)
     # The shared Eastern as-of stamp (eastern.asof_stamp) — one
@@ -400,10 +424,10 @@ def fetch_board(now=None, groups=None):
             rows = data.setdefault(gname, [])
             row = {"sym": sym, "label": label, "dec": dec, "kind": kind,
                    "last": None, "chg": None, "pct": None, "mtime": None,
-                   "ls": (None, None, None)}
+                   "date": None, "ls": (None, None, None)}
             for key, _n in HORIZONS:
                 row[key] = None
-            got, closes = futs[sym].result()
+            got, closes, last_bar_date = futs[sym].result()
             if isinstance(got, Exception):  # 404, timeout, bad JSON...
                 notes.append("futures: %s unavailable (%s)" % (sym, got))
                 got = None
@@ -413,8 +437,16 @@ def fetch_board(now=None, groups=None):
                 row["chg"] = last - settle
                 row["pct"] = 100.0 * (last - settle) / settle
                 if mtime:
-                    row["mtime"] = datetime.datetime.fromtimestamp(
-                        mtime, ET).strftime("%m-%d %H:%M %Z")
+                    mkt = datetime.datetime.fromtimestamp(mtime, ET)
+                    row["mtime"] = mkt.strftime("%m-%d %H:%M %Z")
+                    # The row's data date (Eastern, ISO): the
+                    # calendar date of the same market time the
+                    # mtime string renders — plumbed through in
+                    # machine-usable form so renderers can compare
+                    # it against today (the Markets page grays a
+                    # day % whose date is before today, user
+                    # direction 2026-11-01).
+                    row["date"] = mkt.date().isoformat()
                 if dec is None:  # cash index: decimals from its level
                     row["dec"] = cash_dec(last)
                 available += 1
@@ -434,6 +466,12 @@ def fetch_board(now=None, groups=None):
                 row["last"] = closes[-1]
                 row["chg"] = closes[-1] - closes[-2]
                 row["pct"] = 100.0 * row["chg"] / closes[-2]
+                if last_bar_date is not None:
+                    # The fallback's data is its last completed
+                    # bar; that bar's Eastern date is the row's
+                    # data date (it lags the live-quoted rows by
+                    # construction, so renderers can gray it).
+                    row["date"] = last_bar_date.isoformat()
                 if dec is None:  # cash index: decimals from its level
                     row["dec"] = cash_dec(row["last"])
                 available += 1
