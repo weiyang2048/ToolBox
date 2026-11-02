@@ -239,6 +239,34 @@ def all_groups():
     return out
 
 
+# Liquid-alternatives ETFs for the dashboard's Alternatives
+# section (user direction 2026-11-02): IALT itself plus the
+# hedge-fund replication family Yahoo carries — the multi-
+# strategy trackers, merger arbitrage, managed futures and a
+# market-neutral anti-beta fund. All eight verified against
+# Yahoo on 2026-11-02 (live quote + history). This group is
+# deliberately NOT part of all_groups(): the briefs' futures
+# report fetches the board unfiltered, and their board must
+# not grow a section they never asked for. NAMED_GROUPS below
+# makes it selectable by name only.
+ALTERNATIVES = [
+    ("IALT", "Systematic alternatives (IALT)", 2),
+    ("QAI", "Hedge multi-strategy tracker (QAI)", 2),
+    ("HDG", "Hedge replication (HDG)", 2),
+    ("MNA", "Merger arbitrage (MNA)", 2),
+    ("DBMF", "Managed futures, DBi (DBMF)", 2),
+    ("CTA", "Managed futures, Simplify (CTA)", 2),
+    ("KMLM", "Managed futures, Mount Lucas (KMLM)", 2),
+    ("BTAL", "Market neutral anti-beta (BTAL)", 2),
+]
+
+# Groups a consumer may fetch by name (fetch_board's groups
+# argument) that are not part of the canonical unfiltered
+# board — see ALTERNATIVES above.
+NAMED_GROUPS = [("Alternatives",
+                 [(s, l, d, "cash") for s, l, d in ALTERNATIVES])]
+
+
 def fetch(sym):
     """(last, settle, market_time) from Yahoo v8 chart meta, or None."""
     url = ("https://query1.finance.yahoo.com/v8/finance/chart/"
@@ -412,8 +440,13 @@ def fetch_board(now=None, groups=None):
     # I/O-bound; fetch all lines concurrently. Futures are awaited
     # in symbol order, so notes and data come out in board order.
     wanted = set(groups) if groups is not None else None
+    # An unfiltered fetch is the canonical board (all_groups);
+    # a named fetch may also draw on NAMED_GROUPS, which never
+    # join the unfiltered board.
+    registry = (all_groups() if wanted is None
+                else all_groups() + NAMED_GROUPS)
     order = [(gname, sym, label, dec, kind)
-             for gname, contracts in all_groups()
+             for gname, contracts in registry
              for sym, label, dec, kind in contracts
              if wanted is None or gname in wanted]
     with ThreadPoolExecutor(max_workers=8) as pool:
