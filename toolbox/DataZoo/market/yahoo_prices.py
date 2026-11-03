@@ -63,8 +63,38 @@ def download_close_prices(
 
     prices = _close_frame(_history(symbols, period))
     prices = _strip_timezone(prices)
+    prices = _patch_tail(prices)
     if normalize and not prices.empty:
         prices = normalize_close_prices(prices)
+    return prices
+
+
+def _patch_tail(prices: pd.DataFrame) -> pd.DataFrame:
+    """Fill recent NaN cells from yahoo_daily (the repaired
+    chart path). yfinance assembles the same lagging daily
+    bars, so a completed session can sit NaN at a column's
+    tail for hours after the close while the chart path's
+    repairs already carry it. Best-effort and bounded: only
+    NaN cells in the last three rows, only where yahoo_daily
+    has a value for that date; a failed leg keeps its NaNs."""
+    if prices.empty:
+        return prices
+    import datetime as _dt
+
+    p1 = int(_dt.datetime.now(_dt.timezone.utc).timestamp()) \
+        - 45 * 86400
+    tail = prices.iloc[-3:]
+    for col in prices.columns:
+        if not tail[col].isna().any():
+            continue
+        try:
+            s = yahoo_daily(str(col), p1=p1, include_partial=True)
+        except Exception:  # noqa: BLE001 - best-effort patch
+            continue
+        for d in tail.index[tail[col].isna()]:
+            v = s.get(d) if len(s) else None
+            if v is not None and pd.notna(v):
+                prices.loc[d, col] = float(v)
     return prices
 
 
@@ -273,12 +303,65 @@ def _repaired_adjclose(r):
     return adj
 
 
+# The intraday fallback cache: ticker -> (monotonic fetch
+# time, {Eastern date: raw close at that session's end}).
+_INTRADAY_CACHE = {}
+_INTRADAY_LOCK = threading.Lock()
+
+
+def _intraday_session_closes(ticker, instrument_type=None):
+    """Each recent session's closing RAW price, reconstructed
+    from Yahoo's 60-minute bars: the last intraday close at or
+    before the session's end (16:00 Eastern; 17:00 for futures,
+    whose Globex day ends then). The daily bars lag their own
+    fill for hours after a close (see _repaired_adjclose); the
+    intraday bars never do, so a still-null daily bar can be
+    filled from its own session's tape. Cached per process at
+    the chart TTL; any failure returns {} — the caller keeps
+    the unfilled series rather than failing."""
+    now_m = time.monotonic()
+    with _INTRADAY_LOCK:
+        entry = _INTRADAY_CACHE.get(ticker)
+        if entry is not None \
+                and now_m - entry[0] <= _CHART_TTL_SECONDS:
+            return entry[1]
+    out = {}
+    try:
+        p2 = int(datetime.datetime.now(
+            datetime.timezone.utc).timestamp())
+        url = (f"https://query1.finance.yahoo.com/v8/finance/chart/"
+               f"{ticker}?period1={p2 - 12 * 86400}&period2={p2}"
+               f"&interval=60m")
+        d = with_retry(lambda: fetch_json(url, 30,
+                                          user_agent=YAHOO_UA),
+                       "yahoo intraday " + ticker)
+        r = d["chart"]["result"][0]
+        closes = r["indicators"]["quote"][0]["close"]
+        cutoff = 17 if instrument_type == "FUTURE" else 16
+        ny = ZoneInfo("America/New_York")
+        for t, c in zip(r["timestamp"], closes):
+            if c is None:
+                continue
+            et = datetime.datetime.fromtimestamp(
+                t, datetime.timezone.utc).astimezone(ny)
+            if et.hour < cutoff:  # the bar ends by the close
+                out[et.date()] = float(c)  # later bars overwrite
+    except Exception:  # noqa: BLE001 - a fallback must not fail
+        out = {}
+    with _INTRADAY_LOCK:
+        _INTRADAY_CACHE[ticker] = (now_m, out)
+    return out
+
+
 def yahoo_daily(ticker, p1=0, p2=None, include_partial=False):
     """Daily adjusted closes for one ticker from Yahoo's v8 chart API.
 
     Returns a tz-naive, midnight-normalized Series of adjclose values,
-    NaNs dropped. A trailing bar Yahoo has not filled yet is
-    repaired from the payload meta (see _repaired_adjclose).
+    NaNs dropped. Bars Yahoo has not filled yet are repaired
+    from the payload meta (see _repaired_adjclose) and, for
+    any recent bar still null, from that session's intraday
+    tape (see _intraday_session_closes) — one ladder, so every
+    consumer of this layer stops a session early never.
     The in-progress session's partial bar is dropped:
     the series ends at the latest COMPLETE trading day
     (America/New_York); after the 16:00 ET close on a weekday, that
@@ -299,6 +382,35 @@ def yahoo_daily(ticker, p1=0, p2=None, include_partial=False):
     # fetch of this window would have returned.
     pairs = [(t, c) for t, c in zip(ts_all, closes_all)
              if p1 <= t <= p2]
+    # Any recent bar still null (the index/futures shape: the
+    # completed session's bar sits unfilled behind the live
+    # session's) fills from that session's intraday tape.
+    if any(c is None for _t, c in pairs[-5:]) \
+            and (r.get("meta") or {}).get("instrumentType") \
+            != "CRYPTOCURRENCY":
+        fills = _intraday_session_closes(
+            ticker, (r.get("meta") or {}).get("instrumentType"))
+        if fills:
+            ny = ZoneInfo("America/New_York")
+            valid = [(t, c) for t, c in pairs if c is not None]
+            ratio = 1.0
+            if valid:
+                raw = ((r["indicators"].get("quote") or [{}])[0]
+                       .get("close") or [])
+                t_last, c_last = valid[-1]
+                i_last = ts_all.index(t_last)
+                if i_last < len(raw) and raw[i_last]:
+                    ratio = c_last / raw[i_last]
+
+            def _filled(t, c):
+                if c is not None:
+                    return c
+                day = datetime.datetime.fromtimestamp(
+                    t, datetime.timezone.utc).astimezone(ny).date()
+                v = fills.get(day)
+                return v * ratio if v is not None else c
+
+            pairs = [(t, _filled(t, c)) for t, c in pairs]
     s = pd.Series(
         [c for _t, c in pairs],
         index=pd.to_datetime([t for t, _c in pairs], unit="s",

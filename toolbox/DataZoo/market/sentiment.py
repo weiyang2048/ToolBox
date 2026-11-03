@@ -145,19 +145,23 @@ def fetch_crypto():
 
 
 def fetch_gold():
-    """GC=F gold futures $/oz, last year of daily closes."""
-    url = ("https://query1.finance.yahoo.com/v8/finance/chart/GC=F"
-           "?range=1y&interval=1d")
-    d = _get_json(url, headers={"User-Agent": "Mozilla/5.0"})
-    res = d["chart"]["result"][0]
-    closes = res["indicators"]["quote"][0]["close"]
-    idx = pd.to_datetime(res["timestamp"], unit="s", utc=True)
-    # Yahoo stamps futures daily bars at midnight Eastern (the start of
-    # the exchange day), so date them in the exchange's timezone: a
-    # Chicago conversion lands at 11 PM the prior day and normalize()
-    # would label every bar one day early (Friday's session as Thursday).
-    idx = idx.tz_convert("America/New_York").tz_localize(None).normalize()
-    s = pd.Series(closes, index=idx).dropna()
+    """GC=F gold futures $/oz, last year of daily closes.
+
+    Through the canonical yahoo_daily since 2026-11-02 (this
+    function's private chart fetch was the last copy of the
+    lagging-bar disease: Yahoo leaves a completed session's
+    bar null for hours, and a private dropna read a day
+    stale). Yahoo stamps futures bars at midnight Eastern,
+    so yahoo_daily's UTC-normalized dates are the exchange
+    dates; include_partial keeps the live session's bar, as
+    the old range fetch did."""
+    import time as _time
+
+    from toolbox.DataZoo.market.yahoo_prices import yahoo_daily
+
+    s = yahoo_daily("GC=F",
+                    p1=int(_time.time()) - 400 * 86400,
+                    include_partial=True)
     return s[~s.index.duplicated(keep="last")].sort_index()
 
 

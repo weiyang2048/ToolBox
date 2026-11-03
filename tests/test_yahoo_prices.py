@@ -261,6 +261,84 @@ def test_repaired_adjclose_leaves_an_equity_interior_bar():
     assert yp._repaired_adjclose(r)[3] is None
 
 
+# --- the intraday fallback: an index's unfilled session (2026-11-02) ---
+
+@pytest.fixture(autouse=True)
+def _clear_intraday_cache():
+    yp._INTRADAY_CACHE.clear()
+    yield
+    yp._INTRADAY_CACHE.clear()
+
+
+def _dxy_daily_payload():
+    # DX-Y.NYB as served on Mon Nov 2, 2026, ~21:15 ET: Fri
+    # filled, a null Sunday placeholder, Monday's bar null,
+    # and a live pseudo-bar stamped at the fetch instant.
+    ts = [_stamp(2026, 10, 30, 4), _stamp(2026, 11, 1, 4),
+          _stamp(2026, 11, 2, 5), _stamp(2026, 11, 3, 2)]
+    vals = [101.88, None, None, 101.829]
+    return {"chart": {"result": [{
+        "timestamp": ts,
+        "meta": {"instrumentType": "INDEX",
+                 "regularMarketPrice": 101.829,
+                 "regularMarketTime": _stamp(2026, 11, 3, 2)},
+        "indicators": {
+            "quote": [{"close": list(vals),
+                       "open": list(vals)}],
+            "adjclose": [{"adjclose": list(vals)}]}}]}}
+
+
+def _intraday_payload():
+    # Monday hourly bars: 09:00/10:00/11:00 ET under the
+    # 16:00 cutoff, plus a 16:00 ET bar (excluded by it).
+    ts = [_stamp(2026, 11, 2, 14), _stamp(2026, 11, 2, 15),
+          _stamp(2026, 11, 2, 16), _stamp(2026, 11, 2, 21)]
+    return {"chart": {"result": [{
+        "timestamp": ts,
+        "indicators": {"quote": [
+            {"close": [101.50, 101.70, 101.82, 999.0]}]}}]}}
+
+
+def test_yahoo_daily_fills_an_unfilled_session_from_intraday(
+        monkeypatch):
+    monkeypatch.setattr(yp, "chart_payload",
+                        lambda t, a, b: _dxy_daily_payload())
+    monkeypatch.setattr(yp, "fetch_json",
+                        lambda url, timeout, user_agent=None:
+                        _intraday_payload())
+    s = yp.yahoo_daily("DX-Y.NYB", include_partial=True)
+    assert list(s.index.strftime("%Y-%m-%d")) == [
+        "2026-10-30", "2026-11-02", "2026-11-03"]
+    assert abs(float(s.loc["2026-11-02"]) - 101.82) < 1e-9
+
+
+def test_yahoo_daily_survives_an_intraday_failure(monkeypatch):
+    monkeypatch.setattr(yp, "chart_payload",
+                        lambda t, a, b: _dxy_daily_payload())
+
+    def boom(url, timeout, user_agent=None):
+        raise ValueError("no intraday")
+
+    monkeypatch.setattr(yp, "fetch_json", boom)
+    s = yp.yahoo_daily("DX-Y.NYB", include_partial=True)
+    assert list(s.index.strftime("%Y-%m-%d")) == [
+        "2026-10-30", "2026-11-03"]
+
+
+def test_patch_tail_fills_from_yahoo_daily(monkeypatch):
+    import pandas as pd
+
+    idx = pd.to_datetime(["2026-10-30", "2026-11-02"])
+    frame = pd.DataFrame({"SPY": [755.72, float("nan")]}, index=idx)
+    monkeypatch.setattr(
+        yp, "yahoo_daily",
+        lambda t, p1=0, p2=None, include_partial=False:
+        pd.Series([752.10], index=pd.to_datetime(["2026-11-02"])))
+    out = yp._patch_tail(frame)
+    assert float(out.loc["2026-11-02", "SPY"]) == 752.10
+    assert float(out.loc["2026-10-30", "SPY"]) == 755.72
+
+
 def test_yahoo_daily_slices_a_wider_cached_window(monkeypatch):
     # Bars at p1-1d, p1, p1+1d, p2, p2+1d in the cached payload;
     # only the ones inside [p1, p2] may come back.
