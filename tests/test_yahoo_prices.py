@@ -417,6 +417,22 @@ def test_download_keeps_a_genuinely_young_ticker(monkeypatch):
     assert float(out["NEW"].dropna().iloc[0]) == 7.0
 
 
+def test_download_empty_batch_is_refilled(monkeypatch):
+    # The extreme stub: the batch returns nothing at all; the
+    # chart path still carries the ticker, so the call returns
+    # its history instead of an empty frame.
+    import pandas as pd
+
+    monkeypatch.setattr(yp, "_history", lambda t, p: pd.DataFrame())
+    monkeypatch.setattr(
+        yp, "yahoo_daily",
+        lambda t, p1=0, p2=None, include_partial=False:
+        _full_series(50.0))
+    out = yp.download_close_prices(["AAA"], period="5y")
+    assert list(out.columns) == ["AAA"]
+    assert int(out["AAA"].notna().sum()) == 100
+
+
 def test_download_survives_a_failed_refill(monkeypatch):
     import pandas as pd
 

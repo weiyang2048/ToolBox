@@ -116,7 +116,15 @@ def test_download_normalize_scales_to_first_print(monkeypatch):
 
 
 def test_download_empty_history_returns_empty(monkeypatch):
+    # Empty batch AND an empty chart path: nothing to return.
+    # (An empty batch alone no longer ends the call — it is
+    # the extreme stub, refilled from the chart path; see
+    # test_download_empty_batch_is_refilled in
+    # test_yahoo_prices.py.)
     monkeypatch.setattr(yp_module, "_history", lambda t, p: pd.DataFrame())
+    monkeypatch.setattr(yp_module, "yahoo_daily",
+                        lambda t, p1=0, p2=None, include_partial=False:
+                        pd.Series(dtype=float))
     assert download_close_prices(["AAA"]).empty
 
 
