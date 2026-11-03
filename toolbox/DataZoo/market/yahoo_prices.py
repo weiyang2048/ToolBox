@@ -202,11 +202,62 @@ def chart_payload(ticker, p1=0, p2=None):
             event.set()
 
 
+def _repaired_adjclose(r):
+    """The payload result's adjclose list, with a trailing null
+    bar filled from the payload meta when Yahoo has published
+    the session's price there but not yet filled the daily bar
+    (observed 2026-11-02: hours after the Monday close the
+    Nov 2 bar still sat null on both chart hosts while
+    meta.regularMarketPrice already carried the close — every
+    equity series read a session stale). The fill is
+    regularMarketPrice scaled by the standing adjustment ratio
+    (the last valid bar's adjclose / raw close — Yahoo anchors
+    adjclose so the ratio is ~1 at the recent end). Skipped
+    when a dividend or split event lands after the last valid
+    bar (the ratio changes on exactly those days), when the
+    meta price is missing, or when its New York date is not
+    the null bar's session date."""
+    ts = r.get("timestamp") or []
+    adj = list(r["indicators"]["adjclose"][0]["adjclose"])
+    if not ts or not adj or adj[-1] is not None:
+        return adj
+    valid = [i for i, a in enumerate(adj) if a is not None]
+    if not valid:
+        return adj
+    meta = r.get("meta") or {}
+    price, mtime = (meta.get("regularMarketPrice"),
+                    meta.get("regularMarketTime"))
+    if not price or not mtime:
+        return adj
+    ny = ZoneInfo("America/New_York")
+
+    def _ny_day(stamp):
+        return datetime.datetime.fromtimestamp(
+            stamp, datetime.timezone.utc).astimezone(ny).date()
+
+    if _ny_day(ts[-1]) != _ny_day(mtime):
+        return adj
+    last = valid[-1]
+    events = r.get("events") or {}
+    for kind in ("dividends", "splits"):
+        for ev in (events.get(kind) or {}).values():
+            if (ev.get("date") or 0) > ts[last]:
+                return adj
+    closes = r["indicators"]["quote"][0]["close"]
+    raw = closes[last] if last < len(closes) else None
+    if not raw:
+        return adj
+    adj[-1] = price * adj[last] / raw
+    return adj
+
+
 def yahoo_daily(ticker, p1=0, p2=None, include_partial=False):
     """Daily adjusted closes for one ticker from Yahoo's v8 chart API.
 
     Returns a tz-naive, midnight-normalized Series of adjclose values,
-    NaNs dropped. The in-progress session's partial bar is dropped:
+    NaNs dropped. A trailing bar Yahoo has not filled yet is
+    repaired from the payload meta (see _repaired_adjclose).
+    The in-progress session's partial bar is dropped:
     the series ends at the latest COMPLETE trading day
     (America/New_York); after the 16:00 ET close on a weekday, that
     day's bar is complete and is kept.
@@ -220,8 +271,7 @@ def yahoo_daily(ticker, p1=0, p2=None, include_partial=False):
         p2 = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
     d = chart_payload(ticker, p1, p2)
     r = d["chart"]["result"][0]
-    ts_all, closes_all = (r["timestamp"],
-                          r["indicators"]["adjclose"][0]["adjclose"])
+    ts_all, closes_all = r["timestamp"], _repaired_adjclose(r)
     # A cache hit may hold a wider window than requested; slice
     # the raw bars to exactly the requested [p1, p2], as a direct
     # fetch of this window would have returned.

@@ -163,6 +163,70 @@ def test_chart_payload_fetches_once_under_concurrency(
     assert len(out) == 4 and all(o is out[0] for o in out)
 
 
+# --- _repaired_adjclose: Yahoo's unfilled trailing bar (2026-11-02) ---
+
+def _result(adj, closes=None, meta=None, events=None):
+    import datetime as _dt
+
+    # Fri Oct 30 and Mon Nov 2, 2026, 14:30 UTC session stamps.
+    ts = [int(_dt.datetime(2026, 10, 30, 14, 30,
+                           tzinfo=_dt.timezone.utc).timestamp()),
+          int(_dt.datetime(2026, 11, 2, 14, 30,
+                           tzinfo=_dt.timezone.utc).timestamp())]
+    r = {"timestamp": ts,
+         "indicators": {
+             "quote": [{"close": list(closes or adj)}],
+             "adjclose": [{"adjclose": list(adj)}]}}
+    if meta is not None:
+        r["meta"] = meta
+    if events is not None:
+        r["events"] = events
+    return r
+
+
+def _stamp(y, m, d, hh=0):
+    import datetime as _dt
+
+    return int(_dt.datetime(y, m, d, hh, tzinfo=_dt.timezone.utc)
+               .timestamp())
+
+
+_CLOSE_META = {"regularMarketPrice": 29.41,
+               "regularMarketTime": _stamp(2026, 11, 2, 21)}
+
+
+def test_repaired_adjclose_fills_the_unfilled_bar():
+    r = _result([29.47, None], meta=_CLOSE_META)
+    out = yp._repaired_adjclose(r)
+    assert out[0] == 29.47
+    assert abs(out[1] - 29.41) < 1e-9  # ratio 1.0 at the anchor bar
+
+
+def test_repaired_adjclose_scales_by_the_standing_ratio():
+    r = _result([20.0, None], closes=[25.0, None], meta=_CLOSE_META)
+    out = yp._repaired_adjclose(r)
+    assert abs(out[1] - 29.41 * 20.0 / 25.0) < 1e-9
+
+
+def test_repaired_adjclose_skips_a_dividend_on_the_bar():
+    r = _result([29.47, None], meta=_CLOSE_META,
+                events={"dividends": {"x": {"date": _stamp(2026, 11, 2)}}})
+    assert yp._repaired_adjclose(r)[1] is None
+
+
+def test_repaired_adjclose_skips_a_stale_meta():
+    stale = {"regularMarketPrice": 29.41,
+             # Nov 2 00:00 UTC is still Nov 1 in New York.
+             "regularMarketTime": _stamp(2026, 11, 2)}
+    r = _result([29.47, None], meta=stale)
+    assert yp._repaired_adjclose(r)[1] is None
+
+
+def test_repaired_adjclose_noops_on_a_filled_bar():
+    r = _result([29.47, 29.41], meta=_CLOSE_META)
+    assert yp._repaired_adjclose(r) == [29.47, 29.41]
+
+
 def test_yahoo_daily_slices_a_wider_cached_window(monkeypatch):
     # Bars at p1-1d, p1, p1+1d, p2, p2+1d in the cached payload;
     # only the ones inside [p1, p2] may come back.
