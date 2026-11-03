@@ -236,11 +236,11 @@ def test_resolve_strategy_names():
 
 
 def test_combo_names_cover_the_demoed_grid():
-    # 23 since Ledoit–Wolf joined the grid (user direction
-    # 2026-10-31): Max Sharpe 3 covs x 3 means, the three cov-only
-    # rules x 3 covs, plus the five bare names.
-    assert len(COMBO_STRATEGY_NAMES) == 23
-    assert len(set(COMBO_STRATEGY_NAMES)) == 23
+    # 28 since the RS(n, w) rules joined (user direction
+    # 2026-11-02): Max Sharpe 3 covs x 3 means, the three cov-only
+    # rules x 3 covs, the five bare names, plus five RS pairs.
+    assert len(COMBO_STRATEGY_NAMES) == 28
+    assert len(set(COMBO_STRATEGY_NAMES)) == 28
     for name in COMBO_STRATEGY_NAMES:
         resolve_strategy(name)  # every listed name must resolve
 
@@ -304,3 +304,76 @@ def test_backtest_window_rolling_keeps_oos_span():
     assert not np.allclose(roll["returns"].values, exp["returns"].values)
     with pytest.raises(ValueError):
         walk_forward_backtest(prices, window=0, **kw)
+
+
+def _rs_returns():
+    """Four tickers with known trailing sums: over the full
+    frame A > B > C > D; over the last 2 rows C is strongest."""
+    data = {
+        "A": [0.06, 0.06, 0.06, 0.01, 0.01],
+        "B": [0.05, 0.05, 0.05, 0.01, 0.01],
+        "C": [0.01, 0.01, 0.01, 0.06, 0.06],
+        "D": [0.00, 0.00, 0.00, 0.00, 0.00],
+    }
+    idx = pd.bdate_range("2026-01-05", periods=5)
+    return pd.DataFrame(data, index=idx)
+
+
+def test_rs_weights_top_n_equal_weight():
+    from toolbox.DataZoo.market.strategies import rs_weights
+
+    R = _rs_returns()
+    # Full window: A (0.20) and B (0.17) lead.
+    assert list(rs_weights(R, 2, 5)) == [0.5, 0.5, 0.0, 0.0]
+    # Winner-take-all at w=2: C's last two days dominate.
+    assert list(rs_weights(R, 1, 2)) == [0.0, 0.0, 1.0, 0.0]
+    # A window longer than the history uses all of it.
+    assert list(rs_weights(R, 1, 252)) == [1.0, 0.0, 0.0, 0.0]
+    # n at the universe size is 1/N.
+    assert list(rs_weights(R, 4, 5)) == [0.25] * 4
+    assert list(rs_weights(R, 9, 5)) == [0.25] * 4
+
+
+def test_rs_ties_keep_universe_order():
+    from toolbox.DataZoo.market.strategies import rs_weights
+
+    R = _rs_returns()
+    R["B"] = R["A"]  # exact tie for the lead
+    assert list(rs_weights(R, 1, 5)) == [1.0, 0.0, 0.0, 0.0]
+
+
+def test_rs_names_resolve_and_rank_before_average():
+    from toolbox.DataZoo.market.strategies import (
+        COMBO_STRATEGY_NAMES,
+        RS_STRATEGY_NAMES,
+        _strategy_order,
+        resolve_strategy,
+    )
+
+    for name in RS_STRATEGY_NAMES:
+        assert name in COMBO_STRATEGY_NAMES
+        assert resolve_strategy(name) == (name, None, None)
+    # Any well-formed pair resolves, grid membership or not.
+    assert resolve_strategy("RS(4, 40)") == ("RS(4, 40)", None, None)
+    with pytest.raises(ValueError):
+        resolve_strategy("RS(0, 40)")
+    order = _strategy_order(["Average", "RS(1, 252)", "1/N"])
+    assert order == ["1/N", "RS(1, 252)", "Average"]
+
+
+def test_rs_snapshot_and_backtest():
+    R = _returns(n=300)
+    W, _info = snapshot_weights(R, "ledoit_wolf", "sample", 0.0,
+                                ["RS(2, 63)", "Average"])
+    w = W.loc["RS(2, 63)"].values
+    assert np.isclose(w.sum(), 1.0)
+    assert sorted(w)[-2:] == [0.5, 0.5]
+    assert np.allclose(W.loc["Average"].values, w)
+
+    prices = _prices(n=500)
+    out = walk_forward_backtest(
+        prices, strategies=["RS(1, 21)"], cov_method="bbp",
+        mean_method="sample", seed=126, hold=21)
+    assert out is not None
+    assert set(out["stats"].index) == {"RS(1, 21)"}
+    assert np.isfinite(out["stats"].values).all()

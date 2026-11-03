@@ -95,13 +95,41 @@ _GRID_COVS = ("sample", "bbp", "ledoit_wolf")
 _GRID_MEANS = ("sample", "james_stein", "bayes_stein")
 _COV_ONLY_RULES = ("Min variance", "Max diversification", "NCO")
 
+# Relative-strength rules (user direction 2026-11-02):
+# "RS(n, w)" holds the n tickers with the highest trailing
+# w-day return at equal weight 1/n, re-chosen at every
+# rebalance — no covariance or mean inputs. The pair rides
+# in the name like the cleaning pairs do; any well-formed
+# RS(n, w) resolves, and the grid offers this curated set —
+# winner-take-all at a month and at a year, then widening
+# baskets as the window lengthens.
+RS_PAIRS = ((1, 21), (1, 252), (2, 63), (3, 126), (5, 252))
+RS_STRATEGY_NAMES = tuple(f"RS({n}, {w})" for n, w in RS_PAIRS)
+
 COMBO_STRATEGY_NAMES = (
     tuple(f"Max Sharpe ({_COV_SHORT[c]} × {_MEAN_SHORT[m]})"
           for c in _GRID_COVS for m in _GRID_MEANS)
     + tuple(f"{rule} ({_COV_SHORT[c]})"
             for rule in _COV_ONLY_RULES for c in _GRID_COVS)
-    + ("1/N", "HRP", "Risk parity", "Min CVaR", "Average")
+    + ("1/N", "HRP", "Risk parity", "Min CVaR")
+    + RS_STRATEGY_NAMES
+    + ("Average",)
 )
+
+
+def _parse_rs(name: str) -> tuple[int, int] | None:
+    """``(n, w)`` for a well-formed ``RS(n, w)`` name with
+    n, w >= 1, else None."""
+    if name.startswith("RS(") and name.endswith(")"):
+        parts = name[3:-1].split(", ")
+        if len(parts) == 2:
+            try:
+                n, w = int(parts[0]), int(parts[1])
+            except ValueError:
+                return None
+            if n >= 1 and w >= 1:
+                return n, w
+    return None
 
 
 def resolve_strategy(name: str) -> tuple[str, str | None, str | None]:
@@ -113,6 +141,8 @@ def resolve_strategy(name: str) -> tuple[str, str | None, str | None]:
     name or qualifier.
     """
     if name in STRATEGY_NAMES:
+        return name, None, None
+    if _parse_rs(name) is not None:
         return name, None, None
     if " (" in name and name.endswith(")"):
         base, qual = name[:-1].split(" (", 1)
@@ -691,6 +721,22 @@ def cvar_weights(R_exc: np.ndarray, alpha: float = 0.95) -> np.ndarray:
     return _clean_w(res.x[:p])
 
 
+def rs_weights(R: pd.DataFrame, n: int, w: int) -> np.ndarray:
+    """Equal weights on the n strongest tickers over the last
+    w rows of ``R`` (log returns): strength is the trailing
+    sum of log returns — the log price ratio over the window.
+    A window longer than the history uses all of it. Ties
+    keep universe order (the sort is stable); n at or above
+    the universe size is 1/N."""
+    p = R.shape[1]
+    k = min(n, p)
+    strength = R.tail(w).sum(axis=0).to_numpy()
+    top = np.argsort(-strength, kind="stable")[:k]
+    out = np.zeros(p)
+    out[top] = 1.0 / k
+    return out
+
+
 def strategy_weights(name: str, R: pd.DataFrame, S: np.ndarray,
                      mu: np.ndarray, rf_d: float) -> np.ndarray:
     """Weights of one strategy on one estimation window.
@@ -699,7 +745,9 @@ def strategy_weights(name: str, R: pd.DataFrame, S: np.ndarray,
     ``mu`` the (possibly cleaned) excess mean, ``rf_d`` the window's
     daily risk-free rate (for the CVaR scenarios). ``Average`` is not
     a single-window rule here — the backtest/snapshot layers build it
-    as the mean of the other selected rules.
+    as the mean of the other selected rules. An ``RS(n, w)`` name
+    resolves to itself and is solved by :func:`rs_weights` from
+    ``R`` alone.
     """
     p = R.shape[1]
     if name == "1/N":
@@ -718,6 +766,9 @@ def strategy_weights(name: str, R: pd.DataFrame, S: np.ndarray,
         return cvar_weights(R.values - rf_d)
     if name == "Max Sharpe":
         return max_sharpe_weights(S, mu)
+    rs = _parse_rs(name)
+    if rs is not None:
+        return rs_weights(R, rs[0], rs[1])
     raise ValueError(f"Unknown or ensemble strategy: {name}")
 
 
