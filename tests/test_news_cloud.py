@@ -431,6 +431,26 @@ def test_window_fold_merges_live_template():
     assert "Behind The Move" not in topics
 
 
+def test_window_fold_blocked_by_fragment_gate():
+    # The windows' join ("Broader Market Some") ends on a
+    # determiner — a fragment the shape gate rejects — so the
+    # fold is an ordinary miss and both windows survive.
+    topics = [
+        {"term": "Broader Market", "weight": 3, "group": "neutral",
+         "canon": ("broader", "market"), "mined": True,
+         "example_headline": "", "link": "",
+         "surfaces": {"broader market": 3}},
+        {"term": "Market Some", "weight": 3, "group": "neutral",
+         "canon": ("market", "some"), "mined": True,
+         "example_headline": "", "link": "",
+         "surfaces": {"market some": 3}},
+    ]
+    heads = _heads("Broader Market Some Facts Emerge", 3)
+    out = _fold_windows(topics, heads, [])
+    assert {t["term"] for t in out} == {
+        "Broader Market", "Market Some"}
+
+
 # ------------------------------------------------------------------
 # Robustness gates (2026-11-02): shape, outlet, template, stories
 # ------------------------------------------------------------------
@@ -523,6 +543,52 @@ def test_story_clusters_rare_token_veto():
     clusters = _story_clusters(heads)
     assert clusters[0] == clusters[1]   # one story, counted once
     assert clusters[2] != clusters[3]   # template siblings stay apart
+
+
+def test_fold_fragment_gate_shapes():
+    # The three fragments that rendered live on 2026-11-02
+    # ("Kills 26", "Dip Than Broader", "Broader Market Some")
+    # each pass one of the shape gate's old holes; the gate
+    # now closes all three, and the adjudicated phrases the
+    # window fold owns still pass.
+    assert not _shape_ok(_canon_of_term("Kills 26"))
+    assert not _shape_ok(("kill", "26"))        # verb + count
+    assert not _shape_ok(_canon_of_term("Dip Than Broader"))
+    assert not _shape_ok(("dip", "than", "broader"))
+    assert not _shape_ok(_canon_of_term("Broader Market Some"))
+    assert not _shape_ok(("broader", "market", "some"))
+    assert _shape_ok(_canon_of_term("What Is Behind The Move"))
+    assert _shape_ok(("s&p", "500"))  # & head keeps number tail
+
+
+def test_fold_fragment_gate_filters_live_fragments():
+    # End to end on the live fragments' own headline families
+    # (the Yahoo explainer template + the Ukraine count
+    # headlines, verbatim patterns from the 2026-11-02 pool).
+    y = "Yahoo ^GSPC"
+    heads = [
+        {"title": "AeroVironment (AVAV) Sees a More Significant "
+                  "Dip Than Broader Market: Some Facts to Know",
+         "source": y, "published": None},
+        {"title": "Wix.com (WIX) Sees a More Significant Dip "
+                  "Than Broader Market: Some Facts to Know",
+         "source": "Yahoo ^IXIC", "published": None},
+        {"title": "Intrusion Inc. (INTZ) Sees a More Significant "
+                  "Dip Than Broader Market: Some Facts to Know",
+         "source": y, "published": None},
+        {"title": "Russian bombing kills 26 people at Ukraine "
+                  "aid centre, Kyiv says", "source": "Wire UK",
+         "published": None},
+        {"title": "Russian bombing of Ukrainian aid centre "
+                  "kills 26 people", "source": "Wire CA",
+         "published": None},
+        {"title": "Russia kills 26 in strike on Ukraine aid "
+                  "centre", "source": "Wire US", "published": None},
+    ]
+    terms = {t["term"] for t in _mine_phrases(heads, [])}
+    assert "Kills 26" not in terms
+    assert "Dip Than Broader" not in terms
+    assert "Broader Market Some" not in terms
 
 
 def test_ahead_of_earnings_is_scaffolding_not_a_topic():

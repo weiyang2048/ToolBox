@@ -252,13 +252,10 @@ _NOMINAL_SUFFIXES = ("tion", "sion", "ness", "ment", "ity", "ism",
 _QUANTITY_WORDS = {"billion", "million", "trillion", "percent", "%"}
 # Fragment shapes caught live 2026-11-02, after the first gates
 # shipped ("Least 24", "Some Facts", "30 Years" all rendered):
-# determiner edges that head no noun phrase, quantity adjectives
-# that cannot serve as a noun head before a number tail, and
-# bare durations (a number + a time unit is a span, not a topic).
+# determiner edges that head no noun phrase, and bare durations
+# (a number + a time unit is a span, not a topic).
 _DETERMINER_EDGES = {"some", "any", "all", "each", "every",
                       "another"}
-_QUANTITY_ADJS = {"least", "most", "more", "less", "fewer",
-                  "few", "many", "much"}
 _TIME_UNITS = {"year", "month", "week", "day", "hour", "minute",
                "decade"}
 
@@ -275,34 +272,60 @@ def _noun_like(tok):
             and tok not in STOPWORDS and tok not in _EDGE_JUNK)
 
 
+def _strong_head(tok):
+    """A token that can head a number-tailed phrase on its own
+    evidence: an ampersand entity ("s&p"), a nominal-suffix
+    noun, or a letter+digit entity code ("cb90"). A plain word
+    cannot — the fold-fragment gate's lesson (2026-11-02):
+    "Kills 26" passed the old noun-like test because "kill"
+    is absent from the verb list, but a verb + count is an
+    event fragment, not a topic."""
+    if "&" in tok:
+        return True
+    if tok.endswith(_NOMINAL_SUFFIXES):
+        return True
+    return (any(c.isdigit() for c in tok)
+            and any(c.isalpha() for c in tok))
+
+
 def _shape_ok(canon):
     """The shape gate on a candidate's canonical tokens: no
     possessive/demonstrative edge, not a bare quantity ("$20
     Billion" is a figure, not a topic), and at least one
-    noun-like token as the phrase's head."""
+    noun-like token as the phrase's head. Since 2026-11-02
+    (the fold-fragment gate) the gate also judges a phrase's
+    END and its comparative interior, and it re-judges every
+    window-fold join — the three fragments that rendered
+    live that night ("Kills 26", "Dip Than Broader",
+    "Broader Market Some") each passed the earlier shape
+    rules on one of those three holes."""
     if canon[0] in _EDGE_JUNK or canon[-1] in _EDGE_JUNK:
         return False
     if all(re.fullmatch(r"\$?[\d,.]+", t) or t in _QUANTITY_WORDS
            for t in canon):
         return False
-    # Determiner-initial fragments ("Some Facts"): a determiner
-    # edge heads no topic, like the possessive edges above.
-    if canon[0] in _DETERMINER_EDGES:
+    # Determiner edges head no topic, at either end ("Some
+    # Facts" leading; "Broader Market Some" trailing — a
+    # phrase that ends on a determiner is a fragment cut off
+    # before its noun).
+    if canon[0] in _DETERMINER_EDGES or \
+            canon[-1] in _DETERMINER_EDGES:
+        return False
+    # A comparative interior ("Dip Than Broader") is half of
+    # a comparison, never a complete topic.
+    if "than" in canon:
         return False
     # Bare duration ("30 Years"): number + time unit is a span.
     if (len(canon) == 2 and canon[1] in _TIME_UNITS
             and re.fullmatch(r"\$?[\d,.]+", canon[0])):
         return False
-    # Number tail ("Least 24"): a phrase ending in a bare number
-    # needs a genuine noun head before the tail — a token that
-    # is noun-like on its own letters, not via its digits, and
-    # not a quantity adjective. ("S&P 500" keeps its head: the
-    # & token is noun-like without any digit.)
+    # Number tail ("Least 24", "Kills 26"): a phrase ending
+    # in a bare number needs a STRONG head before the tail
+    # (see _strong_head) — a merely noun-like word is not
+    # enough, because verbs absent from the verb list read
+    # as noun-like. ("S&P 500" keeps its head: the & token.)
     if re.fullmatch(r"\$?[\d,.]+", canon[-1]):
-        return any(_noun_like(t) and not any(c.isdigit()
-                                             for c in t)
-                   and t not in _QUANTITY_ADJS
-                   for t in canon[:-1])
+        return any(_strong_head(t) for t in canon[:-1])
     return any(_noun_like(t) for t in canon)
 
 
@@ -792,10 +815,12 @@ def _fold_windows(mined, headlines, known_terms):
     living inside a larger topic's headlines is that topic's
     business, not a window); the joined phrase occurs
     contiguously in >= 80% of the shared headlines (the
-    containment fold's guard constant); and neither gram
+    containment fold's guard constant); neither gram
     carries an adjunct-heading stopword inside it (see
     _WINDOW_OK_INTERNAL — "protests turn violent" must never
-    extend into "violent in France"). The survivor's label
+    extend into "violent in France"); and the joined phrase
+    passes the shape gate (the fold-fragment gate,
+    2026-11-02). The survivor's label
     is the joined phrase itself — a real headline substring,
     taken from an actual headline's token span; its weight
     is the member set's size, and its surfaces pool both
@@ -860,6 +885,16 @@ def _fold_windows(mined, headlines, known_terms):
                     continue
                 joined = _join_windows(x["canon"], y["canon"])
                 if joined is None:
+                    continue
+                # Fold-fragment gate (2026-11-02): the joined
+                # phrase must itself pass the shape gate — a
+                # fold may not assemble a fragment that neither
+                # gate would let render on its own. A failed
+                # join is an ordinary fold miss: the windows
+                # keep their separate topics. (The pinned
+                # explainer join, "What Is Behind The Move",
+                # passes the gate.)
+                if not _shape_ok(joined):
                     continue
                 mx, my = members[x["term"]], members[y["term"]]
                 if not mx or mx != my:
