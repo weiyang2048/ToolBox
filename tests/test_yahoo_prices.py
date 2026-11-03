@@ -363,8 +363,6 @@ def test_download_refills_a_stub_column(monkeypatch):
     # The batch returns BBB as a 3-row stub (a throttled leg);
     # the chart path carries its full history, which must
     # replace the stub (the 2026-11-02 IXN incident).
-    import numpy as np
-    import pandas as pd
 
     full = [100.0 + i for i in range(100)]
     stub = [5.0, 5.1, 5.2] + [float("nan")] * 97
@@ -382,7 +380,6 @@ def test_download_refills_a_stub_column(monkeypatch):
 
 
 def test_download_refills_a_missing_column(monkeypatch):
-    import pandas as pd
 
     full = [100.0 + i for i in range(100)]
     monkeypatch.setattr(yp, "_history",
@@ -399,7 +396,6 @@ def test_download_refills_a_missing_column(monkeypatch):
 def test_download_keeps_a_genuinely_young_ticker(monkeypatch):
     # A young ticker's batch column is short and its refill is
     # the same short history: nothing is replaced or padded.
-    import numpy as np
     import pandas as pd
 
     full = [100.0 + i for i in range(100)]
@@ -434,7 +430,6 @@ def test_download_empty_batch_is_refilled(monkeypatch):
 
 
 def test_download_survives_a_failed_refill(monkeypatch):
-    import pandas as pd
 
     full = [100.0 + i for i in range(100)]
     monkeypatch.setattr(yp, "_history",

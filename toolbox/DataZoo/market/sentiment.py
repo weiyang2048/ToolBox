@@ -31,7 +31,6 @@ import urllib.request
 
 import pandas as pd
 
-
 from toolbox.DataZoo.market.fear_greed import (
     fetch_cnn_graph,
     fetch_crypto_entries,
