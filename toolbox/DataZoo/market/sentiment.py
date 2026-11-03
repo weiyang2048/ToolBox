@@ -21,8 +21,8 @@ the latest readings; any source that fails is omitted (the
 caller degrades), and the result is None only when nothing at
 all could be fetched. :func:`chart_png` renders the one-year
 banded chart (zone bands, both Fear & Greed lines, gold
-min-max normalized to 0-100 on a right axis labeled in $/oz)
-to PNG bytes.
+min-max normalized with its peak at GOLD_PEAK on a right axis
+labeled in $/oz) to PNG bytes.
 """
 import datetime
 import io
@@ -45,6 +45,43 @@ GOLD_COLOR = "#b8860b"
 BANDS = [(0, 25, "Extreme Fear", "#e74c3c"), (25, 45, "Fear", "#e67e22"),
          (45, 55, "Neutral", "#f1c40f"), (55, 75, "Greed", "#82c46a"),
          (75, 100, "Extreme Greed", "#27ae60")]
+
+# Chart geometry (see chart_png): the index axis runs 0-115 so
+# the 0-100 scale ceiling carries 15% headroom, and the gold
+# series is normalized with its window peak at GOLD_PEAK on its
+# own 0-100 axis — the axis top then sits at the gold max plus
+# (100/GOLD_PEAK - 1) ≈ 17.6% of the gold range, and the peak
+# itself renders below the band ceiling instead of on it.
+GOLD_PEAK = 85.0
+# Endpoint labels: minimum vertical separation (index units)
+# between two label centers, and the band they must stay in.
+LABEL_MIN_SEP = 8.0
+LABEL_LO, LABEL_HI = 4.0, 112.0
+
+
+def _spread_labels(desired, lo=LABEL_LO, hi=LABEL_HI,
+                   min_sep=LABEL_MIN_SEP):
+    """Adjust endpoint-label center positions (index units) so
+    no two sit closer than ``min_sep``, preserving their order,
+    clamped into [lo, hi]. Converged endpoints (e.g. crypto 26
+    vs CNN 23) would otherwise draw their labels on top of each
+    other at identical offsets."""
+    order = sorted(range(len(desired)), key=lambda i: desired[i])
+    pos = [float(desired[i]) for i in order]
+    for j in range(1, len(pos)):
+        pos[j] = max(pos[j], pos[j - 1] + min_sep)
+    if pos and pos[-1] > hi:
+        pos[-1] = float(hi)
+        for j in range(len(pos) - 2, -1, -1):
+            pos[j] = min(pos[j], pos[j + 1] - min_sep)
+    if pos and pos[0] < lo:
+        pos[0] = float(lo)
+        for j in range(1, len(pos)):
+            pos[j] = max(pos[j], pos[j - 1] + min_sep)
+    out = [0.0] * len(desired)
+    for j, i in enumerate(order):
+        out[i] = pos[j]
+    return out
 
 
 def zone(v):
@@ -175,45 +212,70 @@ def chart_png(series):
     ax2 = None
     if "gold" in series:
         g = series["gold"]
-        gmin, gmax = g.min(), g.max()
-        gn = ((g - gmin) / (gmax - gmin) * 100 if gmax > gmin
-              else g * 0 + 50)
+        gmin, gmax = float(g.min()), float(g.max())
+        # Headroom repair (2026-11-02, second round): normalizing
+        # the peak to exactly 100 put it on the band ceiling, the
+        # top gridline and the top gold tick at once, so the
+        # Jan–Feb spikes read as truncated even with the axis
+        # extended to 115 — the extension only added unlabelled
+        # space above the bands. The peak now maps to GOLD_PEAK
+        # on a 0-100 gold axis: the axis top is the max plus
+        # ~17.6% of the range, and the peak renders below the
+        # band ceiling, visibly inside the plot.
+        gn = ((g - gmin) / (gmax - gmin) * GOLD_PEAK if gmax > gmin
+              else g * 0 + GOLD_PEAK / 2)
         ax2 = ax.twinx()
         ax2.plot(g.index, gn.values, color=GOLD_COLOR, linewidth=1.6,
                  label="Gold futures (GC=F, $/oz)", alpha=0.95)
-        ax2.set_ylim(0, 115)
+        ax2.set_ylim(0, 100)
         ax2.set_ylabel("Gold price ($/oz)", fontsize=11,
                        color=GOLD_COLOR)
-        ax2.set_yticks([0, 25, 50, 75, 100])
+        fracs = (0, 0.25, 0.5, 0.75, 1.0)
+        ax2.set_yticks([GOLD_PEAK * f for f in fracs])
         ax2.set_yticklabels(
-            [f"${gmin + (gmax - gmin) * t / 100:,.0f}"
-             for t in (0, 25, 50, 75, 100)])
+            [f"${gmin + (gmax - gmin) * f:,.0f}" for f in fracs])
         ax2.tick_params(colors=GOLD_COLOR)
         ax2.spines["top"].set_visible(False)
         ax2.scatter([g.index[-1]], [gn.iloc[-1]], color=GOLD_COLOR,
                     s=40, zorder=5, edgecolors="white", linewidths=1)
         ax2.annotate(f"${g.iloc[-1]:,.0f}/oz · {g.index[-1].strftime('%a %b %-d')}",
                      xy=(g.index[-1], gn.iloc[-1]),
-                     xytext=(8, 10), textcoords="offset points",
+                     xytext=(-8, 10), textcoords="offset points",
+                     ha="right",
                      fontsize=10, fontweight="bold", color=GOLD_COLOR,
                      bbox=dict(boxstyle="round,pad=0.3", fc="white",
                                ec=GOLD_COLOR, alpha=0.9))
-    for name, color in (("cnn", CNN_COLOR), ("crypto", CRYPTO_COLOR)):
-        if name in series:
-            s = series[name]
+    endpoints = [(name, color, series[name])
+                 for name, color in (("cnn", CNN_COLOR),
+                                     ("crypto", CRYPTO_COLOR))
+                 if name in series]
+    if endpoints:
+        # Label collision handling (2026-11-02, second round):
+        # identical offsets put converged endpoints' labels on
+        # top of each other (crypto 26 vs CNN 23 live) and past
+        # the right spine onto the gold tick labels. Labels now
+        # anchor inside the plot (right-aligned, ending just
+        # before each series' last date) at _spread_labels
+        # positions — order preserved, LABEL_MIN_SEP apart.
+        placed = _spread_labels(
+            [float(s.iloc[-1]) + 3.0 for _n, _c, s in endpoints])
+        for (_name, color, s), label_y in zip(endpoints, placed):
             v = s.iloc[-1]
             ax.scatter([s.index[-1]], [v], color=color, s=40, zorder=5,
                        edgecolors="white", linewidths=1)
-            ax.annotate(f"{v:.0f} · {zone(v)} · {s.index[-1].strftime('%a %b %-d')}", xy=(s.index[-1], v),
-                        xytext=(8, 8), textcoords="offset points",
+            ax.annotate(f"{v:.0f} · {zone(v)} · {s.index[-1].strftime('%a %b %-d')}",
+                        xy=(s.index[-1], v),
+                        xytext=(s.index[-1] - pd.Timedelta(days=3),
+                                label_y),
+                        textcoords="data", ha="right", va="center",
                         fontsize=10, fontweight="bold", color=color,
                         bbox=dict(boxstyle="round,pad=0.3", fc="white",
                                   ec=color, alpha=0.9))
-    # Headroom (2026-11-02 live fix): both axes run to 115 so a
-    # series max at 100 (the gold line normalizes its peak to
-    # exactly 100) renders inside the plot instead of clipping
-    # at the top edge, and endpoint labels sit clear of the
-    # axes. The zone bands themselves stay 0-100 (axhspan above).
+    # Headroom (2026-11-02 live fix): the index axis runs to
+    # 115 so the 0-100 scale ceiling carries ~15% headroom and
+    # endpoint labels sit clear of the axes; gold carries its
+    # own 0-100 axis with the peak at GOLD_PEAK (see above).
+    # The zone bands themselves stay 0-100 (axhspan above).
     ax.set_ylim(0, 115)
     ax.set_ylabel("Index (0–100)", fontsize=11)
     ax.grid(axis="y", alpha=0.25, linestyle="--")

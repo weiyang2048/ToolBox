@@ -115,10 +115,7 @@ def test_chart_png_renders():
     assert len(png) > 20000
 
 
-def test_chart_png_headroom_above_100(monkeypatch):
-    # Live fix 2026-11-02: a series max at 100 (gold normalizes
-    # its peak to exactly 100) clipped at the plot's top edge.
-    # Both axes run to 115; the zone bands stay 0-100.
+def _capture(monkeypatch):
     import matplotlib.pyplot as plt
 
     captured = {}
@@ -130,10 +127,86 @@ def test_chart_png_headroom_above_100(monkeypatch):
         return fig, ax
 
     monkeypatch.setattr(plt, "subplots", fake)
+    return captured
+
+
+def test_chart_png_headroom_above_100(monkeypatch):
+    # Live fix 2026-11-02: the index axis runs to 115 (headroom
+    # over the 0-100 scale; bands stay 0-100) and gold sits on
+    # its own 0-100 axis with its peak normalized to GOLD_PEAK,
+    # below the band ceiling — normalizing the peak to exactly
+    # 100 put it on the ceiling / top tick and the spikes read
+    # as truncated on the served page.
+    captured = _capture(monkeypatch)
     series = {"cnn": _series([20 + i % 50 for i in range(120)]),
               "crypto": _series([30 + i % 40 for i in range(120)]),
               "gold": _series([3000 + i * 5 for i in range(120)])}
     sm.chart_png(series)
     axes = captured["fig"].axes
     assert axes[0].get_ylim() == (0.0, 115.0)
-    assert axes[1].get_ylim() == (0.0, 115.0)
+    assert axes[1].get_ylim() == (0.0, 100.0)
+    peak = max(axes[1].lines[0].get_ydata())
+    assert abs(peak - sm.GOLD_PEAK) < 1e-6
+
+
+def test_chart_png_gold_axis_top_headroom(monkeypatch):
+    # The gold axis top (in dollars, via the plotted mapping)
+    # must exceed the series max by ~15% of the series range.
+    captured = _capture(monkeypatch)
+    gold = _series([3000.0 + i * 20 for i in range(101)])  # ..5000
+    sm.chart_png({"gold": gold})
+    ax2 = captured["fig"].axes[-1]
+    top_norm = ax2.get_ylim()[1]
+    peak_norm = max(ax2.lines[0].get_ydata())
+    gmin, gmax = float(gold.min()), float(gold.max())
+    axis_top_usd = gmin + (gmax - gmin) * top_norm / peak_norm
+    headroom = (axis_top_usd - gmax) / (gmax - gmin)
+    assert axis_top_usd > gmax + 0.15 * (gmax - gmin)
+    assert 0.14 < headroom < 0.20
+    assert ax2.get_yticklabels()[-1].get_text() == "$5,000"
+
+
+def test_spread_labels():
+    # Converged desireds are pushed apart, order preserved.
+    out = sm._spread_labels([26.0, 29.0])
+    assert out[1] - out[0] >= sm.LABEL_MIN_SEP
+    assert out[0] == 26.0
+    # Well-spread desireds pass through untouched.
+    assert sm._spread_labels([23.0, 63.0]) == [23.0, 63.0]
+    # A stack at the top clamps into the band, still separated.
+    out = sm._spread_labels([110.0, 111.0])
+    assert out[1] == sm.LABEL_HI
+    assert out[1] - out[0] >= sm.LABEL_MIN_SEP
+
+
+def test_chart_png_endpoint_labels_separate_when_converged(monkeypatch):
+    # Live defect 2026-11-02: crypto 26 vs CNN 23 at identical
+    # (+8, +8) offsets drew on top of each other and past the
+    # right spine. Labels now sit inside at spread positions.
+    captured = _capture(monkeypatch)
+    cnn = _series([40.0] * 119 + [23.0])
+    crypto = _series([40.0] * 119 + [26.0])
+    sm.chart_png({"cnn": cnn, "crypto": crypto})
+    ax = captured["fig"].axes[0]
+    labels = {t.get_text(): t.get_position()[1]
+              for t in ax.texts if "·" in t.get_text()}
+    y23 = next(y for txt, y in labels.items() if txt.startswith("23 ·"))
+    y26 = next(y for txt, y in labels.items() if txt.startswith("26 ·"))
+    assert y26 > y23
+    assert y26 - y23 >= sm.LABEL_MIN_SEP
+    assert sm.LABEL_LO <= y23
+    assert y26 <= sm.LABEL_HI
+
+
+def test_chart_png_endpoint_labels_natural_when_spread(monkeypatch):
+    captured = _capture(monkeypatch)
+    cnn = _series([40.0] * 119 + [60.0])
+    crypto = _series([40.0] * 119 + [20.0])
+    sm.chart_png({"cnn": cnn, "crypto": crypto})
+    ax = captured["fig"].axes[0]
+    labels = {t.get_text(): t.get_position()[1]
+              for t in ax.texts if "·" in t.get_text()}
+    y60 = next(y for txt, y in labels.items() if txt.startswith("60 ·"))
+    y20 = next(y for txt, y in labels.items() if txt.startswith("20 ·"))
+    assert y60 == 63.0  # value + 3, unadjusted
+    assert y20 == 23.0
