@@ -53,16 +53,22 @@ def test_fetch_crypto_dates_values_by_index_day(monkeypatch):
 def test_fetch_gold_dates_bars_in_eastern(monkeypatch):
     # Yahoo stamps GC=F daily bars at midnight ET (04:00 UTC). Dated in
     # Eastern, the Friday bar stays Friday; a Chicago conversion would
-    # push it back to Thursday 11 PM and mislabel it.
+    # push it back to Thursday 11 PM and mislabel it. fetch_gold rides
+    # the canonical yahoo_daily since 2026-11-02; its UTC-normalized
+    # dates are the same exchange dates for midnight-ET stamps.
     import datetime
+
+    from toolbox.DataZoo.market import yahoo_prices as yp
 
     fri_et = datetime.datetime(2026, 10, 30, 4, tzinfo=datetime.timezone.utc)
     thu_et = fri_et - datetime.timedelta(days=1)
     payload = {"chart": {"result": [{
         "timestamp": [int(thu_et.timestamp()), int(fri_et.timestamp())],
-        "indicators": {"quote": [{"close": [4031.4, 3898.9]}]},
+        "indicators": {"quote": [{"close": [4031.4, 3898.9]}],
+                       "adjclose": [{"adjclose": [4031.4, 3898.9]}]},
     }]}}
-    monkeypatch.setattr(sm, "_get_json", lambda url, headers=None: payload)
+    monkeypatch.setattr(yp, "chart_payload",
+                        lambda t, a, b: payload)
     out = sm.fetch_gold()
     assert [str(d.date()) for d in out.index] == ["2026-10-29", "2026-10-30"]
     assert out.iloc[-1] == 3898.9
