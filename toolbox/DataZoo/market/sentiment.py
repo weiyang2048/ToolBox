@@ -31,7 +31,7 @@ import urllib.request
 
 import pandas as pd
 
-from toolbox.DataZoo.market.eastern import asof_stamp
+
 from toolbox.DataZoo.market.fear_greed import (
     fetch_cnn_graph,
     fetch_crypto_entries,
@@ -188,12 +188,21 @@ def fetch_sentiment():
             latest[name] = {"value": v, "zone": zone(v)}
     if "gold" in series:
         latest["gold"] = {"value": float(series["gold"].iloc[-1])}
-    return {"series": series, "latest": latest,
-            "asof": asof_stamp()}
+    # No fetch-time "asof" (removed 2026-11-02): the tab dates
+    # each series by its own last measurement, like the other
+    # tabs — a pull-time stamp here invited exactly the
+    # mismatch the freshness stamps exist to prevent.
+    return {"series": series, "latest": latest}
 
 
 def chart_png(series):
-    """The one-year banded sentiment chart as PNG bytes."""
+    """The one-year banded sentiment chart as PNG bytes.
+
+    Endpoint labels carry value · zone only — no dates in the
+    plot (user direction 2026-11-02): each series' date lives
+    in the tab's freshness stamp line above the chart, in the
+    other tabs' format (data date + lag pill), never as a
+    label inside the figure."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.dates as mdates
@@ -242,7 +251,7 @@ def chart_png(series):
         ax2.spines["top"].set_visible(False)
         ax2.scatter([g.index[-1]], [gn.iloc[-1]], color=GOLD_COLOR,
                     s=40, zorder=5, edgecolors="white", linewidths=1)
-        ax2.annotate(f"${g.iloc[-1]:,.0f}/oz · {g.index[-1].strftime('%a %b %-d')}",
+        ax2.annotate(f"${g.iloc[-1]:,.0f}/oz",
                      xy=(g.index[-1], gn.iloc[-1]),
                      xytext=(-8, 10), textcoords="offset points",
                      ha="right",
@@ -267,7 +276,7 @@ def chart_png(series):
             v = s.iloc[-1]
             ax.scatter([s.index[-1]], [v], color=color, s=40, zorder=5,
                        edgecolors="white", linewidths=1)
-            ax.annotate(f"{v:.0f} · {zone(v)} · {s.index[-1].strftime('%a %b %-d')}",
+            ax.annotate(f"{v:.0f} · {zone(v)}",
                         xy=(s.index[-1], v),
                         xytext=(s.index[-1] - pd.Timedelta(days=3),
                                 label_y),

@@ -102,7 +102,9 @@ def test_fetch_sentiment_degrades_per_source(monkeypatch):
     assert out["latest"]["cnn"] == {"value": 40.0, "zone": "Fear"}
     assert out["latest"]["gold"] == {"value": 3900.0}
     assert "crypto" not in out["latest"]
-    assert out["asof"].endswith((" EST", " EDT"))
+    # No fetch-time stamp: the tab dates each series by its
+    # own last measurement (user direction 2026-11-02).
+    assert "asof" not in out
 
 
 def test_fetch_sentiment_none_when_all_fail(monkeypatch):
