@@ -330,3 +330,33 @@ def test_alternatives_is_a_named_group_only(monkeypatch):
     full = fb.fetch_board(now=now)
     assert "Alternatives" not in full["data"]
     assert list(full["data"]) == [g for g, _c in fb.all_groups()]
+
+
+def test_grad_hex_endpoints_and_midpoint():
+    # The briefs' stats-table ramp: red at 0, white at 0.5,
+    # green at 1, on the shade_zero stops.
+    assert fb.grad_hex(0.0) == "#F8696B"
+    assert fb.grad_hex(0.5) == "#FFFFFF"
+    assert fb.grad_hex(1.0) == "#63BE7B"
+    assert fb.grad_hex(-1.0) == "#F8696B"  # clamped
+    assert fb.grad_hex(2.0) == "#63BE7B"
+
+
+def test_norm_good_directions():
+    # 1 = better: min-max, flipped when higher is worse.
+    assert fb.norm_good([0.0, 5.0, 10.0]) == [0.0, 0.5, 1.0]
+    assert fb.norm_good([0.0, 5.0, 10.0],
+                        higher_good=False) == [1.0, 0.5, 0.0]
+    # A constant column sits at the white midpoint.
+    assert fb.norm_good([3.0, 3.0]) == [0.5, 0.5]
+    # Missing values pass through as None, others unaffected.
+    out = fb.norm_good([0.0, None, float("nan"), 10.0])
+    assert out[0] == 0.0 and out[1] is None and out[2] is None
+    assert out[3] == 1.0
+
+
+def test_norm_good_center_zero():
+    # Divergent around 0: the largest magnitude sets the
+    # scale, sign picks the side, 0 is white.
+    assert fb.norm_good([-10.0, 0.0, 5.0],
+                        center_zero=True) == [0.0, 0.5, 0.75]

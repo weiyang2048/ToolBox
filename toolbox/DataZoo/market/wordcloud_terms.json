@@ -1,0 +1,198 @@
+{
+ "window": "past 24 hours ending 2026-11-03T02:45:17.171925+00:00",
+ "headlines": 388,
+ "sources": {
+  "CNBC Top News": 28,
+  "CNBC Markets": 1,
+  "MarketWatch": 10,
+  "Bloomberg Markets": 19,
+  "FT Markets": 12,
+  "BBC Business": 11,
+  "Guardian Business": 25,
+  "Investing.com": 10,
+  "Yahoo ^GSPC": 18,
+  "Yahoo ^IXIC": 9,
+  "Nikkei Asia": 50,
+  "Google News Business US": 49,
+  "Google News Business UK": 41,
+  "Google News Business IN": 42,
+  "Google News Business AU": 22,
+  "Google News Business SG": 21,
+  "Google News Business CA": 20
+ },
+ "renderer": "html-fancy",
+ "caption": {
+  "left": "As of <span class=\"nc-hl\">Mon Nov 2, 9:45 PM EST</span> · <span class=\"nc-hl\">388</span> distinct headlines, <span class=\"nc-hl\">17</span> sources",
+  "right": "Size = distinct stories mentioning the topic"
+ },
+ "topics": [
+  {
+   "term": "Midterms",
+   "weight": 28,
+   "group": "macro",
+   "example_headline": "Trump focuses on Reflecting Pool in final public speech before midterms",
+   "link": "https://www.cnbc.com/2026/11/02/trump-midterm-election-speech-reflecting-pool.html"
+  },
+  {
+   "term": "Apple",
+   "weight": 8,
+   "group": "tech",
+   "example_headline": "CrowdStrike lands an upgrade, and Jim Cramer's advice on Apple ahead of earnings",
+   "link": "https://www.cnbc.com/investingclub/2026/11/02/crowdstrike-lands-an-upgrade-and-jim-cramers-advice-on-apple-ahead-of-earnings.html"
+  },
+  {
+   "term": "Binance",
+   "weight": 5,
+   "group": "crypto",
+   "example_headline": "North Korea denies links to Binance hack as researchers trace stolen billions",
+   "link": "https://www.cnbc.com/2026/11/03/north-korea-binance-elliptic-chainalysis.html"
+  },
+  {
+   "term": "Hong Kong",
+   "weight": 5,
+   "group": "neutral",
+   "example_headline": "China Vows to Boost Yuan Liquidity, Back Hong Kong Markets",
+   "link": "https://www.bloomberg.com/news/articles/2026-11-03/china-s-he-says-will-support-free-open-economy-in-hong-kong"
+  },
+  {
+   "term": "Earnings Beat",
+   "weight": 4,
+   "group": "neutral",
+   "example_headline": "Crescent Energy earnings beat by $0.16, revenue topped estimates",
+   "link": "https://www.investing.com/news/earnings/crescent-energy-earnings-beat-by-016-revenue-topped-estimates-4993390"
+  },
+  {
+   "term": "Gold",
+   "weight": 4,
+   "group": "commodities",
+   "example_headline": "Treasure hunter strikes gold with 1,000-year-old discovery linked to 'Hand of God'",
+   "link": "https://news.google.com/rss/articles/CBMioAFBVV95cUxQU0dxQ0JiZXlSTWM4c1RKcmR1bkdwb29GakRyUzVjMUwteUYxLUd0cU02MDdXcFZYMmpBRnJuV0RZRjVyeTd1UVNFTnZlTktzN0Q2Q0V2cGt2VlF3d2ZiS3B0WnJxajRFUzhqMHdRbTFpYzhVN1N6THY3TFZNbExCanEwRm9ZYkxvY0VaQkJkR0pad2hDNjRuWThGX3lnLV820gGmAUFVX3lxTE0tLUdoRVdidkFPSVk2dS1PLTBwc29aUVhmRG1hWWZqZEN5WkN6SjVwdnlzaWhveTZiLUp5WnZmWnNWaW1PcVh4TXJnRF9zNlhEYnpZNWJUeTdtWmxlNFV3N3RIdXZGRGl2LW94Tk1aZGxJM09uQ1FpdnVDLS1xdlpsZ1l5bldDU1NLT0lOdlFaT29pLUU0S0VtMHo5WW9TdzdkTC1jQWc?oc=5"
+  },
+  {
+   "term": "Oil prices",
+   "weight": 4,
+   "group": "commodities",
+   "example_headline": "Crude oil prices sell off more than 7% on Iran peace talk hopes ahead of U.S. midterms",
+   "link": "https://www.cnbc.com/2026/11/02/oil-prices-fall-as-iran-us-pursue-diplomacy.html"
+  },
+  {
+   "term": "Strait of Hormuz",
+   "weight": 4,
+   "group": "commodities",
+   "example_headline": "Al-Jawf becomes new hotspot in Yemen war between government forces, Houthis",
+   "link": "https://news.google.com/rss/articles/CBMitgFBVV95cUxPUzExSjhLZldVQ054Vnd4REUzSnJ0WlZoU2VCSnRRWjNFb3p5b1JqcmpjcXpPYUpfQkJwckRIM1pILWdqekxlaDJKQU9BVmRaWXlrUS1PQVdtUWRZdFdLRFJ1VGZJeXd4NXJmYURPb0tEVUk5TEdQRkNBREI4d2Y3Z1dhZnpkMG5zdjRmRGo1UzdZLXppQ09JV19uWVc2TDNia1FkZWtJbDVHVE5paHlWWGdpSE55QdIBuwFBVV95cUxQbGc0ekM3d3Bad1pCRmY3ZWpTbHd2UkdFM0VGZUtmU3JVdWdlM3dNeUZSVUdjZkJSZGhSRzRUVjdpUWJ5MGNEemJLNGwwUDNzUXZaMGY2UVpPckktVjZ6cGQyMnh5eW9JS1NnQ0I2MTU2Q3pkNkRwTTJlY1poLUtzQ013MHFGU1U3ejkzdWJBTE0wUy00Q2EtVmRxNU5FMzVfallBRXFhN0lRWHB1aFAxRXBPVUtfMHgzS19R?oc=5"
+  },
+  {
+   "term": "AI spending",
+   "weight": 3,
+   "group": "tech",
+   "example_headline": "Jim Cramer says these six fashion stocks are buys beyond the AI trade",
+   "link": "https://www.cnbc.com/2026/11/02/jim-cramer-fashion-stocks.html"
+  },
+  {
+   "term": "Constitutional Crisis",
+   "weight": 3,
+   "group": "neutral",
+   "example_headline": "Poland's constitutional crisis deepens as Prime Minister Tusk faces accusations of power grab",
+   "link": "https://news.google.com/rss/articles/CBMitwFBVV95cUxQcjBrd3FTdWlWY1A1aU5LUERrSHlYdUFVcnBzZVZSSVV0cnlMcG5naTY2WW1rRkVtcnZHa2tqNkkzYmc1d2tLZDJ0WlRIZS1PdUpuMWlxYUJXRk1CWFZnSW5iLXN3WGlFUU4wVXJPUHBmaGswTzhjMTlTYkFCbjNPcU9vdS1BampBbGs0WFp6WmJOTVpBaERMbENpVnl2T3g0dWxVeW4zbF9JVTZWbXdlVTFaOUJQc1XSAbwBQVVfeXFMTnZOZFpGMVJqQUsyNUwzWnVjYl9laFkyNHpkcWVmNkstdlZ1VlNuZkx2T1pHVU1EdGQyT2p4NWZRTHpPeWNzZmJtZVNKdXppN1RMNlFUTThON3JNREdLTWVPLXlzTjRGM1pZU2tMVE9TT2lPMWVMVklUb1pjdjhvMVk0bFJLaE14dU5tT0g5WVQ5UExGVFViSWlWeWRRd1NNcHZ6MGNFV0hPcUlORXFaZmUtVkZDYXNDNjJ1QjY?oc=5"
+  },
+  {
+   "term": "Crypto",
+   "weight": 3,
+   "group": "crypto",
+   "example_headline": "Defense, healthcare, crypto and AI: How the midterm election could affect stocks",
+   "link": "https://www.cnbc.com/2026/11/02/midterm-election-stocks-defense-healthcare-crypto-ai.html"
+  },
+  {
+   "term": "Hit Record",
+   "weight": 3,
+   "group": "neutral",
+   "example_headline": "Petrol prices set to hit record high under Trump on eve of US elections",
+   "link": "https://www.ft.com/content/ee2748fb-9f85-4095-b599-526e5a4a6baa?syn-25a6b1a6=1"
+  },
+  {
+   "term": "Midterm Campaign",
+   "weight": 3,
+   "group": "tech",
+   "example_headline": "Tensions rise as midterm campaign ends with control of Congress at stake",
+   "link": "https://news.google.com/rss/articles/CBMimAFBVV95cUxNS1p3dHhlWlVyZ29BWXlxLWN3M2JlWHBpNVE1N0hQTjVEMmUyOGJ4V0tqOG81eFBSTlpTZE43NHVYMjJ0QXVjb3Q1MGJaVF9FN3BIN3BzX3VFemNmOUJObGtTdzl0b3hBRkJENU9TQXRBUENEb3psZ0xMQlZXMWFkX3hTLTRkaWNITlBqR1lQcVM3Ri1EVUhucA?oc=5"
+  },
+  {
+   "term": "Peace Talks",
+   "weight": 3,
+   "group": "neutral",
+   "example_headline": "U.S., Russia and Ukraine to resume peace talks in Abu Dhabi next week, Witkoff says",
+   "link": "https://news.google.com/rss/articles/CBMikgFBVV95cUxQa09zVHBJLUx0cFhYX1paZnhnT1RqYWx6bF9idUtVNFZ3TVpvd0R0OFE2WTdYWW1MeXFpWGhBR3FWS1c0ZjNlWW8xQW5ZYWlFV2pwR0NISTdiSFh2alU5V05kYUdNVjBFTXQxbFFPZ0RpMnZDVVczbzRESFNTWENLeWo3Mm81STZJVEluXzgtU2RrUQ?oc=5"
+  },
+  {
+   "term": "Qeshm Island",
+   "weight": 3,
+   "group": "neutral",
+   "example_headline": "Explosions heard on Qeshm Island, Bandar Lengeh",
+   "link": "https://news.google.com/rss/articles/CBMiigFBVV95cUxNdmV5RFJVeFJsSElPcEJJVG5aX0d4SUZVcG8tMnlXdzdlMEVZVEtYeTd3b25ZbzVqejZBUFBUa1I3Zks0WktmaGJkZUxLM3plSGt2ZDZWMm1SdmJxY3pVd3NCMi1DQjVQZWhHck9aaUlJT2NENzF2QUZJSkZNVFljQjh4djZ3M2xkeEE?oc=5"
+  },
+  {
+   "term": "S&P 500",
+   "weight": 3,
+   "group": "market",
+   "example_headline": "Stock market after midterm elections: What S&P 500 history shows",
+   "link": "https://www.cnbc.com/2026/11/02/stock-market-after-midterm-elections-sp-500-history.html"
+  },
+  {
+   "term": "South Korea",
+   "weight": 3,
+   "group": "neutral",
+   "example_headline": "South Korea targets 'world's highest performance' sovereign AI model in record new budget",
+   "link": "https://www.cnbc.com/2026/11/02/south-korea-ai-spending-budget.html"
+  },
+  {
+   "term": "Tech selloff",
+   "weight": 3,
+   "group": "market",
+   "example_headline": "S&P 500, Nasdaq Drop As Capex Concerns Grip Tech Investors, Outweighing US-Iran Diplomacy Hope —  ORCL, META, PLTR, AAPL In Focus",
+   "link": "https://stocktwits.com/news-articles/markets/equity/s-and-p-500-nasdaq-drop-as-capex-concerns-grip-tech-investors-outweighing-us-iran-diplomacy-hope/cNGQZKqR9PD?.tsrc=rss"
+  },
+  {
+   "term": "Amazon earnings",
+   "weight": 2,
+   "group": "tech",
+   "example_headline": "Chinese cigarettes and Bolivian beer: the Amazonian town transformed by a rampant mining boom",
+   "link": "https://www.theguardian.com/global-development/2026/nov/02/chinese-cigarettes-and-bolivian-beer-the-amazonian-town-transformed-by-a-rampant-mining-boom"
+  },
+  {
+   "term": "Anthropic",
+   "weight": 2,
+   "group": "tech",
+   "example_headline": "Anthropic reports $17 billion in Q3 revenue, purchase commitments of $895.4 billion in revised S-1",
+   "link": "https://www.cnbc.com/2026/11/02/anthropic-ant-s-1-quarter-financials.html"
+  },
+  {
+   "term": "Federal Reserve",
+   "weight": 2,
+   "group": "macro",
+   "example_headline": "Feeling isolated? Half of in-office workers describe their desk jobs as 'remote,' NY Fed survey finds",
+   "link": "https://www.cnbc.com/2026/11/02/remote-work-in-office-mandate-new-york-fed.html"
+  },
+  {
+   "term": "GDP",
+   "weight": 2,
+   "group": "macro",
+   "example_headline": "North Korea leans on China and Russia to drive 3% economic growth",
+   "link": "https://asia.nikkei.com/economy/north-korea-leans-on-china-and-russia-to-drive-3-economic-growth"
+  },
+  {
+   "term": "Meta",
+   "weight": 2,
+   "group": "tech",
+   "example_headline": "S&P 500, Nasdaq Drop As Capex Concerns Grip Tech Investors, Outweighing US-Iran Diplomacy Hope —  ORCL, META, PLTR, AAPL In Focus",
+   "link": "https://stocktwits.com/news-articles/markets/equity/s-and-p-500-nasdaq-drop-as-capex-concerns-grip-tech-investors-outweighing-us-iran-diplomacy-hope/cNGQZKqR9PD?.tsrc=rss"
+  },
+  {
+   "term": "Tariffs",
+   "weight": 2,
+   "group": "macro",
+   "example_headline": "If Trump loses control of Congress, what changes for India? The big questions on trade, tariffs and H-1B...",
+   "link": "https://news.google.com/rss/articles/CBMi9wFBVV95cUxNWTVZT1V0ZzZoaFpJNW5hR1Q3MkRtckdwSU9paU96amdxYlJmbTI0NU4yUzUtZHZUQWE1bWdiX1A5Wm95YmdaanQxRm9fYnM2bFlrTzdxRWdRaGhuNHBBTWc0cU92ODZzMnN1NjMyQ2F3RnhjVXo4UkUyYXpKT3ZtcUxoWEJNR3RMSzFFZE1ZLU5CTkhoMmFRVml0YU5PUVAwN1BHbEVtU3UzMWtVN3Y1dHh5S3ZyX2VyTXlhSk56RExjTXU5dVpld1p5MnhMaUV3cUpXX0lrd25tZUFzWFRJT2lfRUFRQ1pCMjMzRFJhX0k1TjRkY3Rz0gH8AUFVX3lxTE90MWZHZXZZTTR1dU9Ebmx2NVBWQjFrVjhSZ25KRWpiTC1leC1jZ0RpRkZ2VUJCa09qSzE2ZlpsWHdaS3ByTUd4bEhHcV90SkJNZFJrUjJkeHRCVTJHcmNWaG42cGl2LWFadUoyQ3QzdU5WT0lNTE15X1oyMTBDRE9tTERnemtoS0U3SjZRV2F1Y0FJVUZsaHZRM180RUJ0WmN3aGx1WFdTMkFKWGhBalNwSm0yS1NSUGNMdW4wVVNndm9yaURLeVpWU05FbU0tZWE1UmxkR3BEWjltOHdpYm4zUEl4MjFxcmhsZXBOT1BtSFBCSXI0VUFWQ3BOLQ?oc=5"
+  }
+ ]
+}

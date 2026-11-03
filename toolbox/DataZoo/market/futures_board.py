@@ -566,6 +566,54 @@ def shade_zero(v, scale):
     return "{:02X}{:02X}{:02X}".format(*_lerp(_WHITE, _GREEN if v >= 0 else _RED, t))
 
 
+def grad_hex(t):
+    """Cell-color hex (#RRGGBB) at t in [0, 1] of the
+    red-white-green gradient: full red at 0, white at 0.5,
+    full green at 1. The briefs' stats-table ramp (their
+    _grad_hex, on the same stops as shade_zero), ported here
+    so the dashboard's stats tables shade by the one logic."""
+    t = max(0.0, min(1.0, float(t)))
+    if t < 0.5:
+        c = _lerp(_RED, _WHITE, t * 2.0)
+    else:
+        c = _lerp(_WHITE, _GREEN, (t - 0.5) * 2.0)
+    return "#{:02X}{:02X}{:02X}".format(*c)
+
+
+def norm_good(vals, higher_good=True, center_zero=False):
+    """Normalize values to [0, 1] where 1 = better (the
+    briefs' stats-table _norm_good): min-max over the values
+    as given, flipped when higher_good is False; with
+    center_zero, a divergent scale around 0 (positive ->
+    green side, negative -> red side, scaled by the largest
+    magnitude). Missing values (None/NaN) come back None."""
+    def _miss(v):
+        return v is None or (isinstance(v, float) and v != v)
+
+    raw = list(vals)
+    clean = [float(v) for v in raw if not _miss(v)]
+    if center_zero:
+        m = max((abs(v) for v in clean), default=0.0)
+
+        def _t(v):
+            if _miss(v):
+                return None
+            return 0.5 + 0.5 * (0.0 if m == 0 else float(v) / m)
+    else:
+        lo = min(clean) if clean else 0.0
+        hi = max(clean) if clean else 0.0
+
+        def _t(v):
+            if _miss(v):
+                return None
+            return 0.5 if hi == lo else (float(v) - lo) / (hi - lo)
+
+    out = [_t(v) for v in raw]
+    if not higher_good:
+        out = [None if t is None else 1.0 - t for t in out]
+    return out
+
+
 def board_scales(data):
     """(day_scale, {horizon: scale}) for shading a fetched board:
     the board-wide max |day %| and, per horizon column, the max
