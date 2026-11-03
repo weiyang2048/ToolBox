@@ -71,10 +71,9 @@ def lag_pill_html(board_date, data_date):
         bg, fg, text = OK_BG, OK_FG, "current"
     else:
         bg, fg = LAG_BG, LAG_FG
-        text = "%d session%s behind the board" % (
-            n, "s" if n != 1 else "")
-    return ('<span style="display:inline-block;background:%s;'
-            'color:%s;font-size:11.5px;font-weight:700;'
-            'border-radius:999px;padding:2px 9px;'
-            'margin-left:8px;vertical-align:1px">%s</span>'
-            % (bg, fg, text))
+        text = f"{n} session{'s' if n != 1 else ''} behind the board"
+    return ('<span style="display:inline-block;'
+            f'background:{bg};color:{fg};font-size:11.5px;'
+            'font-weight:700;border-radius:999px;'
+            'padding:2px 9px;margin-left:8px;'
+            f'vertical-align:1px">{text}</span>')
