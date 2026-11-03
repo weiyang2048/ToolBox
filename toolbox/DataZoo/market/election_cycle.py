@@ -1,32 +1,34 @@
 """Election cycle — the average market path around US
-elections (Markets page, Equities tab 3).
+elections, split by election type (Markets page,
+Equities tab 3).
 
     election_series()       the shipped historical series
                             (package data,
                             election_cycle_paths.csv)
-    current_cycle_paths()   the 2026 cycle's path so far,
-                            live from Yahoo; {} on any
-                            failure
+    current_cycle_paths()   the 2026 midterm cycle's path
+                            so far, live from Yahoo; {}
+                            on any failure
     render_election_cycle() HTML for the page (house dark
                             theme)
 
-Definitions (computed 2026-11-03 from Yahoo daily closes):
-every US federal election — midterms and presidential
-elections pooled, every even year — aligned by trading
-days around election day (±24 months, -504..+504), each
-market indexed to 100 at the election-day close; the
-shipped series carries the cross-election mean and the
-middle half (q25-q75). US is the S&P 500 price index
-(37 elections, 1950-2022); Europe is a per-election
-equal-weight composite of the FTSE 100, DAX and CAC 40
-price indices, over whichever of the three have data for
-that election (19 elections, 1986-2022); Japan is the
-Nikkei 225 (28 elections, 1968-2022); Hong Kong is the
-Hang Seng (17 elections, 1990-2022). Price returns
-throughout — dividends excluded; non-US markets in local
-currency, so no FX moves are in them either. Adjacent
-elections' windows overlap by construction: the curve
-is the average four-year cycle centered on election day.
+Definitions (computed 2026-11-03 from Yahoo daily
+closes): US elections split into two sets — midterms
+and presidential elections — each aligned by trading
+days around election day (±12 months, -252..+252),
+each market indexed to 100 at the election-day close;
+the shipped series carries, per set, the cross-election
+mean and the middle half (q25-q75). Each set has a US
+series (S&P 500 price index) and one ex-US series: a
+per-election equal-weight composite of the Nikkei 225,
+Hang Seng, FTSE 100, DAX and CAC 40 price indices, over
+whichever have data for that election. Samples: midterm
+US 19 elections (1950-2022), midterm ex-US 15
+(1966-2022); presidential US 20 (1948-2024),
+presidential ex-US 15 (1968-2024). Price returns
+throughout — dividends excluded; non-US markets in
+local currency, so no FX moves are in them either. The
+2026 overlay belongs to the midterm set only: 2026 is
+a midterm year.
 """
 
 import html
@@ -43,31 +45,39 @@ SERIES_CSV = os.path.join(HERE, "election_cycle_paths.csv")
 _MUTE = "#9AA0A6"
 _ACCENT = "#FFB066"
 _OVERLAY = "#7FB3D5"
-_EU = ("^FTSE", "^GDAXI", "^FCHI")
-_DAYS = 504  # trading days on each side of election day
+_XUS = ("^N225", "^HSI", "^FTSE", "^GDAXI", "^FCHI")
+_DAYS = 252  # trading days on each side of election day
 
-# Region key, panel title, and the study's headline stats
-# (means over elections): the +24m-after mean, how many
-# elections were positive at +24m, and the 6m-before mean.
-REGIONS = (
-    ("us", "United States — S&P 500, 37 elections, "
-           "1950–2022", 19.4, "31 of 37", 2.8),
-    ("eu", "Europe — FTSE 100 · DAX · CAC 40 composite, "
-           "19 elections, 1986–2022", 14.3, "16 of 19", -2.9),
-    ("jp", "Japan — Nikkei 225, 28 elections, 1968–2022",
-     18.7, "20 of 28", -1.8),
-    ("hk", "Hong Kong — Hang Seng, 17 elections, "
-           "1990–2022", 18.1, "11 of 17", 1.1),
+# Tab structure: (subhead, panels). Each panel: (series
+# key, overlay key or None, title, the +12m-after mean,
+# how many elections were positive at +12m, the
+# 6m-before mean) — the headline stats are means over
+# elections of each election's own returns. Only the
+# midterm panels carry an overlay key: 2026 is a
+# midterm year.
+SECTIONS = (
+    ("Midterm elections", (
+        ("mid_us", "us", "United States — S&P 500, "
+         "19 midterms, 1950–2022", 14.6, "19 of 19", 1.3),
+        ("mid_xus", "xus", "Ex-US — five-market composite, "
+         "15 midterms, 1966–2022", 10.8, "13 of 15", -6.1),
+    )),
+    ("Presidential elections", (
+        ("pres_us", None, "United States — S&P 500, "
+         "20 elections, 1948–2024", 8.1, "13 of 20", 4.6),
+        ("pres_xus", None, "Ex-US — five-market composite, "
+         "15 elections, 1968–2024", 13.4, "13 of 15", 3.6),
+    )),
 )
 
 
 def election_series():
     """The historical average election-cycle paths as a
     DataFrame: one row per relative trading day
-    (-504..+504) with <region>_mean/<region>_q25/
-    <region>_q75 for us/eu/jp/hk, all indexed to 100 at
-    day 0 (see the module docstring for definitions and
-    samples)."""
+    (-252..+252) with <set>_<market>_mean/_q25/_q75 for
+    set in {mid, pres} and market in {us, xus}, all
+    indexed to 100 at day 0 (see the module docstring
+    for definitions and samples)."""
     import pandas as pd
 
     return pd.read_csv(SERIES_CSV)
@@ -109,20 +119,22 @@ def _composite(legs):
 
 
 def current_cycle_paths():
-    """The 2026 cycle's path into today's vote (Nov 3,
-    2026 IS election day), live from Yahoo via the
-    canonical yahoo_prices helpers: ^GSPC for the US,
-    ^FTSE/^GDAXI/^FCHI composited for Europe, ^N225 for
-    Japan and ^HSI for Hong Kong, each indexed to 100 at
-    its last available close, which is aligned to day 0.
-    Returns {"us": [...], "us_start": int, "eu": [...],
-    ...} for whichever regions fetched. Any failure
-    degrades: a missing region is simply absent, and a
-    total failure returns {} rather than raising, so the
-    tab falls back to the historical series alone."""
+    """The 2026 midterm cycle's path into today's vote
+    (Nov 3, 2026 IS election day), live from Yahoo via
+    the canonical yahoo_prices helpers: ^GSPC for the
+    US, and the five ex-US indices (^N225, ^HSI, ^FTSE,
+    ^GDAXI, ^FCHI) composited equal-weight over
+    whichever fetched (at least two required), each
+    indexed to 100 at its last available close, which
+    is aligned to day 0. Returns {"us": [...],
+    "us_start": int, "xus": [...], "xus_start": int}
+    for whichever sides fetched. Any failure degrades:
+    a missing side is simply absent, and a total
+    failure returns {} rather than raising, so the tab
+    falls back to the historical series alone."""
     try:
-        p1 = int(time.time()) - 920 * 86400  # trailing ~30 months
-        syms = ("^GSPC",) + _EU + ("^N225", "^HSI")
+        p1 = int(time.time()) - 560 * 86400  # trailing ~18 months
+        syms = ("^GSPC",) + _XUS
         with ThreadPoolExecutor(max_workers=6) as pool:
             got = dict(zip(syms, pool.map(
                 lambda s: _indexed(s, p1), syms)))
@@ -133,11 +145,9 @@ def current_cycle_paths():
                 out[key], out[key + "_start"] = leg[1], leg[0]
 
         put("us", got.get("^GSPC"))
-        put("jp", got.get("^N225"))
-        put("hk", got.get("^HSI"))
-        legs = [got[s] for s in _EU if got.get(s) is not None]
+        legs = [got[s] for s in _XUS if got.get(s) is not None]
         if len(legs) >= 2:
-            put("eu", _composite(legs))
+            put("xus", _composite(legs))
         return out
     except Exception:
         return {}
@@ -211,9 +221,9 @@ def _panel(days, mean, q25, q75, title, overlay, overlay_start):
     body.append(f'<line x1="{x0:.1f}" x2="{x0:.1f}" y1="{T}" '
                 f'y2="{h - B}" stroke="#8A8378" stroke-width="1.1" '
                 f'stroke-dasharray="5 4"/>')
-    for d, lab in ((-504, "-24m"), (-252, "-12m"),
-                   (0, "Election day"), (252, "+12m"),
-                   (504, "+24m")):
+    for d, lab in ((-252, "-12m"), (-126, "-6m"),
+                   (0, "Election day"), (126, "+6m"),
+                   (252, "+12m")):
         body.append(f'<text x="{X(d):.1f}" y="{h - 6}" '
                     f'font-size="10.5" fill="{_MUTE}" '
                     f'text-anchor="middle">{lab}</text>')
@@ -284,59 +294,70 @@ def _chips(items):
 
 
 def render_election_cycle(df, current=None):
-    """Lede + the four regional average-path panels, each
-    with its stat chips, + the source note, wrapped in one
-    centered block (max-width 1120px, the panels' own
-    width, margin auto — the house tab convention). `df`
-    is election_series(); `current` is
-    current_cycle_paths() ({} or None drops the 2026
-    overlays). The chips carry the study's headline stats
-    (means over elections of each election's own returns);
-    panel endpoint labels read off the mean paths
-    themselves."""
+    """Lede + two sections — Midterm elections, then
+    Presidential elections — each with a US and an ex-US
+    average-path panel and its stat chips, + the source
+    note, wrapped in one centered block (max-width
+    1120px, the panels' own width, margin auto — the
+    house tab convention). `df` is election_series();
+    `current` is current_cycle_paths() ({} or None drops
+    the 2026 overlays, which only the midterm panels
+    draw — 2026 is a midterm year). The chips carry the
+    study's headline stats (means over elections of each
+    election's own returns); panel endpoint labels read
+    off the mean paths themselves."""
     current = current or {}
     days = df["day"].tolist()
     lede = ('<div style="font-size:12.5px;color:' + _MUTE
             + ';margin:2px 0 10px">The average stock-market '
-            'path around US elections — midterms and '
-            'presidential pooled, ±24 months — price '
-            'returns, indexed to <span style="color:'
-            + _ACCENT + ';font-weight:700">100 at the '
-            'election-day close</span>; the band is the '
-            'middle half of elections, and the dashed blue '
-            'line is the 2026 cycle into today\'s vote.'
-            '</div>')
+            'path around US elections, ±12 months — '
+            'midterms and presidential elections in '
+            'separate panels — price returns, indexed to '
+            '<span style="color:' + _ACCENT
+            + ';font-weight:700">100 at the election-day '
+            'close</span>; the band is the middle half of '
+            'elections, and the dashed blue line on the '
+            'midterm panels is the 2026 cycle into '
+            'today\'s vote.</div>')
     parts = [lede]
-    for key, title, after, positive, before in REGIONS:
-        parts.append(_panel(
-            days, df[key + "_mean"].tolist(),
-            df[key + "_q25"].tolist(),
-            df[key + "_q75"].tolist(), title,
-            current.get(key), current.get(key + "_start", 0)))
-        parts.append(_chips([
-            f"24m after &nbsp;<b>{after:+.1f}%</b> mean "
-            f"&nbsp;·&nbsp; positive <b>{positive}</b>",
-            f"6m before &nbsp;<b>{before:+.1f}%</b> mean",
-        ]))
+    for subhead, panels in SECTIONS:
+        parts.append(
+            '<div style="font-size:15px;font-weight:700;'
+            'color:#FAFAFA;margin:20px 0 2px">'
+            + subhead + '</div>')
+        for key, okey, title, after, positive, before \
+                in panels:
+            overlay = current.get(okey) if okey else None
+            ostart = (current.get(okey + "_start", 0)
+                      if okey else 0)
+            parts.append(_panel(
+                days, df[key + "_mean"].tolist(),
+                df[key + "_q25"].tolist(),
+                df[key + "_q75"].tolist(), title,
+                overlay, ostart))
+            parts.append(_chips([
+                f"12m after &nbsp;<b>{after:+.1f}%</b> mean "
+                f"&nbsp;·&nbsp; positive <b>{positive}</b>",
+                f"6m before &nbsp;<b>{before:+.1f}%</b> mean",
+            ]))
     note = ('<div style="font-size:11.5px;color:#8A8378;'
-            'margin-top:8px">Definitions: every US federal '
-            'election — midterms and presidential elections '
-            'pooled — aligned by trading days around '
-            'election day (±24 months), each market indexed '
+            'margin-top:8px">Definitions: US elections '
+            'split by type — midterms and presidential '
+            'elections — aligned by trading days around '
+            'election day (±12 months), each market indexed '
             'to 100 at the election-day close. US is the '
-            'S&amp;P 500 (37 elections, 1950–2022); Europe '
-            'is a per-election equal-weight composite of '
-            'the FTSE 100, DAX and CAC 40 over whichever '
-            'have data (19 elections, 1986–2022); Japan is '
-            'the Nikkei 225 (28 elections, 1968–2022); Hong '
-            'Kong is the Hang Seng (17 elections, '
-            '1990–2022). Price returns throughout: '
+            'S&amp;P 500 (midterms: 19 elections, '
+            '1950–2022; presidential: 20 elections, '
+            '1948–2024). Ex-US is a per-election '
+            'equal-weight composite of the Nikkei 225, '
+            'Hang Seng, FTSE 100, DAX and CAC 40 over '
+            'whichever have data (midterms: 15 elections, '
+            '1966–2022; presidential: 15 elections, '
+            '1968–2024). Price returns throughout: '
             'dividends excluded; non-US markets in local '
-            'currency, so no FX moves are in them. Adjacent '
-            'elections\' windows overlap by construction '
-            '— the curve is the average four-year cycle '
-            'centered on election day. The 2026 overlay is '
-            'the current cycle\'s path into today\'s vote, '
+            'currency, so no FX moves are in them. The '
+            '2026 overlay on the midterm panels is the '
+            'current cycle\'s path into today\'s vote, '
             'each market indexed to 100 at its last close. '
             'Computed 2026-11-03 from Yahoo daily closes.'
             '</div>')
