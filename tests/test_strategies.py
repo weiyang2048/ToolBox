@@ -236,13 +236,13 @@ def test_resolve_strategy_names():
 
 
 def test_combo_names_cover_the_demoed_grid():
-    # 29 since the RS(n, w) rules joined (user direction
-    # 2026-11-02): Max Sharpe 3 covs x 3 means, the three cov-only
-    # rules x 3 covs, the five bare names, plus six RS pairs
-    # (RS(1, 126) added the same evening, at the user's
-    # direction).
-    assert len(COMBO_STRATEGY_NAMES) == 29
-    assert len(set(COMBO_STRATEGY_NAMES)) == 29
+    # 92 since the estimation windows became strategy variants
+    # (user direction 2026-11-02): the 21 window-using bases
+    # (Max Sharpe 3 covs x 3 means, the three cov-only rules x 3
+    # covs, HRP, risk parity, Min CVaR) at four windows each,
+    # plus 1/N, the six RS pairs and Average.
+    assert len(COMBO_STRATEGY_NAMES) == 92
+    assert len(set(COMBO_STRATEGY_NAMES)) == 92
     assert "RS(1, 126)" in COMBO_STRATEGY_NAMES
     for name in COMBO_STRATEGY_NAMES:
         resolve_strategy(name)  # every listed name must resolve
@@ -380,3 +380,64 @@ def test_rs_snapshot_and_backtest():
     assert out is not None
     assert set(out["stats"].index) == {"RS(1, 21)"}
     assert np.isfinite(out["stats"].values).all()
+
+
+def test_parse_window_suffix():
+    from toolbox.DataZoo.market.strategies import parse_window
+
+    assert parse_window("Max Sharpe (LW × sample) @ 252") == (
+        "Max Sharpe (LW × sample)", 252)
+    assert parse_window("HRP @ All") == ("HRP", None)
+    assert parse_window("Min variance (raw)") == (
+        "Min variance (raw)", None)
+    assert parse_window("RS(1, 252)") == ("RS(1, 252)", None)
+    with pytest.raises(ValueError):
+        parse_window("HRP @ soon")
+    with pytest.raises(ValueError):
+        parse_window("HRP @ 0")
+
+
+def test_windowed_grid_shape():
+    # 21 window-using bases x 4 windows + 1/N + 6 RS + Average.
+    assert len(COMBO_STRATEGY_NAMES) == 92
+    assert "Max Sharpe (LW × sample) @ 252" in COMBO_STRATEGY_NAMES
+    assert "Max Sharpe (LW × sample) @ All" in COMBO_STRATEGY_NAMES
+    assert "Min variance (LW) @ 126" in COMBO_STRATEGY_NAMES
+    assert "HRP @ 504" in COMBO_STRATEGY_NAMES
+    assert "Min CVaR @ All" in COMBO_STRATEGY_NAMES
+    assert "HRP" not in COMBO_STRATEGY_NAMES
+    assert "1/N" in COMBO_STRATEGY_NAMES
+    for name in COMBO_STRATEGY_NAMES:
+        resolve_strategy(name)  # every grid name resolves
+
+
+def test_snapshot_window_suffix_slices_per_strategy():
+    R = _returns()
+    names = ["Min variance (raw) @ 63", "Min variance (raw) @ All",
+             "Min variance (raw)"]
+    W, _info = snapshot_weights(R, "sample", "sample", 0.0, names)
+    # "@ All" is the expanding window: identical to no suffix.
+    assert np.allclose(W.loc["Min variance (raw) @ All"],
+                       W.loc["Min variance (raw)"])
+    # A short rolling window estimates on different data.
+    assert not np.allclose(W.loc["Min variance (raw) @ 63"],
+                           W.loc["Min variance (raw)"])
+
+
+def test_backtest_name_window_overrides_global():
+    prices = _prices(n=400)
+    kw = dict(cov_method="bbp", mean_method="bayes_stein",
+              seed=126, hold=21)
+    suffixed = walk_forward_backtest(
+        prices, strategies=["Min variance (raw) @ 126"], **kw)
+    globaled = walk_forward_backtest(
+        prices, strategies=["Min variance (raw)"], window=126, **kw)
+    assert np.allclose(suffixed["returns"].values,
+                       globaled["returns"].values)
+    expanding = walk_forward_backtest(
+        prices, strategies=["Min variance (raw) @ All"], window=126,
+        **kw)
+    plain = walk_forward_backtest(
+        prices, strategies=["Min variance (raw)"], **kw)
+    assert np.allclose(expanding["returns"].values,
+                       plain["returns"].values)

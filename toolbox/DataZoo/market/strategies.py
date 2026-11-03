@@ -106,12 +106,50 @@ _COV_ONLY_RULES = ("Min variance", "Max diversification", "NCO")
 RS_PAIRS = ((1, 21), (1, 126), (1, 252), (2, 63), (3, 126), (5, 252))
 RS_STRATEGY_NAMES = tuple(f"RS({n}, {w})" for n, w in RS_PAIRS)
 
-COMBO_STRATEGY_NAMES = (
+# Estimation windows as strategy variants (user direction
+# 2026-11-02): there is no global estimation-window parameter —
+# each window creates a new strategy, exactly as RS(n, w)
+# carries its lookback in its name. The suffix is " @ 252" for
+# a rolling window of that many trading days, " @ All" for the
+# expanding window. Every window-using combination base appears
+# at each of the four windows; 1/N never uses a window (its
+# weights cannot depend on one) and the RS rules carry their
+# own lookback, so both stay unsuffixed.
+STRATEGY_WINDOWS = (126, 252, 504, "All")
+
+
+def parse_window(name: str) -> tuple[str, int | None]:
+    """``(clean_name, window)`` for a strategy name: the window
+    is an int for an ``" @ <days>"`` suffix, None for
+    ``" @ All"`` and for a name with no suffix (both are the
+    expanding window). Raises ValueError on a malformed
+    suffix."""
+    if " @ " not in name:
+        return name, None
+    clean, _, tail = name.rpartition(" @ ")
+    if tail == "All":
+        return clean, None
+    try:
+        w = int(tail)
+    except ValueError:
+        raise ValueError(f"Unknown strategy: {name}") from None
+    if w < 1:
+        raise ValueError(f"Unknown strategy: {name}")
+    return clean, w
+
+
+_WINDOWED_BASES = (
     tuple(f"Max Sharpe ({_COV_SHORT[c]} × {_MEAN_SHORT[m]})"
           for c in _GRID_COVS for m in _GRID_MEANS)
     + tuple(f"{rule} ({_COV_SHORT[c]})"
             for rule in _COV_ONLY_RULES for c in _GRID_COVS)
-    + ("1/N", "HRP", "Risk parity", "Min CVaR")
+    + ("HRP", "Risk parity", "Min CVaR")
+)
+
+COMBO_STRATEGY_NAMES = (
+    tuple(f"{base} @ {w}"
+          for base in _WINDOWED_BASES for w in STRATEGY_WINDOWS)
+    + ("1/N",)
     + RS_STRATEGY_NAMES
     + ("Average",)
 )
@@ -137,9 +175,11 @@ def resolve_strategy(name: str) -> tuple[str, str | None, str | None]:
 
     A ``None`` component falls back to the caller's pair. Bare base
     names resolve to ``(name, None, None)`` — ``"Average"`` likewise
-    (the ensemble layer handles it). Raises ValueError on an unknown
-    name or qualifier.
+    (the ensemble layer handles it). An estimation-window suffix
+    (see :func:`parse_window`) is stripped first. Raises ValueError
+    on an unknown name or qualifier.
     """
+    name, _win = parse_window(name)
     if name in STRATEGY_NAMES:
         return name, None, None
     if _parse_rs(name) is not None:
@@ -156,6 +196,22 @@ def resolve_strategy(name: str) -> tuple[str, str | None, str | None]:
     raise ValueError(f"Unknown strategy: {name}")
 
 
+_COMBO_RANK = {s: i for i, s in enumerate(COMBO_STRATEGY_NAMES)}
+_WINDOWED_BASE_SET = frozenset(_WINDOWED_BASES)
+
+
+def _combo_rank(name: str) -> float | None:
+    """A name's rank in the combination grid, or None when the
+    name is not a combination at all. An unsuffixed windowed
+    base ranks just ahead of its own windowed variants."""
+    if name in _COMBO_RANK:
+        return float(_COMBO_RANK[name])
+    clean, _w = parse_window(name)
+    if clean in _WINDOWED_BASE_SET:
+        return _COMBO_RANK[f"{clean} @ {STRATEGY_WINDOWS[0]}"] - 0.5
+    return None
+
+
 def _strategy_order(names: list[str]) -> list[str]:
     """Display order for a set of strategy names.
 
@@ -163,16 +219,17 @@ def _strategy_order(names: list[str]) -> list[str]:
     Otherwise bare-name order rules, with each combination placed
     at its base rule's position (Average, a bare name, stays last).
     """
-    if all(s in COMBO_STRATEGY_NAMES for s in names):
-        rank = {s: i for i, s in enumerate(COMBO_STRATEGY_NAMES)}
-        return sorted(names, key=rank.__getitem__)
+    ranks = [_combo_rank(s) for s in names]
+    if all(r is not None for r in ranks):
+        return [s for _r, s in sorted(zip(ranks, names),
+                                      key=lambda t: t[0])]
     base_rank = {s: i for i, s in enumerate(STRATEGY_NAMES)}
-    combo_rank = {s: i for i, s in enumerate(COMBO_STRATEGY_NAMES)}
 
-    def key(s: str) -> tuple[int, int]:
+    def key(s: str) -> tuple[int, float]:
         base = s if s in STRATEGY_NAMES else resolve_strategy(s)[0]
+        r = _combo_rank(s)
         return (base_rank.get(base, len(base_rank)),
-                combo_rank.get(s, -1))
+                r if r is not None else -1.0)
 
     return sorted(names, key=key)
 
@@ -774,28 +831,37 @@ def strategy_weights(name: str, R: pd.DataFrame, S: np.ndarray,
 
 def snapshot_weights(R: pd.DataFrame, cov_method: str, mean_method: str,
                      rf_d: float, strategies: list[str]) -> tuple[pd.DataFrame, dict]:
-    """Current weights of ``strategies`` on the window ``R``.
+    """Current weights of ``strategies`` on the history ``R``.
 
     Combination names (see :data:`COMBO_STRATEGY_NAMES`) are solved
     on their own cleaning pair; ``(cov_method, mean_method)`` is the
-    fallback pair for unqualified names. Inputs are estimated once
-    per distinct pair in play. Returns ``(weights, info)``: weights
-    indexed by strategy with one column per ticker (Average = mean
-    of the other selected rules), and the estimation diagnostics of
-    the fallback pair.
+    fallback pair for unqualified names. Each name's own estimation
+    window (its ``@`` suffix; no suffix and ``@ All`` = all of
+    ``R``) slices ``R`` for that strategy, and inputs are estimated
+    once per distinct (window, pair) in play. Returns
+    ``(weights, info)``: weights indexed by strategy with one
+    column per ticker (Average = mean of the other selected
+    rules), and the estimation diagnostics of the fallback pair
+    on the full ``R``.
     """
     mu0, S0, info = estimate_inputs(R, cov_method, mean_method, rf_d)
     tickers = list(R.columns)
     rows = {}
     base = [s for s in strategies if s != "Average"]
-    cache = {(cov_method, mean_method): (mu0, S0)}
+    cache = {((cov_method, mean_method), None): (mu0, S0)}
+    slices = {((cov_method, mean_method), None): R}
     for name in base:
-        rule, cov_m, mean_m = resolve_strategy(name)
+        clean, win = parse_window(name)
+        rule, cov_m, mean_m = resolve_strategy(clean)
         pair = (cov_m or cov_method, mean_m or mean_method)
-        if pair not in cache:
-            cache[pair] = estimate_inputs(R, pair[0], pair[1], rf_d)[:2]
-        mu, S = cache[pair]
-        rows[name] = strategy_weights(rule, R, S, mu, rf_d)
+        key = (pair, win)
+        if key not in cache:
+            R_w = R if win is None else R.tail(win)
+            cache[key] = estimate_inputs(R_w, pair[0], pair[1],
+                                         rf_d)[:2]
+            slices[key] = R_w
+        mu, S = cache[key]
+        rows[name] = strategy_weights(rule, slices[key], S, mu, rf_d)
     if "Average" in strategies and base:
         rows["Average"] = np.mean([rows[s] for s in base], axis=0)
     order = _strategy_order(list(rows))
@@ -1094,6 +1160,12 @@ def walk_forward_backtest(
     sets where out-of-sample scoring starts, so every
     ``(seed, window)`` pair is valid.
 
+    Per-strategy windows (user direction 2026-11-02): a strategy
+    name may carry its own window as an ``@`` suffix (see
+    :func:`parse_window`), which overrides ``window`` for that
+    strategy — the estimation slice and its risk-free mean follow
+    the strategy's own window. Unsuffixed names use ``window``.
+
     Returns ``None`` when the common history cannot seed plus hold.
     Otherwise a dict with the OOS daily ``returns`` and ``equity``
     frames, the ``stats`` frame (one row per strategy), the
@@ -1111,7 +1183,14 @@ def walk_forward_backtest(
     rf_all = rf_daily_series(logret.index, rf_annual_pct)
     tickers = list(px.columns)
     base = [s for s in strategies if s != "Average"]
-    resolved = {name: resolve_strategy(name) for name in base}
+    resolved = {}
+    eff_window = {}
+    for name in base:
+        clean, w_suf = parse_window(name)
+        resolved[name] = resolve_strategy(clean)
+        # A name's own @ window wins; an unsuffixed name falls
+        # back to the call's ``window`` (None = expanding).
+        eff_window[name] = w_suf if " @ " in name else window
     labels = list(base) + (["Average"] if "Average" in strategies and base else [])
     if not labels:
         return None
@@ -1122,19 +1201,24 @@ def walk_forward_backtest(
     n_reb = 0
     for start in range(seed, len(simple), hold):
         end = min(start + hold, len(simple))
-        lo = 0 if window is None else max(0, start - window)
-        R = logret.iloc[lo:start]
-        rf_win = float(rf_all[lo:start].mean())
-        cache: dict[tuple[str, str], tuple[np.ndarray, np.ndarray]] = {}
+        cache: dict = {}
+        slices: dict = {}
         W = {}
         for name in base:
             rule, cov_m, mean_m = resolved[name]
             pair = (cov_m or cov_method, mean_m or mean_method)
-            if pair not in cache:
-                cache[pair] = estimate_inputs(R, pair[0], pair[1],
-                                              rf_win)[:2]
-            mu, S = cache[pair]
-            W[name] = strategy_weights(rule, R, S, mu, rf_win)
+            win = eff_window[name]
+            key = (win, pair)
+            if key not in cache:
+                lo = 0 if win is None else max(0, start - win)
+                R_w = logret.iloc[lo:start]
+                rf_w = float(rf_all[lo:start].mean())
+                cache[key] = estimate_inputs(R_w, pair[0], pair[1],
+                                             rf_w)[:2]
+                slices[key] = (R_w, rf_w)
+            mu, S = cache[key]
+            R_w, rf_w = slices[key]
+            W[name] = strategy_weights(rule, R_w, S, mu, rf_w)
         if "Average" in labels:
             W["Average"] = np.mean([W[s] for s in base], axis=0)
         n_reb += 1
