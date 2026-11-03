@@ -339,6 +339,100 @@ def test_patch_tail_fills_from_yahoo_daily(monkeypatch):
     assert float(out.loc["2026-10-30", "SPY"]) == 755.72
 
 
+def _batch_frame(cols):
+    """A yfinance-shaped batch history: (Price, Ticker) columns."""
+    import pandas as pd
+
+    idx = pd.bdate_range("2026-06-01", periods=100)
+    data = {}
+    for tic, vals in cols.items():
+        data[("Close", tic)] = vals
+    frame = pd.DataFrame(data, index=idx)
+    frame.columns = pd.MultiIndex.from_tuples(frame.columns)
+    return frame
+
+
+def _full_series(v0=10.0):
+    import pandas as pd
+
+    idx = pd.bdate_range("2026-06-01", periods=100)
+    return pd.Series([v0 + i * 0.1 for i in range(100)], index=idx)
+
+
+def test_download_refills_a_stub_column(monkeypatch):
+    # The batch returns BBB as a 3-row stub (a throttled leg);
+    # the chart path carries its full history, which must
+    # replace the stub (the 2026-11-02 IXN incident).
+    import numpy as np
+    import pandas as pd
+
+    full = [100.0 + i for i in range(100)]
+    stub = [5.0, 5.1, 5.2] + [float("nan")] * 97
+    monkeypatch.setattr(yp, "_history",
+                        lambda t, p: _batch_frame({"AAA": full,
+                                                   "BBB": stub}))
+    monkeypatch.setattr(
+        yp, "yahoo_daily",
+        lambda t, p1=0, p2=None, include_partial=False:
+        _full_series(50.0))
+    out = yp.download_close_prices(["AAA", "BBB"], period="5y")
+    assert int(out["BBB"].notna().sum()) == 100
+    assert float(out["BBB"].iloc[0]) == 50.0
+    assert int(out["AAA"].notna().sum()) == 100
+
+
+def test_download_refills_a_missing_column(monkeypatch):
+    import pandas as pd
+
+    full = [100.0 + i for i in range(100)]
+    monkeypatch.setattr(yp, "_history",
+                        lambda t, p: _batch_frame({"AAA": full}))
+    monkeypatch.setattr(
+        yp, "yahoo_daily",
+        lambda t, p1=0, p2=None, include_partial=False:
+        _full_series(50.0))
+    out = yp.download_close_prices(["AAA", "BBB"], period="5y")
+    assert "BBB" in out.columns
+    assert int(out["BBB"].notna().sum()) == 100
+
+
+def test_download_keeps_a_genuinely_young_ticker(monkeypatch):
+    # A young ticker's batch column is short and its refill is
+    # the same short history: nothing is replaced or padded.
+    import numpy as np
+    import pandas as pd
+
+    full = [100.0 + i for i in range(100)]
+    young = [7.0] * 40 + [float("nan")] * 60
+    monkeypatch.setattr(yp, "_history",
+                        lambda t, p: _batch_frame({"AAA": full,
+                                                   "NEW": young}))
+    idx = pd.bdate_range("2026-06-01", periods=100)
+    monkeypatch.setattr(
+        yp, "yahoo_daily",
+        lambda t, p1=0, p2=None, include_partial=False:
+        pd.Series([7.0] * 40, index=idx[:40]))
+    out = yp.download_close_prices(["AAA", "NEW"], period="5y")
+    assert int(out["NEW"].notna().sum()) == 40
+    assert float(out["NEW"].dropna().iloc[0]) == 7.0
+
+
+def test_download_survives_a_failed_refill(monkeypatch):
+    import pandas as pd
+
+    full = [100.0 + i for i in range(100)]
+    monkeypatch.setattr(yp, "_history",
+                        lambda t, p: _batch_frame({"AAA": full}))
+
+    def boom(t, p1=0, p2=None, include_partial=False):
+        raise RuntimeError("chart down")
+
+    monkeypatch.setattr(yp, "yahoo_daily", boom)
+    out = yp.download_close_prices(["AAA", "BBB"], period="5y")
+    assert "BBB" not in out.columns
+    assert int(out["AAA"].notna().sum()) == 100
+
+
 def test_yahoo_daily_slices_a_wider_cached_window(monkeypatch):
     # Bars at p1-1d, p1, p1+1d, p2, p2+1d in the cached payload;
     # only the ones inside [p1, p2] may come back.

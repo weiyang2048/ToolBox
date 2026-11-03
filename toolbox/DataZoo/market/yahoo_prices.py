@@ -56,6 +56,10 @@ def download_close_prices(
 
     Columns are ticker symbols, in first-seen order. A timezone-aware index is
     converted to naive. ``normalize`` scales each column by its first valid price.
+
+    A ticker the batch download returns as a stub (missing or
+    nearly empty — Yahoo throttling the batch) is refilled
+    whole from the repaired chart path; see _refill_stubs.
     """
     symbols = list(dict.fromkeys(tickers))
     if not symbols:
@@ -63,10 +67,80 @@ def download_close_prices(
 
     prices = _close_frame(_history(symbols, period))
     prices = _strip_timezone(prices)
+    prices = _refill_stubs(prices, symbols, period)
     prices = _patch_tail(prices)
     if normalize and not prices.empty:
         prices = normalize_close_prices(prices)
     return prices
+
+
+# A batch column shorter than this is a stub, not a history:
+# the batch download was throttled or dropped the leg (on the
+# dashboard's shared egress IP this cost the Strategies page
+# its IXN column on 2026-11-02 — the default universe silently
+# rendered, weighted and backtested on 10 of its 11 sectors).
+STUB_MIN_OBS = 60
+
+
+def _period_start(period: str) -> int:
+    """Epoch seconds for the start of a yfinance period string
+    ("5y", "6mo"); unrecognized strings fall back to 10y back —
+    over-fetching is safe here because a refill is sliced to
+    the batch frame's own window before it is used."""
+    import re
+    import time as _time
+
+    now = int(_time.time())
+    m = re.fullmatch(r"(\d+)(y|mo)", period or "")
+    if not m:
+        return now - int(10 * 365.25 * 86400)
+    n, unit = int(m.group(1)), m.group(2)
+    days = n * 365.25 if unit == "y" else n * 30.44
+    return now - int(days * 86400)
+
+
+def _refill_stubs(prices: pd.DataFrame, symbols, period: str
+                  ) -> pd.DataFrame:
+    """Refill stub columns from yahoo_daily (the repaired chart
+    path) — user direction 2026-11-02 ("refill stub tickers in
+    the price path").
+
+    yfinance's batch history can return one ticker as a stub
+    (missing, all-NaN, or a handful of rows) when Yahoo
+    throttles the batch, while the same ticker's chart payload
+    is served normally. A column with fewer than STUB_MIN_OBS
+    valid points is refetched whole through the chart path and
+    replaces the stub only when it brings MORE valid points —
+    a genuinely young ticker (whose refill is the same short
+    history) is untouched. Refilled values are sliced to the
+    batch frame's window and the frame's index grows to their
+    union, so a fully missing ticker returns with its dates.
+    Best-effort per ticker: a failed refill keeps the stub."""
+    stubs = [s for s in symbols
+             if s not in prices.columns
+             or int(prices[s].notna().sum()) < STUB_MIN_OBS]
+    if not stubs:
+        return prices
+    p1 = _period_start(period)
+    lo = prices.index.min() if len(prices) else None
+    hi = prices.index.max() if len(prices) else None
+    out = prices.copy()
+    for sym in stubs:
+        try:
+            s = yahoo_daily(sym, p1=p1, include_partial=True)
+        except Exception:  # noqa: BLE001 - best-effort refill
+            continue
+        if not len(s):
+            continue
+        if lo is not None:
+            s = s[(s.index >= lo) & (s.index <= hi)]
+        have = (int(out[sym].notna().sum())
+                if sym in out.columns else 0)
+        if int(s.notna().sum()) <= have:
+            continue
+        out = out.reindex(out.index.union(s.index)).sort_index()
+        out[sym] = s.reindex(out.index)
+    return out
 
 
 def _patch_tail(prices: pd.DataFrame) -> pd.DataFrame:
