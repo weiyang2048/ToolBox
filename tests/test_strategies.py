@@ -236,11 +236,14 @@ def test_resolve_strategy_names():
 
 
 def test_combo_names_cover_the_demoed_grid():
-    # 28 since the RS(n, w) rules joined (user direction
+    # 29 since the RS(n, w) rules joined (user direction
     # 2026-11-02): Max Sharpe 3 covs x 3 means, the three cov-only
-    # rules x 3 covs, the five bare names, plus five RS pairs.
-    assert len(COMBO_STRATEGY_NAMES) == 28
-    assert len(set(COMBO_STRATEGY_NAMES)) == 28
+    # rules x 3 covs, the five bare names, plus six RS pairs
+    # (RS(1, 126) added the same evening, at the user's
+    # direction).
+    assert len(COMBO_STRATEGY_NAMES) == 29
+    assert len(set(COMBO_STRATEGY_NAMES)) == 29
+    assert "RS(1, 126)" in COMBO_STRATEGY_NAMES
     for name in COMBO_STRATEGY_NAMES:
         resolve_strategy(name)  # every listed name must resolve
 

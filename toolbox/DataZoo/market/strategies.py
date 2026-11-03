@@ -101,9 +101,9 @@ _COV_ONLY_RULES = ("Min variance", "Max diversification", "NCO")
 # rebalance — no covariance or mean inputs. The pair rides
 # in the name like the cleaning pairs do; any well-formed
 # RS(n, w) resolves, and the grid offers this curated set —
-# winner-take-all at a month and at a year, then widening
-# baskets as the window lengthens.
-RS_PAIRS = ((1, 21), (1, 252), (2, 63), (3, 126), (5, 252))
+# winner-take-all at a month, a half-year and a year, then
+# widening baskets as the window lengthens.
+RS_PAIRS = ((1, 21), (1, 126), (1, 252), (2, 63), (3, 126), (5, 252))
 RS_STRATEGY_NAMES = tuple(f"RS({n}, {w})" for n, w in RS_PAIRS)
 
 COMBO_STRATEGY_NAMES = (
@@ -1045,7 +1045,8 @@ def merged_stats(prices: pd.DataFrame,
             row["win_rate"] = float("nan")
         rows[t] = row
     cols = ["rebased", "day_chg", "wk_chg", "mo_chg", "q_chg",
-            "ytd_chg", "px_ema20", "ema_long", "ema_regime", "mu_ann",
+            "ytd_chg", "yr_chg", "px_ema20", "ema_long", "ema_regime",
+            "mu_ann",
             "vol_ann", "vol", "sharpe0", "sharpe",
             "ulcer", "win_rate", "dd", "dd_q", "max_dd", "beta"]
     out = pd.DataFrame(rows).T
