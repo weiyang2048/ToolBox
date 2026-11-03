@@ -81,6 +81,13 @@ Repository = "https://github.com/weiyang2048/ToolBox"
 where = ["."]
 include = ["toolbox*", "energy_optimization_challenge*"]
 
+# Package data the market modules read by path at runtime
+# (wordcloud_terms.json for news_cloud, midterm_paths.csv
+# for midterm). Without this, setuptools ships neither file
+# in the wheel or the sdist and the modules break installed.
+[tool.setuptools.package-data]
+"toolbox.DataZoo.market" = ["*.json", "*.csv"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests", "energy_optimization_challenge/tests"]
 
