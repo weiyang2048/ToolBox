@@ -247,17 +247,29 @@ def _panel(days, mean, q25, q75, title, overlay, overlay_start):
         # day-0 endpoint (the midterm version labelled the
         # line's start, where the band is widest, and
         # crowded it). All three lines converge at the
-        # endpoint, so the label gets a translucent dark
-        # backing to stay legible over them.
+        # endpoint and the band passes under the label, so
+        # it sits on a backing plate in the chips' colors
+        # (#171512 on #2E2A24) at near-full opacity, sized
+        # to the text with real padding, and the glyphs
+        # carry a paint-order halo in the plate color —
+        # together they keep the label crisp where it
+        # crosses the band (a 0.55-black rect with ~1px
+        # of padding did not).
         lx2, ly2 = X(0) - 6, Y(overlay[-1]) - 8
-        body.append(f'<rect x="{lx2 - 140:.1f}" '
-                    f'y="{ly2 - 11:.1f}" width="142" '
-                    f'height="15" rx="3" fill="#000000" '
-                    f'fill-opacity="0.55"/>')
+        lab = "2026 (into today's vote)"
+        tw = len(lab) * 6.3  # ~0.60em/char: bold-safe
+        body.append(f'<rect x="{lx2 - tw - 8:.1f}" '
+                    f'y="{ly2 - 13.5:.1f}" '
+                    f'width="{tw + 16:.1f}" height="20" '
+                    f'rx="4" fill="#171512" '
+                    f'fill-opacity="0.94" stroke="#2E2A24" '
+                    f'stroke-width="1"/>')
         body.append(f'<text x="{lx2:.1f}" y="{ly2:.1f}" '
-                    f'font-size="10.5" text-anchor="end" '
-                    f'fill="{_OVERLAY}">2026 (into today\'s '
-                    'vote)</text>')
+                    f'font-size="10.5" font-weight="600" '
+                    f'text-anchor="end" fill="{_OVERLAY}" '
+                    f'stroke="#171512" stroke-width="3" '
+                    f'paint-order="stroke" '
+                    f'stroke-linejoin="round">{lab}</text>')
     return svg_elems(w, h, "".join(body))
 
 
