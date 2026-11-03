@@ -29,7 +29,7 @@ _ACCENT = "#FFB066"
 _SYMS = ("SPY", "EFA", "EEM", "ACWX", "DX-Y.NYB")
 _BLOCS = (("dev", "EFA", "Developed ex-US", "#2E8B57"),
           ("em", "EEM", "Emerging", "#E67300"),
-          ("xus", "ACWX", "All ex-US", "#173F6E"))
+          ("xus", "ACWX", "All ex-US", "#90EE90"))
 
 
 def fetch_us_xus():
