@@ -49,24 +49,31 @@ _XUS = ("^N225", "^HSI", "^FTSE", "^GDAXI", "^FCHI")
 _DAYS = 252  # trading days on each side of election day
 
 # Tab structure: (subhead, panels). Each panel: (series
-# key, overlay key or None, title, the +12m-after mean,
-# how many elections were positive at +12m, the
-# 6m-before mean) — the headline stats are means over
-# elections of each election's own returns. Only the
-# midterm panels carry an overlay key: 2026 is a
-# midterm year.
+# key, overlay key or None, title, the 12m-before mean,
+# the 6m-before mean, the 6m-after mean, how many
+# elections were positive at +6m, the 12m-after mean,
+# how many were positive at +12m) — the headline stats
+# are means over elections of each election's own
+# returns, and the chips print them in chronological
+# order: the two "before" chips first, then the two
+# "after" chips. Only the midterm panels carry an
+# overlay key: 2026 is a midterm year.
 SECTIONS = (
     ("Midterm elections", (
         ("mid_us", "us", "United States — S&P 500, "
-         "19 midterms, 1950–2022", 14.6, "19 of 19", 1.3),
+         "19 midterms, 1950–2022",
+         4.0, 1.3, 13.4, "19 of 19", 14.6, "19 of 19"),
         ("mid_xus", "xus", "Ex-US — five-market composite, "
-         "15 midterms, 1966–2022", 10.8, "13 of 15", -6.1),
+         "15 midterms, 1966–2022",
+         1.1, -6.1, 11.7, "13 of 15", 10.8, "13 of 15"),
     )),
     ("Presidential elections", (
         ("pres_us", None, "United States — S&P 500, "
-         "20 elections, 1948–2024", 8.1, "13 of 20", 4.6),
+         "20 elections, 1948–2024",
+         9.5, 4.6, 4.0, "13 of 20", 8.1, "13 of 20"),
         ("pres_xus", None, "Ex-US — five-market composite, "
-         "15 elections, 1968–2024", 13.4, "13 of 15", 3.6),
+         "15 elections, 1968–2024",
+         13.0, 3.6, 9.8, "13 of 15", 13.4, "13 of 15"),
     )),
 )
 
@@ -157,7 +164,9 @@ def _panel(days, mean, q25, q75, title, overlay, overlay_start):
     """One average-path panel as SVG: IQR band, mean line,
     the 100 reference, a dashed marker at election day,
     and the optional 2026 overlay (dashed, days
-    overlay_start..0, labelled at its end near day 0)."""
+    overlay_start..0, labelled in the sky above its end
+    near day 0 — the plate clears both the line and the
+    band, see ceil_v)."""
     w, h = 1120, 250
     L, R, T, B = 52, 118, 46, 24
     allv = list(q75) + list(q25)
@@ -167,6 +176,35 @@ def _panel(days, mean, q25, q75, title, overlay, overlay_start):
     pad = (hi - lo) * 0.08 or 1.0
     lo, hi = lo - pad, hi + pad
     import numpy as np
+
+    ceil_v = None
+    if overlay:
+        # The overlay label's ceiling: the higher of the
+        # overlay's own values and the band's top (q75)
+        # over the plate's day span (the plate is
+        # right-aligned to just left of day 0; its width
+        # in days follows from the text length). The
+        # plate is placed with its bottom edge a margin
+        # above this ceiling, in the empty sky, so it
+        # never covers the line or the band — the first
+        # plate sat on the endpoint's height (~100) and
+        # hid the overlay's last ~90 days, which run at
+        # 97-104, under its fill. Headroom: if the
+        # ceiling sits so high in the range that plate +
+        # margin would cross the plot's top, extend hi
+        # (the plate is 20px and the margin 5px, so the
+        # ceiling may use at most (180-27)/180 of the
+        # range — see the placement below).
+        lab_w = len("2026 (into today's vote)") * 6.3 + 16
+        px_day = (w - R - L) / (2 * _DAYS)
+        d_lo = int(np.ceil(-6 / px_day - lab_w / px_day))
+        pos = {d: i for i, d in enumerate(days)}
+        ceil_v = max(
+            [overlay[d - overlay_start]
+             for d in range(d_lo, 1)
+             if 0 <= d - overlay_start < len(overlay)]
+            + [q75[pos[d]] for d in range(d_lo, 1)])
+        hi = max(hi, lo + (ceil_v - lo) / 0.85)
 
     step = 10 ** np.floor(np.log10((hi - lo) / 4))
     for m in (1, 2, 2.5, 5, 10):
@@ -253,28 +291,30 @@ def _panel(days, mean, q25, q75, title, overlay, overlay_start):
                     + f'" fill="none" stroke="{_OVERLAY}" '
                       'stroke-width="1.8" stroke-dasharray="6 4" '
                       'stroke-linejoin="round"/>')
-        # Label at the END of the overlay, just above its
-        # day-0 endpoint (the midterm version labelled the
-        # line's start, where the band is widest, and
-        # crowded it). All three lines converge at the
-        # endpoint and the band passes under the label, so
-        # it sits on a backing plate in the chips' colors
-        # (#171512 on #2E2A24) at near-full opacity, sized
-        # to the text with real padding, and the glyphs
-        # carry a paint-order halo in the plate color —
-        # together they keep the label crisp where it
-        # crosses the band (a 0.55-black rect with ~1px
-        # of padding did not).
-        lx2, ly2 = X(0) - 6, Y(overlay[-1]) - 8
+        # Label in the empty sky above the overlay's
+        # end: right-aligned to just left of day 0, its
+        # plate's bottom edge 5px above ceil_v — the
+        # higher of the overlay and the band top over
+        # the plate's span, computed with the scale
+        # above — so the dashed line runs visibly all
+        # the way into the election-day marker under a
+        # label that covers neither it nor the band.
+        # The plate is in the chips' colors (#171512 on
+        # #2E2A24) at near-full opacity, sized to the
+        # text with real padding, and the glyphs carry
+        # a paint-order halo in the plate color.
+        lx2 = X(0) - 6
+        plate_bot = Y(ceil_v) - 5
         lab = "2026 (into today's vote)"
         tw = len(lab) * 6.3  # ~0.60em/char: bold-safe
         body.append(f'<rect x="{lx2 - tw - 8:.1f}" '
-                    f'y="{ly2 - 13.5:.1f}" '
+                    f'y="{plate_bot - 20:.1f}" '
                     f'width="{tw + 16:.1f}" height="20" '
                     f'rx="4" fill="#171512" '
                     f'fill-opacity="0.94" stroke="#2E2A24" '
                     f'stroke-width="1"/>')
-        body.append(f'<text x="{lx2:.1f}" y="{ly2:.1f}" '
+        body.append(f'<text x="{lx2:.1f}" '
+                    f'y="{plate_bot - 6.5:.1f}" '
                     f'font-size="10.5" font-weight="600" '
                     f'text-anchor="end" fill="{_OVERLAY}" '
                     f'stroke="#171512" stroke-width="3" '
@@ -325,8 +365,8 @@ def render_election_cycle(df, current=None):
             '<div style="font-size:15px;font-weight:700;'
             'color:#FAFAFA;margin:20px 0 2px">'
             + subhead + '</div>')
-        for key, okey, title, after, positive, before \
-                in panels:
+        for key, okey, title, b12, b6, a6, a6pos, a12, \
+                a12pos in panels:
             overlay = current.get(okey) if okey else None
             ostart = (current.get(okey + "_start", 0)
                       if okey else 0)
@@ -336,9 +376,12 @@ def render_election_cycle(df, current=None):
                 df[key + "_q75"].tolist(), title,
                 overlay, ostart))
             parts.append(_chips([
-                f"12m after &nbsp;<b>{after:+.1f}%</b> mean "
-                f"&nbsp;·&nbsp; positive <b>{positive}</b>",
-                f"6m before &nbsp;<b>{before:+.1f}%</b> mean",
+                f"12m before &nbsp;<b>{b12:+.1f}%</b> mean",
+                f"6m before &nbsp;<b>{b6:+.1f}%</b> mean",
+                f"6m after &nbsp;<b>{a6:+.1f}%</b> mean "
+                f"&nbsp;·&nbsp; positive <b>{a6pos}</b>",
+                f"12m after &nbsp;<b>{a12:+.1f}%</b> mean "
+                f"&nbsp;·&nbsp; positive <b>{a12pos}</b>",
             ]))
     note = ('<div style="font-size:11.5px;color:#8A8378;'
             'margin-top:8px">Definitions: US elections '
