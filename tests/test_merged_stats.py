@@ -80,7 +80,13 @@ def test_a_columns_match_asset_stats(sectors_10y):
         np.testing.assert_allclose(
             merged[col].astype(float), base[col].astype(float),
             rtol=0, atol=1e-9, err_msg=col)
-    page_rebased = frame.div(frame.iloc[0]).iloc[-1] * 100.0
+    # Rebased anchor (canonical, shared with merged_stats): first
+    # VALID print per column. The raw frame's first row is NaN for
+    # tickers whose history starts a row late (8 of the 11 sector
+    # ETFs on the current 10y pull), so a frame.iloc[0] anchor makes
+    # one side NaN and the comparison flip between runs.
+    page_rebased = frame.apply(
+        lambda s: s.dropna().iloc[-1] / s.dropna().iloc[0] * 100.0)
     for t in SECTORS:
         assert abs(float(merged.loc[t, "rebased"])
                    - float(page_rebased[t])) < 1e-9
@@ -88,6 +94,9 @@ def test_a_columns_match_asset_stats(sectors_10y):
 
 @pytest.fixture(scope="module")
 def panel():
+    if not (_FLACO_MB / "panel-stats.py").exists():
+        pytest.skip("Flaco repo not present (cross-repo check, "
+                    "local only)")
     ps = _load("panel_stats", "panel-stats.py")
     frame = ps.fetch_all()
     if frame.empty:
