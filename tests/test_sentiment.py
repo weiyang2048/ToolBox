@@ -92,6 +92,53 @@ def _series(vals):
     return pd.Series(vals, index=idx, dtype=float)
 
 
+def test_crypto_evening_index_is_dated_in_eastern(monkeypatch):
+    # The index for tomorrow's UTC day is published at 19:00
+    # Eastern tonight; on an Eastern evening it is tonight's
+    # reading and is dated tonight (user direction 2026-11-02:
+    # "let's use EST") — never a day ahead, never (the morning
+    # bug) a day behind its source day.
+    import datetime
+
+    from toolbox.DataZoo.market.eastern import ET
+
+    today_et = datetime.datetime.now(ET).date()
+    tomorrow = today_et + datetime.timedelta(days=1)
+    stamp = int(datetime.datetime(
+        tomorrow.year, tomorrow.month, tomorrow.day,
+        tzinfo=datetime.timezone.utc).timestamp())
+    rows = [{"value": "40", "timestamp": str(stamp - 86400)},
+            {"value": "26", "timestamp": str(stamp)}]
+    monkeypatch.setattr(sm, "fetch_crypto_entries",
+                        lambda limit, timeout=30: rows)
+    out = sm.fetch_crypto()
+    assert out.index[-1].date() == today_et
+    assert out.iloc[-1] == 26
+
+
+def test_cap_to_eastern_today_merges_the_future_point():
+    # The cap itself (fetch_gold's live bar rides it): a final
+    # point dated tomorrow moves to today's Eastern date and
+    # wins over today's own earlier point; history untouched.
+    import datetime
+
+    import pandas as pd
+
+    from toolbox.DataZoo.market.eastern import ET
+
+    today_et = datetime.datetime.now(ET).date()
+    tomorrow = today_et + datetime.timedelta(days=1)
+    s = pd.Series([3900.0, 3956.0],
+                  index=pd.to_datetime(
+                      [today_et.isoformat(), tomorrow.isoformat()]))
+    out = sm._cap_to_eastern_today(s)
+    assert out.index[-1].date() == today_et
+    assert out.iloc[-1] == 3956.0
+    assert len(out) == 1
+    # A series already within Eastern today is returned as-is.
+    assert sm._cap_to_eastern_today(s.iloc[:1]).iloc[-1] == 3900.0
+
+
 def test_fetch_sentiment_degrades_per_source(monkeypatch):
     monkeypatch.setattr(sm, "fetch_cnn", lambda: _series([40] * 40))
     monkeypatch.setattr(sm, "fetch_crypto",

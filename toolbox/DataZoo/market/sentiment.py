@@ -126,6 +126,34 @@ def fetch_cnn():
                          [p["x"] for p in pts], "ms")
 
 
+def _cap_to_eastern_today(s):
+    """Re-date a final point that is future-dated in Eastern
+    terms to today's Eastern date (user direction 2026-11-02:
+    "let's use EST"). A UTC-day-keyed index is published at
+    19:00 Eastern on the evening BEFORE its UTC day, and a
+    futures bar trades this Eastern evening under tomorrow's
+    session date — left alone, both wear tomorrow's date all
+    evening. The newest reading is tonight's, and it is dated
+    tonight. Only a final point AHEAD of the Eastern date
+    moves (merging keep-last into today's point when one
+    exists); history is untouched, and the source day returns
+    on its own tomorrow, when the Eastern date reaches it.
+    The companion rule stands (same day, user-caught): a
+    day-keyed series is never dated BEHIND its source day
+    either — see fetch_crypto."""
+    if not len(s):
+        return s
+    from toolbox.DataZoo.market.eastern import ET
+
+    today = datetime.datetime.now(ET).date()
+    if s.index[-1].date() <= today:
+        return s
+    idx = list(s.index)
+    idx[-1] = pd.Timestamp(today)
+    out = pd.Series(list(s.values), index=idx)
+    return out[~out.index.duplicated(keep="last")].sort_index()
+
+
 def fetch_crypto():
     """Crypto Fear & Greed (alternative.me), 365 calendar days.
 
@@ -137,11 +165,15 @@ def fetch_crypto():
     in Eastern as instants, which labelled every value a day
     early — the current reading showed as yesterday's; the user
     caught it. Day-keyed daily series keep their source day;
-    the app's Eastern rule governs true instants.)
+    the app's Eastern rule governs true instants.) The final
+    point is Eastern-capped (see _cap_to_eastern_today): the
+    index for tomorrow's UTC day is published at 19:00 Eastern
+    tonight and is tonight's reading.
     """
     rows = fetch_crypto_entries(365, timeout=30)
-    return _daily_series([int(r["value"]) for r in rows],
-                         [int(r["timestamp"]) for r in rows], "s")
+    return _cap_to_eastern_today(_daily_series(
+        [int(r["value"]) for r in rows],
+        [int(r["timestamp"]) for r in rows], "s"))
 
 
 def fetch_gold():
@@ -154,7 +186,9 @@ def fetch_gold():
     stale). Yahoo stamps futures bars at midnight Eastern,
     so yahoo_daily's UTC-normalized dates are the exchange
     dates; include_partial keeps the live session's bar, as
-    the old range fetch did."""
+    the old range fetch did. The final point is Eastern-
+    capped (see _cap_to_eastern_today): the live bar trades
+    this Eastern evening under tomorrow's session date."""
     import time as _time
 
     from toolbox.DataZoo.market.yahoo_prices import yahoo_daily
@@ -162,7 +196,8 @@ def fetch_gold():
     s = yahoo_daily("GC=F",
                     p1=int(_time.time()) - 400 * 86400,
                     include_partial=True)
-    return s[~s.index.duplicated(keep="last")].sort_index()
+    s = s[~s.index.duplicated(keep="last")].sort_index()
+    return _cap_to_eastern_today(s)
 
 
 def fetch_sentiment():
