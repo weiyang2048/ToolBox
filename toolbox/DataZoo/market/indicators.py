@@ -1,9 +1,11 @@
-"""Portfolio risk indicators built on QuantStats.
+"""Portfolio risk indicators built on QuantStats, plus the pure
+12-1 momentum math.
 
 The functions in this module operate on plain pandas price or return
 series and have no display, data-fetching, or application coupling.
 QuantStats is an optional dependency: install ``toolbox[quantstats]``
-to use them.
+to use the drawdown / greeks functions; the momentum functions are
+pure pandas.
 """
 
 from __future__ import annotations
@@ -12,7 +14,14 @@ import numpy as np
 import pandas as pd
 import quantstats as qs
 
-__all__ = ["alpha_beta", "drawdown_stats"]
+__all__ = [
+    "DEFAULT_LOOKBACK_DAYS",
+    "DEFAULT_SKIP_DAYS",
+    "MIN_LOOKBACK_DAYS",
+    "alpha_beta",
+    "compute_momentum_universe",
+    "drawdown_stats",
+]
 
 _NAN = float("nan")
 
@@ -112,3 +121,81 @@ def alpha_beta(
         )
     except (TypeError, ValueError, KeyError, ZeroDivisionError):
         return _NAN, _NAN
+
+
+# ---------------------------------------------------------------------------
+# 12-1 momentum (moved from the Investments app's
+# src/indicators/momemtum.py at the user's direction 2026-11-03 —
+# the filename typo dies in the move). Pure math on pandas: the
+# defaults are the canonical 12-1 values (skip the most recent
+# month, look back a year, require a month of span); app callers
+# pass their own configured values explicitly at every call site.
+# ---------------------------------------------------------------------------
+
+DEFAULT_SKIP_DAYS = 21
+DEFAULT_LOOKBACK_DAYS = 252
+MIN_LOOKBACK_DAYS = 30
+
+
+def _compute_raw_momentum(
+    prices: pd.Series,
+    *,
+    skip_days: int,
+    lookback_days: int,
+    min_lookback_days: int = MIN_LOOKBACK_DAYS,
+) -> float | None:
+    """
+    12-1 momentum over available history:
+        mom_t = P(t - skip) / P(t - lookback) - 1
+    Lookback is clamped to available data length (min span enforced).
+    """
+    if prices is None or prices.empty:
+        return None
+
+    prices = prices.dropna()
+    if prices.empty or (prices <= 0).any():
+        raise ValueError("All prices must be positive for momentum calculation")
+    if skip_days < 0 or lookback_days <= skip_days:
+        return None
+    # Use whatever history is available: clamp the lookback window to the data,
+    # as long as the resulting span still meets the minimum required length.
+    effective_lookback = min(lookback_days, len(prices) - 1)
+    if effective_lookback - skip_days < min_lookback_days:
+        return None
+
+    end_idx = -(skip_days + 1)
+    start_idx = -(effective_lookback + 1)
+    end_price = prices.iloc[end_idx]
+    start_price = prices.iloc[start_idx]
+    if pd.isna(end_price) or pd.isna(start_price) or start_price <= 0:
+        return None
+
+    return float(end_price / start_price - 1)
+
+
+def compute_momentum_universe(
+    prices: pd.DataFrame,
+    *,
+    skip_days: int = DEFAULT_SKIP_DAYS,
+    lookback_days: int = DEFAULT_LOOKBACK_DAYS,
+    min_lookback_days: int = MIN_LOOKBACK_DAYS,
+) -> pd.Series:
+    """12-1 momentum per symbol; symbols whose history cannot
+    support the span are skipped."""
+    raw_scores: dict[str, float] = {}
+    for symbol in prices.columns:
+        try:
+            score = _compute_raw_momentum(
+                prices[symbol],
+                skip_days=skip_days,
+                lookback_days=lookback_days,
+                min_lookback_days=min_lookback_days,
+            )
+            if score is not None:
+                raw_scores[symbol] = float(score)
+        except (ValueError, IndexError):
+            continue
+
+    if not raw_scores:
+        return pd.Series(dtype=float)
+    return pd.Series(raw_scores, dtype=float)
