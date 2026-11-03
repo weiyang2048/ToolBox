@@ -678,12 +678,12 @@ def test_spacy_layer_failsoft_without_module():
     import toolbox.DataZoo.market.news_cloud as nc
     saved = _block_spacy_module()
     try:
-        assert nc._spacy_layer(_hybrid_pool()) is None
+        assert nc._combined_layer(_hybrid_pool()) is None
     finally:
         _restore_spacy_module(saved)
 
 
-def test_challenger_entry_is_the_spacy_layer_alone():
+def test_challenger_entry_combined_extraction():
     import pytest
     pytest.importorskip("spacy")
     try:
@@ -696,8 +696,8 @@ def test_challenger_entry_is_the_spacy_layer_alone():
     topics = extract_topics_challenger(_hybrid_pool(),
                                        max_topics=20,
                                        min_weight=3)
-    # The challenger adopted as-is: exactly its topics — the
-    # entity theme, with no incumbent topic beside it.
+    # The combined extractor on an entity-only pool: exactly
+    # the entity theme — no lexicon or mined topic fires.
     assert [t["term"] for t in topics] == ["Zelensky"]
 
 
@@ -727,3 +727,29 @@ def test_member_sets_honor_carried_members():
                "_members": {1}}]
     members = topic_member_sets(topics, heads)
     assert members["AI"] == {1}
+
+
+def test_combined_merges_lexicon_and_spacy_sources():
+    import pytest
+    pytest.importorskip("spacy")
+    try:
+        import spacy
+        spacy.load("en_core_web_sm")
+    except Exception:
+        pytest.skip("en_core_web_sm not installed")
+    from toolbox.DataZoo.market.news_cloud import (
+        extract_topics_challenger)
+    heads = _hybrid_pool()
+    for src, title in (
+            ("Wire A", "Binance freezes withdrawals after hack"),
+            ("Wire B", "Binance says funds are safe after breach"),
+            ("Wire A", "Binance halts trading amid investigation")):
+        heads.append({"title": title, "source": src,
+                      "link": "", "published": None})
+    topics = extract_topics_challenger(heads, max_topics=20,
+                                       min_weight=3)
+    terms = [t["term"] for t in topics]
+    # One theme per source strength: the lexicon's Binance
+    # and the spaCy layer's Zelensky both present, once each.
+    assert "Binance" in terms and "Zelensky" in terms
+    assert terms.count("Binance") == 1

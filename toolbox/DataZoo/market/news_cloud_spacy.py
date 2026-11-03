@@ -1,7 +1,11 @@
 """The word cloud's extractor: POS-pattern generation with
 spaCy (built as the from-scratch challenger, 2026-11-03;
 adopted standalone as the production extractor the same
-day, superseding the hybrid union built an hour earlier).
+day, superseding the hybrid union built an hour earlier;
+superseded in turn by the combined extractor below —
+challenger-3, adopted 2026-11-03 after the all-builders
+revisit — which keeps this module's generation as one of
+its three sources).
 
 Why a separate module: Streamlit Cloud caches imported
 modules across deploys, so new names in a long-imported
@@ -48,8 +52,14 @@ coverage axis of the 2026-11-03 head-to-head):
 from collections import Counter, defaultdict
 
 from toolbox.DataZoo.market.news_cloud import (
+    LEXICON,
+    _canon_of_term,
     _family_of,
+    _matches,
+    _mine_phrases,
     _representative,
+    _story_clusters,
+    topic_member_sets,
 )
 
 GENERIC_UNIGRAMS = {"stock", "stocks", "market", "markets",
@@ -256,6 +266,153 @@ def spacy_topics(headlines, min_stories=MIN_STORIES,
             "canon": label["key"],
             "surfaces": surfaces,
             "_members": hits_idx,
+        })
+    topics.sort(key=lambda t: (-t["weight"], t["term"]))
+    return topics[:max_topics]
+
+
+# ------------------------------------------------------------------
+# The combined extractor (challenger-3, adopted 2026-11-03)
+# ------------------------------------------------------------------
+def _display_surface(surfaces):
+    """A theme's display label from its pooled surfaces: the
+    most frequent capitalized variant when it carries >= 30%
+    of the top surface's count; an all-lowercase winner is a
+    mid-sentence form and takes title case (the incumbent's
+    mined-label house style)."""
+    if not surfaces:
+        return None
+    items = sorted(surfaces.items(), key=lambda kv: (-kv[1], kv[0]))
+    top_surface, top_count = items[0]
+    caps = [(s, c) for s, c in items if s[:1].isupper()]
+    if caps and caps[0][1] >= 0.3 * top_count:
+        return caps[0][0]
+    if not any(c.isupper() for c in top_surface):
+        return top_surface.title()
+    return top_surface
+
+
+def _gather_candidates(headlines, min_weight):
+    """Candidate records {key, term, source, surfaces,
+    members} from all three generators: the curated lexicon
+    (pattern matches), the n-gram miner, and this module's
+    spaCy generation (as feedstock, capped higher)."""
+    cands = []
+    lexicon_terms = []
+    for term, patterns, _group in LEXICON:
+        hits = {i for i, h in enumerate(headlines)
+                if any(_matches(p, h["title"].lower())
+                       for p in patterns)}
+        if len(hits) < min_weight:
+            continue
+        lexicon_terms.append(term)
+        cands.append({"key": tuple(_canon_of_term(term)),
+                      "term": term, "source": "lexicon",
+                      "surfaces": {term: len(hits)},
+                      "members": hits})
+    mined = _mine_phrases(headlines, lexicon_terms)
+    mined_members = topic_member_sets(mined, headlines)
+    for t in mined:
+        cands.append({"key": tuple(t["canon"]),
+                      "term": t["term"], "source": "mined",
+                      "surfaces": t.get("surfaces") or {},
+                      "members": mined_members[t["term"]]})
+    for t in spacy_topics(headlines, max_topics=40):
+        cands.append({"key": tuple(t["canon"]),
+                      "term": t["term"], "source": "spacy",
+                      "surfaces": t.get("surfaces") or {},
+                      "members": set(t["_members"])})
+    return cands
+
+
+def _cluster_themes(cands):
+    """Union-find across sources over three merge rules:
+    exact canon; lemma overlap >= 0.5 with a weight ratio
+    <= 3.0 (merges disjoint surface variants of one theme);
+    and containment (canon subset with >= 80% of the
+    smaller candidate's members inside the larger's)."""
+    parent = list(range(len(cands)))
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+
+    weights = [len(c["members"]) for c in cands]
+    for i, a in enumerate(cands):
+        for j, b in enumerate(cands[i + 1:], i + 1):
+            sa, sb = set(a["key"]), set(b["key"])
+            if sa == sb:
+                union(i, j)
+                continue
+            overlap = len(sa & sb) / max(1, min(len(sa), len(sb)))
+            ratio = max(weights[i], weights[j]) / max(
+                1, min(weights[i], weights[j]))
+            if overlap >= 0.5 and ratio <= 3.0:
+                union(i, j)
+                continue
+            if sa < sb or sb < sa:
+                small, big = (i, j) if sa < sb else (j, i)
+                ms = cands[small]["members"]
+                mb = cands[big]["members"]
+                if ms and len(ms & mb) >= 0.8 * len(ms):
+                    union(i, j)
+    themes = {}
+    for i, c in enumerate(cands):
+        themes.setdefault(find(i), []).append(c)
+    out = []
+    for members_ in themes.values():
+        hits = set().union(*(c["members"] for c in members_))
+        surfaces = {}
+        for c in members_:
+            for s, cnt in c["surfaces"].items():
+                surfaces[s] = surfaces.get(s, 0) + cnt
+        lex = [c for c in members_ if c["source"] == "lexicon"]
+        if lex:
+            label, label_key = lex[0]["term"], lex[0]["key"]
+        else:
+            best = max(members_, key=lambda c: len(c["members"]))
+            label = _display_surface(best["surfaces"]) \
+                or best["term"]
+            label_key = best["key"]
+        out.append({"term": label, "canon": label_key,
+                    "surfaces": surfaces, "members": hits,
+                    "mined": any(c["source"] != "lexicon"
+                                 for c in members_)})
+    return out
+
+
+def combined_topics(headlines, max_topics=20, min_weight=2):
+    """The production extraction (challenger-3, adopted
+    2026-11-03): three generators unioned, one cross-source
+    theme clustering, weights = the incumbent's story-cluster
+    counts over each theme's union members, a lexicon label
+    winning its theme, capitalized display surfaces. Raises
+    if spaCy is unavailable — the caller's wrapper converts
+    that to the incumbent fallback."""
+    clusters = _story_clusters(headlines)
+    topics = []
+    for t in _cluster_themes(_gather_candidates(headlines,
+                                                min_weight)):
+        weight = len({clusters[i] for i in t["members"]})
+        if weight < MIN_STORIES:
+            continue
+        hits = [headlines[i] for i in sorted(t["members"])]
+        rep = _representative(hits)
+        topics.append({
+            "term": t["term"], "weight": weight,
+            "example_headline": rep["title"],
+            "link": rep.get("link", ""),
+            "group": _family_of(t["term"].lower()),
+            "mined": t["mined"], "canon": t["canon"],
+            "surfaces": t["surfaces"],
+            "_members": t["members"],
         })
     topics.sort(key=lambda t: (-t["weight"], t["term"]))
     return topics[:max_topics]

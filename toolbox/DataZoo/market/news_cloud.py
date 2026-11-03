@@ -1165,17 +1165,18 @@ def _fold_containment(topics, headlines, members):
     return topics
 
 
-def _spacy_layer(headlines, max_topics=20):
-    """POS-pattern generation with spaCy (news_cloud_spacy),
-    imported lazily — spaCy is an optional dependency.
-    Returns the layer's topics, or None when the layer is
+def _combined_layer(headlines, max_topics=30, min_weight=2):
+    """The combined extractor (news_cloud_spacy.
+    combined_topics), imported lazily — it needs spaCy, an
+    optional dependency. Returns its topics, or None when
     unavailable (the package or its model not installed, or
     any failure): None is the fallback signal, distinct from
     an empty result."""
     try:
         from toolbox.DataZoo.market.news_cloud_spacy import (
-            spacy_topics)
-        return spacy_topics(headlines, max_topics=max_topics)
+            combined_topics)
+        return combined_topics(headlines, max_topics=max_topics,
+                               min_weight=min_weight)
     except Exception:
         return None
 
@@ -1220,14 +1221,18 @@ def extract_topics(headlines, max_topics=30, min_weight=2):
 
 def extract_topics_challenger(headlines, max_topics=30,
                               min_weight=2):
-    """The production extraction (user direction 2026-11-03):
-    the spaCy challenger, adopted as-is — its topics, labels
-    and distinct-story weights, with no incumbent gate,
-    dedupe or recount applied. Falls back to extract_topics
-    (the incumbent pipeline) when the spaCy layer is
-    unavailable or yields nothing, so the panel never goes
-    blank on a thin pool or a missing model."""
-    layer = _spacy_layer(headlines, max_topics=max_topics)
+    """The production extraction (user direction 2026-11-03,
+    final form): the combined extractor — challenger-3,
+    adopted after the all-builders revisit. Three generators
+    (lexicon, mining, spaCy POS generation) unioned under one
+    cross-source theme clustering, with story-cluster
+    weights and capitalized display surfaces. Falls back to
+    extract_topics (the incumbent pipeline) when the
+    combined layer is unavailable or yields nothing, so the
+    panel never goes blank on a thin pool or a missing
+    model."""
+    layer = _combined_layer(headlines, max_topics=max_topics,
+                            min_weight=min_weight)
     if layer:
         return layer[:max_topics]
     return extract_topics(headlines, max_topics=max_topics,
