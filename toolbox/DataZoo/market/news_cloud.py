@@ -236,6 +236,25 @@ ahead""".split())
 # output, pinned by its tests).
 _EDGE_JUNK = {"their", "his", "her", "our", "your", "my",
               "this", "that", "these", "those"}
+# The closed classes of English — wh-words, auxiliaries and
+# modals, personal and indefinite pronouns. State-of-the-art
+# keyphrase extractors generate candidates by part-of-speech
+# pattern (noun-phrase grammars: TextRank, KPMiner, TopicRank
+# all POS-filter); this inventory is that filter in lexicon
+# form, and its job is narrow: a closed-class token can never
+# be a phrase's content head. The 2026-11-03 "What Does"
+# leak: "what" and "does" sat in none of the enumerative
+# lists below, so each read as noun-like and a gram of two
+# function words passed the shape gate with no content word
+# at all.
+_CLOSED_CLASS = set("""what who whom whose which when where why how
+do does did done doing am is are was were be been being has have
+had having can could may might must shall will would ought
+i you he she it we they me him her us them one
+anyone anybody everyone everybody someone somebody
+anything everything something nothing""".split())
+_WH_WORDS = {"what", "who", "whom", "whose", "which", "when",
+             "where", "why", "how"}
 # Common headline verbs / adjectives: a gram built only from
 # these has no noun head ("Make Final" — verb + adjective).
 _HEAD_VERBS = set("""make makes made get gets take takes see sees hit hits
@@ -269,7 +288,8 @@ def _noun_like(tok):
     if tok.endswith(_NOMINAL_SUFFIXES):
         return True
     return (tok not in _HEAD_VERBS and tok not in _HEAD_ADJS
-            and tok not in STOPWORDS and tok not in _EDGE_JUNK)
+            and tok not in STOPWORDS and tok not in _EDGE_JUNK
+            and tok not in _CLOSED_CLASS)
 
 
 def _strong_head(tok):
@@ -765,7 +785,17 @@ def _mine_phrases(headlines, known_terms, top_n=10, min_weight=3):
                   if "merged_from" in t or not _template_bound(
                       [headlines[i]["title"] for i in
                        members.get(t["term"], set())])]
-    return folded
+    # Question-front fragments (2026-11-03): a surviving
+    # topic that still opens on a wh-word in under four
+    # tokens is the front of a question headline that never
+    # folded into a complete phrase ("What Does", "What
+    # Tariffs"). The filter runs on final topics only, never
+    # on fold seeds — the fold's adjudicated long form
+    # ("What Is Behind The Move", five tokens, pinned by its
+    # test) is built from wh-initial seeds and is untouched.
+    return [t for t in folded
+            if not (t["canon"][0] in _WH_WORDS
+                    and len(t["canon"]) < 4)]
 
 
 def _join_windows(a, b):
@@ -1000,6 +1030,13 @@ def topic_member_sets(topics, headlines):
     members = {}
     for t in topics:
         term = t["term"]
+        # A topic may carry its exact member set (the spaCy
+        # layer computes members by construction — POS spans
+        # in the title — where substring matching would
+        # misread short names: "ai" sits inside "said").
+        if t.get("_members") is not None:
+            members[term] = set(t["_members"])
+            continue
         hits = set()
         pat_terms = [term] + [m for m in (t.get("merged_from") or [])
                               if m != term]
@@ -1128,6 +1165,22 @@ def _fold_containment(topics, headlines, members):
     return topics
 
 
+def _spacy_phrases(headlines, known_terms):
+    """The hybrid's third candidate source (user direction
+    2026-11-03): POS-pattern generation with spaCy, in its
+    own module (news_cloud_spacy) and imported lazily —
+    spaCy is an optional dependency, and any failure (the
+    package or its model not installed) returns [] so the
+    cloud is the incumbent lexicon + mining pipeline,
+    unchanged."""
+    try:
+        from toolbox.DataZoo.market.news_cloud_spacy import (
+            spacy_topics)
+        return spacy_topics(headlines, known_terms)
+    except Exception:
+        return []
+
+
 def extract_topics(headlines, max_topics=30, min_weight=2):
     """Weight lexicon topics by distinct-headline mentions, merged
     with phrases mined from the whole sample on equal footing.
@@ -1149,6 +1202,7 @@ def extract_topics(headlines, max_topics=30, min_weight=2):
                        "group": group,
                        "canon": _canon_of_term(term)})
     topics += _mine_phrases(headlines, [t["term"] for t in topics])
+    topics += _spacy_phrases(headlines, [t["term"] for t in topics])
     topics = _group_exact(topics, headlines)
     members = topic_member_sets(topics, headlines)
     topics = _fold_containment(topics, headlines, members)

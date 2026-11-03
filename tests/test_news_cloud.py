@@ -602,3 +602,106 @@ def test_ahead_of_earnings_is_scaffolding_not_a_topic():
                       source="B"))
     terms = {t["term"] for t in _mine_phrases(heads, [])}
     assert not any("Ahead" in t for t in terms)
+
+
+def test_shape_gate_rejects_closed_class_fragments():
+    # 2026-11-03: "What Does" rendered live as a topic — a
+    # gram of two function words (wh-word + auxiliary) whose
+    # tokens sat in none of the gate's enumerative lists, so
+    # each read as noun-like. Closed-class tokens can no
+    # longer be a phrase's content head.
+    from toolbox.DataZoo.market.news_cloud import _shape_ok
+    assert not _shape_ok(("what", "does"))
+    assert not _shape_ok(("how", "does"))
+    assert not _shape_ok(("who", "will"))
+    # The window fold's adjudicated question phrase still
+    # passes the shared gate on its content head.
+    assert _shape_ok(("what", "is", "behind", "the", "move"))
+
+
+def test_mining_rejects_question_fragments():
+    from toolbox.DataZoo.market.news_cloud import _mine_phrases
+    heads = []
+    for src, tail in (("A", "jobs report"), ("B", "inflation data"),
+                      ("C", "tariff ruling"), ("A", "dollar slide")):
+        heads.append({"title": "What does the %s mean for the Fed"
+                               % tail,
+                      "source": src, "link": "", "published": None})
+    for src, tail in (("A", "on export hopes"),
+                      ("B", "as demand grows"),
+                      ("C", "after earnings")):
+        heads.append({"title": "Semiconductor shares climb " + tail,
+                      "source": src, "link": "", "published": None})
+    mined = _mine_phrases(heads, [], top_n=10, min_weight=3)
+    terms = [t["term"] for t in mined]
+    assert "What Does" not in terms
+    assert not any(t.startswith("What") for t in terms)
+    assert any(t.startswith("Semiconductor Shares") for t in terms)
+
+
+def _hybrid_pool():
+    """An entity theme neither the lexicon nor the n-gram
+    miner can produce: a person named across stories with
+    varying verbs (no shared bigram), plus filler."""
+    heads = []
+    for src, title in (
+            ("Wire A", "Zelensky addresses parliament in Kyiv"),
+            ("Wire B", "Zelensky meets European leaders in Berlin"),
+            ("Wire A", "Zelensky signs new defense decree"),
+            ("Wire B", "Zelensky warns of a hard winter ahead"),
+            ("Wire A", "Stocks drift as traders await data"),
+            ("Wire B", "Bonds steady ahead of the auction")):
+        heads.append({"title": title, "source": src,
+                      "link": "", "published": None})
+    return heads
+
+
+def test_spacy_layer_adds_entity_theme():
+    import pytest
+    pytest.importorskip("spacy")
+    try:
+        import spacy
+        spacy.load("en_core_web_sm")
+    except Exception:
+        pytest.skip("en_core_web_sm not installed")
+    from toolbox.DataZoo.market.news_cloud import extract_topics
+    topics = extract_topics(_hybrid_pool(), max_topics=20,
+                            min_weight=3)
+    terms = [t["term"] for t in topics]
+    assert "Zelensky" in terms
+
+
+def test_spacy_layer_failsoft_without_module():
+    # With the spaCy module unimportable, the wrapper returns
+    # [] and extraction is the incumbent pipeline's alone.
+    import sys
+
+    import toolbox.DataZoo.market.news_cloud as nc
+    saved = sys.modules.get(
+        "toolbox.DataZoo.market.news_cloud_spacy")
+    sys.modules["toolbox.DataZoo.market.news_cloud_spacy"] = None
+    try:
+        assert nc._spacy_phrases(_hybrid_pool(), []) == []
+    finally:
+        if saved is None:
+            del sys.modules[
+                "toolbox.DataZoo.market.news_cloud_spacy"]
+        else:
+            sys.modules[
+                "toolbox.DataZoo.market.news_cloud_spacy"] = saved
+
+
+def test_member_sets_honor_carried_members():
+    # A topic carrying its exact member set is matched by
+    # construction, not by substring: "ai" must not match
+    # the "ai" inside "said".
+    from toolbox.DataZoo.market.news_cloud import topic_member_sets
+    heads = [{"title": "He said the plan again", "source": "A",
+              "link": "", "published": None},
+             {"title": "AI spending rises", "source": "B",
+              "link": "", "published": None}]
+    topics = [{"term": "AI", "weight": 1, "group": "tech",
+               "canon": ("ai",), "mined": True,
+               "_members": {1}}]
+    members = topic_member_sets(topics, heads)
+    assert members["AI"] == {1}
