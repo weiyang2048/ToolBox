@@ -21,7 +21,7 @@ from toolbox.DataZoo.market.news_cloud import (
     _FRAME_CSS,
     FAMILY_GRADIENTS,
     _sizes,
-    extract_topics,
+    extract_topics_challenger,
     fetch_headlines,
     topic_member_sets,
 )
@@ -292,7 +292,7 @@ def build_linked_cloud_html(hours=24):
     line to the links explanation."""
     now = datetime.now(timezone.utc)
     headlines, source_counts = fetch_headlines(hours=hours, now=now)
-    topics = extract_topics(headlines)
+    topics = extract_topics_challenger(headlines)
     if not topics:
         return ""
     try:

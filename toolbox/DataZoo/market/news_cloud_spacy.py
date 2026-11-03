@@ -1,5 +1,7 @@
-"""The word cloud's third candidate source: POS-pattern
-generation with spaCy (the hybrid, user direction 2026-11-03).
+"""The word cloud's extractor: POS-pattern generation with
+spaCy (built as the from-scratch challenger, 2026-11-03;
+adopted standalone as the production extractor the same
+day, superseding the hybrid union built an hour earlier).
 
 Why a separate module: Streamlit Cloud caches imported
 modules across deploys, so new names in a long-imported
@@ -7,8 +9,9 @@ module can arrive as ImportError in production (the
 2026-10-30 lesson recorded in news_cloud_links) — and spaCy
 is an optional dependency. news_cloud imports this module
 lazily, inside a fail-soft wrapper: where spaCy or its model
-is not installed, the cloud is the incumbent pipeline
-(lexicon + mined phrases), unchanged.
+is not installed (or a pool yields nothing), the cloud
+falls back to the incumbent pipeline (lexicon + mined
+phrases), so the panel never goes blank.
 
 What this layer adds (the head-to-head finding, demos/
 news-cloud-sota): the incumbent's miner sees only 2-3 grams
@@ -19,10 +22,10 @@ invisible to it. spaCy noun chunks + named-entity spans are
 the literature's candidate front end (TextRank / KPMiner /
 TopicRank all generate by POS pattern); this module
 generates those candidates, canonicalizes by lemma, pools
-sub-spans, and hands them to the incumbent pipeline as
-ordinary mined topics — the incumbent's shape gate, outlet
-gate, grouping, containment fold and story-cluster recount
-then adjudicate them like any other candidate.
+sub-spans, and adjudicates them with its own containment
+dedup and theme clustering. Adopted as-is: no lexicon
+dedupe and no incumbent gate is applied to its candidates —
+its weights are distinct-story counts, exactly as built.
 
 Generation rules (ported from the challenger that won the
 coverage axis of the 2026-11-03 head-to-head):
@@ -40,16 +43,13 @@ coverage axis of the 2026-11-03 head-to-head):
   * candidates are deduped among themselves by containment
     and by lemma-overlap theme clustering (surface variants
     of one theme carry disjoint story sets, so only lemma
-    overlap can merge them), and against the lexicon by
-    lemma overlap — the curated label always wins its theme.
+    overlap can merge them).
 """
 from collections import Counter, defaultdict
 
 from toolbox.DataZoo.market.news_cloud import (
-    _canon_of_term,
     _family_of,
     _representative,
-    _shape_ok,
 )
 
 GENERIC_UNIGRAMS = {"stock", "stocks", "market", "markets",
@@ -58,7 +58,7 @@ GENERIC_UNIGRAMS = {"stock", "stocks", "market", "markets",
 EDGE_STRIP = {"the", "a", "an", "its", "his", "her", "their",
               "this", "that", "these", "those", "'s", "new"}
 MIN_STORIES = 3
-MAX_TOPICS = 12
+MAX_TOPICS = 20
 
 _NLP = None
 _NLP_FAILED = False
@@ -134,12 +134,13 @@ def _candidate_spans(doc):
     return out
 
 
-def spacy_topics(headlines, known_terms, min_stories=MIN_STORIES):
-    """Topic dicts in the incumbent mined shape (term,
-    weight, group, canon, surfaces, example/link, _members)
-    for the spaCy-generated candidates that clear the bars.
-    Raises if spaCy is unavailable — the caller's wrapper
-    converts that to an empty layer."""
+def spacy_topics(headlines, min_stories=MIN_STORIES,
+                 max_topics=MAX_TOPICS):
+    """Topic dicts in the cloud's topic shape (term, weight,
+    group, canon, surfaces, example/link, _members) for the
+    spaCy-generated candidates that clear the bars. Raises
+    if spaCy is unavailable — the caller's wrapper converts
+    that to the incumbent fallback."""
     nlp = _load_nlp()
     # Work per distinct title (wire duplicates are one
     # story); members are recorded against the FULL headline
@@ -168,7 +169,6 @@ def spacy_topics(headlines, known_terms, min_stories=MIN_STORIES):
                 headlines[by_title[title][0]].get("source", ""))
             cand_surfaces[key][per_story[key]] += 1
     pool_outlets = len({h.get("source", "") for h in headlines})
-    known_canons = [set(_canon_of_term(t)) for t in known_terms]
     cands = []
     for key, members in cand_members.items():
         stories = {headlines[i]["title"] for i in members}
@@ -184,18 +184,6 @@ def spacy_topics(headlines, known_terms, min_stories=MIN_STORIES):
                 continue
             if len(cand_full[key]) < 0.5 * len(stories):
                 continue
-        # The incumbent's shape gate judges the canon like
-        # any mined candidate's.
-        if not _shape_ok(key):
-            continue
-        # The lexicon's curated label wins its theme: drop a
-        # candidate whose lemma set overlaps a known term's
-        # canon by >= 0.5 of the smaller set.
-        key_set = set(key)
-        if any(len(key_set & kc) / max(1, min(len(key_set),
-                                              len(kc))) >= 0.5
-               for kc in known_canons):
-            continue
         surface = cand_surfaces[key].most_common(1)[0][0]
         cands.append({"key": key, "term": surface,
                       "members": set(members),
@@ -270,4 +258,4 @@ def spacy_topics(headlines, known_terms, min_stories=MIN_STORIES):
             "_members": hits_idx,
         })
     topics.sort(key=lambda t: (-t["weight"], t["term"]))
-    return topics[:MAX_TOPICS]
+    return topics[:max_topics]

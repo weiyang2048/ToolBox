@@ -1165,20 +1165,19 @@ def _fold_containment(topics, headlines, members):
     return topics
 
 
-def _spacy_phrases(headlines, known_terms):
-    """The hybrid's third candidate source (user direction
-    2026-11-03): POS-pattern generation with spaCy, in its
-    own module (news_cloud_spacy) and imported lazily —
-    spaCy is an optional dependency, and any failure (the
-    package or its model not installed) returns [] so the
-    cloud is the incumbent lexicon + mining pipeline,
-    unchanged."""
+def _spacy_layer(headlines, max_topics=20):
+    """POS-pattern generation with spaCy (news_cloud_spacy),
+    imported lazily — spaCy is an optional dependency.
+    Returns the layer's topics, or None when the layer is
+    unavailable (the package or its model not installed, or
+    any failure): None is the fallback signal, distinct from
+    an empty result."""
     try:
         from toolbox.DataZoo.market.news_cloud_spacy import (
             spacy_topics)
-        return spacy_topics(headlines, known_terms)
+        return spacy_topics(headlines, max_topics=max_topics)
     except Exception:
-        return []
+        return None
 
 
 def extract_topics(headlines, max_topics=30, min_weight=2):
@@ -1202,7 +1201,6 @@ def extract_topics(headlines, max_topics=30, min_weight=2):
                        "group": group,
                        "canon": _canon_of_term(term)})
     topics += _mine_phrases(headlines, [t["term"] for t in topics])
-    topics += _spacy_phrases(headlines, [t["term"] for t in topics])
     topics = _group_exact(topics, headlines)
     members = topic_member_sets(topics, headlines)
     topics = _fold_containment(topics, headlines, members)
@@ -1218,6 +1216,22 @@ def extract_topics(headlines, max_topics=30, min_weight=2):
                            for i in members.get(t["term"], set())})
     topics.sort(key=lambda t: (-t["weight"], t["term"]))
     return topics[:max_topics]
+
+
+def extract_topics_challenger(headlines, max_topics=30,
+                              min_weight=2):
+    """The production extraction (user direction 2026-11-03):
+    the spaCy challenger, adopted as-is — its topics, labels
+    and distinct-story weights, with no incumbent gate,
+    dedupe or recount applied. Falls back to extract_topics
+    (the incumbent pipeline) when the spaCy layer is
+    unavailable or yields nothing, so the panel never goes
+    blank on a thin pool or a missing model."""
+    layer = _spacy_layer(headlines, max_topics=max_topics)
+    if layer:
+        return layer[:max_topics]
+    return extract_topics(headlines, max_topics=max_topics,
+                          min_weight=min_weight)
 
 
 # ------------------------------------------------------------------
@@ -1402,7 +1416,7 @@ def build_cloud(png_path=DEFAULT_PNG, json_path=DEFAULT_JSON, hours=24):
     summary dict that is also written to json_path."""
     now = datetime.now(timezone.utc)
     headlines, source_counts = fetch_headlines(hours=hours, now=now)
-    topics = extract_topics(headlines)
+    topics = extract_topics_challenger(headlines)
     try:
         from toolbox.DataZoo.market.eastern import asof_stamp
         asof = asof_stamp(now)

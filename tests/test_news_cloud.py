@@ -656,7 +656,34 @@ def _hybrid_pool():
     return heads
 
 
-def test_spacy_layer_adds_entity_theme():
+def _block_spacy_module():
+    import sys
+    saved = sys.modules.get(
+        "toolbox.DataZoo.market.news_cloud_spacy")
+    sys.modules["toolbox.DataZoo.market.news_cloud_spacy"] = None
+    return saved
+
+
+def _restore_spacy_module(saved):
+    import sys
+    if saved is None:
+        del sys.modules["toolbox.DataZoo.market.news_cloud_spacy"]
+    else:
+        sys.modules["toolbox.DataZoo.market.news_cloud_spacy"] = saved
+
+
+def test_spacy_layer_failsoft_without_module():
+    # With the spaCy module unimportable, the layer reports
+    # None — the signal the production entry falls back on.
+    import toolbox.DataZoo.market.news_cloud as nc
+    saved = _block_spacy_module()
+    try:
+        assert nc._spacy_layer(_hybrid_pool()) is None
+    finally:
+        _restore_spacy_module(saved)
+
+
+def test_challenger_entry_is_the_spacy_layer_alone():
     import pytest
     pytest.importorskip("spacy")
     try:
@@ -664,31 +691,26 @@ def test_spacy_layer_adds_entity_theme():
         spacy.load("en_core_web_sm")
     except Exception:
         pytest.skip("en_core_web_sm not installed")
-    from toolbox.DataZoo.market.news_cloud import extract_topics
-    topics = extract_topics(_hybrid_pool(), max_topics=20,
-                            min_weight=3)
-    terms = [t["term"] for t in topics]
-    assert "Zelensky" in terms
+    from toolbox.DataZoo.market.news_cloud import (
+        extract_topics_challenger)
+    topics = extract_topics_challenger(_hybrid_pool(),
+                                       max_topics=20,
+                                       min_weight=3)
+    # The challenger adopted as-is: exactly its topics — the
+    # entity theme, with no incumbent topic beside it.
+    assert [t["term"] for t in topics] == ["Zelensky"]
 
 
-def test_spacy_layer_failsoft_without_module():
-    # With the spaCy module unimportable, the wrapper returns
-    # [] and extraction is the incumbent pipeline's alone.
-    import sys
-
+def test_challenger_entry_falls_back_without_spacy():
     import toolbox.DataZoo.market.news_cloud as nc
-    saved = sys.modules.get(
-        "toolbox.DataZoo.market.news_cloud_spacy")
-    sys.modules["toolbox.DataZoo.market.news_cloud_spacy"] = None
+    saved = _block_spacy_module()
     try:
-        assert nc._spacy_phrases(_hybrid_pool(), []) == []
+        pool = _hybrid_pool()
+        assert nc.extract_topics_challenger(
+            pool, max_topics=20, min_weight=3) == nc.extract_topics(
+            pool, max_topics=20, min_weight=3)
     finally:
-        if saved is None:
-            del sys.modules[
-                "toolbox.DataZoo.market.news_cloud_spacy"]
-        else:
-            sys.modules[
-                "toolbox.DataZoo.market.news_cloud_spacy"] = saved
+        _restore_spacy_module(saved)
 
 
 def test_member_sets_honor_carried_members():
