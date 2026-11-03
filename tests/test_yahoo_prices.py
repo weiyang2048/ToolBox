@@ -227,6 +227,40 @@ def test_repaired_adjclose_noops_on_a_filled_bar():
     assert yp._repaired_adjclose(r) == [29.47, 29.41]
 
 
+def _crypto_result():
+    # BTC-USD, Oct 30 - Nov 3 2026: the Nov 2 bar entirely
+    # unfilled, the Nov 3 bar live; bars are contiguous, so
+    # Nov 3's open is Nov 2's close.
+    r = _result([77198.21, None])
+    r["timestamp"] = [_stamp(2026, 10, 30), _stamp(2026, 10, 31),
+                      _stamp(2026, 11, 1), _stamp(2026, 11, 2),
+                      _stamp(2026, 11, 3)]
+    r["indicators"]["quote"][0]["close"] = [
+        77198.21, 77434.75, 78248.45, None, 76813.70]
+    r["indicators"]["quote"][0]["open"] = [
+        77775.11, 77198.21, 77434.75, None, 76683.89]
+    r["indicators"]["adjclose"][0]["adjclose"] = [
+        77198.21, 77434.75, 78248.45, None, 76813.70]
+    r["meta"] = {"instrumentType": "CRYPTOCURRENCY",
+                 "regularMarketPrice": 76813.70,
+                 "regularMarketTime": _stamp(2026, 11, 3, 2)}
+    return r
+
+
+def test_repaired_adjclose_fills_a_crypto_interior_bar():
+    out = yp._repaired_adjclose(_crypto_result())
+    assert out[3] == 76683.89  # the next bar's open, ratio 1
+    assert out[4] == 76813.70  # the live bar untouched
+
+
+def test_repaired_adjclose_leaves_an_equity_interior_bar():
+    r = _crypto_result()
+    r["meta"] = {"instrumentType": "EQUITY",
+                 "regularMarketPrice": 76813.70,
+                 "regularMarketTime": _stamp(2026, 11, 3, 2)}
+    assert yp._repaired_adjclose(r)[3] is None
+
+
 def test_yahoo_daily_slices_a_wider_cached_window(monkeypatch):
     # Bars at p1-1d, p1, p1+1d, p2, p2+1d in the cached payload;
     # only the ones inside [p1, p2] may come back.

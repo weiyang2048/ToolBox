@@ -203,51 +203,73 @@ def chart_payload(ticker, p1=0, p2=None):
 
 
 def _repaired_adjclose(r):
-    """The payload result's adjclose list, with a trailing null
-    bar filled from the payload meta when Yahoo has published
-    the session's price there but not yet filled the daily bar
-    (observed 2026-11-02: hours after the Monday close the
-    Nov 2 bar still sat null on both chart hosts while
-    meta.regularMarketPrice already carried the close — every
-    equity series read a session stale). The fill is
-    regularMarketPrice scaled by the standing adjustment ratio
-    (the last valid bar's adjclose / raw close — Yahoo anchors
-    adjclose so the ratio is ~1 at the recent end). Skipped
-    when a dividend or split event lands after the last valid
-    bar (the ratio changes on exactly those days), when the
-    meta price is missing, or when its New York date is not
-    the null bar's session date."""
+    """The payload result's adjclose list with Yahoo's unfilled
+    bars repaired from the same payload (observed 2026-11-02,
+    hours after the Monday close: the Nov 2 bar sat null on
+    both chart hosts for every equity while meta already
+    carried the close, and BTC-USD's whole Nov 2 bar sat null
+    behind its filled Nov 3 bar — series read a session stale
+    and the BTC correlations lost Monday entirely).
+
+    Two fills, both scaled by the standing adjustment ratio
+    (a valid bar's adjclose / raw close — Yahoo anchors
+    adjclose so the ratio is ~1 at the recent end):
+
+    - A TRAILING null bar fills from meta.regularMarketPrice.
+      Skipped when a dividend or split event lands after the
+      last valid bar (the ratio changes on exactly those
+      days), when the meta price is missing, or when its New
+      York date is not the null bar's session date.
+    - An INTERIOR null bar fills from the next bar's open —
+      only for CRYPTOCURRENCY payloads, whose bars are
+      contiguous (the payload itself shows each bar's open
+      equal to the prior close); an equity's next open gaps
+      overnight and fills nothing."""
     ts = r.get("timestamp") or []
     adj = list(r["indicators"]["adjclose"][0]["adjclose"])
-    if not ts or not adj or adj[-1] is not None:
+    if not ts or not adj or all(a is not None for a in adj):
         return adj
-    valid = [i for i, a in enumerate(adj) if a is not None]
-    if not valid:
-        return adj
-    meta = r.get("meta") or {}
-    price, mtime = (meta.get("regularMarketPrice"),
-                    meta.get("regularMarketTime"))
-    if not price or not mtime:
-        return adj
-    ny = ZoneInfo("America/New_York")
+    closes = ((r["indicators"].get("quote") or [{}])[0]
+              .get("close") or [])
 
-    def _ny_day(stamp):
-        return datetime.datetime.fromtimestamp(
-            stamp, datetime.timezone.utc).astimezone(ny).date()
+    def _ratio(i):
+        raw = closes[i] if i < len(closes) else None
+        return adj[i] / raw if raw else None
 
-    if _ny_day(ts[-1]) != _ny_day(mtime):
-        return adj
-    last = valid[-1]
-    events = r.get("events") or {}
-    for kind in ("dividends", "splits"):
-        for ev in (events.get(kind) or {}).values():
-            if (ev.get("date") or 0) > ts[last]:
-                return adj
-    closes = r["indicators"]["quote"][0]["close"]
-    raw = closes[last] if last < len(closes) else None
-    if not raw:
-        return adj
-    adj[-1] = price * adj[last] / raw
+    if adj[-1] is None:
+        valid = [i for i, a in enumerate(adj) if a is not None]
+        meta = r.get("meta") or {}
+        price, mtime = (meta.get("regularMarketPrice"),
+                        meta.get("regularMarketTime"))
+        if valid and price and mtime:
+            ny = ZoneInfo("America/New_York")
+
+            def _ny_day(stamp):
+                return datetime.datetime.fromtimestamp(
+                    stamp, datetime.timezone.utc).astimezone(ny).date()
+
+            last = valid[-1]
+            events = r.get("events") or {}
+            blocked = any(
+                (ev.get("date") or 0) > ts[last]
+                for kind in ("dividends", "splits")
+                for ev in (events.get(kind) or {}).values())
+            ratio = _ratio(last)
+            if (not blocked and ratio is not None
+                    and _ny_day(ts[-1]) == _ny_day(mtime)):
+                adj[-1] = price * ratio
+    if (r.get("meta") or {}).get("instrumentType") \
+            == "CRYPTOCURRENCY":
+        opens = ((r["indicators"].get("quote") or [{}])[0]
+                 .get("open") or [])
+        for i in range(len(adj) - 1):
+            if adj[i] is not None or i + 1 >= len(opens) \
+                    or not opens[i + 1]:
+                continue
+            prior = [j for j in range(i) if adj[j] is not None]
+            ratio = _ratio(prior[-1]) if prior else None
+            if ratio is not None:
+                adj[i] = opens[i + 1] * ratio
     return adj
 
 
