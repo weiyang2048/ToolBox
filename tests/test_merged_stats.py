@@ -29,7 +29,7 @@ SECTORS = ["EXI", "IXC", "IXG", "IXJ", "IXN", "IXP",
 A_COLS = ["last", "mu_ann", "vol_ann", "sharpe0", "momentum_12_1",
           "max_dd", "beta", "n_obs"]
 ALL_COLS = ["rebased", "day_chg", "wk_chg", "mo_chg", "q_chg",
-            "ytd_chg", "px_ema20", "ema_long", "ema_regime", "mu_ann",
+            "ytd_chg", "yr_chg", "px_ema20", "ema_long", "ema_regime", "mu_ann",
             "vol_ann", "vol", "sharpe0", "sharpe",
             "ulcer", "win_rate", "dd", "dd_q", "max_dd", "beta"]
 # asset_stats columns the merged table drops (removal passes 1-2,
@@ -61,6 +61,19 @@ def test_merged_stats_shape_offline():
     assert pd.isna(out.loc["AAA", "win_rate"])  # no benchmark frame
     assert pd.isna(out.loc["AAA", "beta"])      # no benchmark series
     assert out.loc["AAA", "ema_regime"] is not None  # 300 sessions
+
+
+def test_merged_stats_yr_chg_offline():
+    # The one-year change: trailing 252 sessions on the full
+    # history; NaN under 253 closes.
+    idx = pd.bdate_range("2023-01-02", periods=300)
+    px = pd.DataFrame(
+        {"CCC": 100.0 * 1.001 ** np.arange(len(idx))}, index=idx)
+    out = merged_stats(px)
+    assert out.loc["CCC", "yr_chg"] == pytest.approx(
+        1.001 ** 252 - 1.0)
+    short = merged_stats(px.iloc[:100])
+    assert pd.isna(short.loc["CCC", "yr_chg"])
 
 
 @pytest.fixture(scope="module")

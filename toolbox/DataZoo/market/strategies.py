@@ -954,7 +954,11 @@ def merged_stats(prices: pd.DataFrame,
       briefs' ~1y window basis): ``day_chg``, ``wk_chg`` (5),
       ``mo_chg`` (21), ``q_chg`` (63) trailing-session changes,
       ``ytd_chg`` (vs the last close of the prior calendar year
-      inside the window; NaN when the window holds none), ``vol``
+      inside the window; NaN when the window holds none),
+      ``yr_chg`` (the trailing 252-session change on the FULL
+      passed history — the one-year price change, added at the
+      user's direction 2026-11-02 for the Strategies Prices
+      table; NaN under 253 closes), ``vol``
       (annualised log-return vol over the window), ``sharpe``
       (daily SIMPLE returns in excess of the contemporaneous
       ^IRX-style yield — ``rf_annual_pct`` converted daily exactly
@@ -1000,6 +1004,10 @@ def merged_stats(prices: pd.DataFrame,
         prior = w[w.index <= ytd_cut]
         row["ytd_chg"] = (float(w.iloc[-1] / prior.iloc[-1] - 1.0)
                           if len(prior) else float("nan"))
+        row["yr_chg"] = (float(px.iloc[-1]
+                               / px.iloc[-TRADING_DAYS - 1] - 1.0)
+                         if len(px) >= TRADING_DAYS + 1
+                         else float("nan"))
         row["px_ema20"] = _ema_state(px, 20, None)
         row["ema_long"] = _ema_state(px, 20, 50)
         row["ema_regime"] = _ema_state(px, 50, 200)
