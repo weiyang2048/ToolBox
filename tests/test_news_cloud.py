@@ -763,3 +763,25 @@ def test_family_of_politics_and_short_cues():
     assert _family_of("strait of hormuz") != "tech"
     assert _family_of("ai") == "tech"
     assert _family_of("ai stocks rally") == "tech"
+
+
+def test_headline_tone_and_gradient():
+    from toolbox.DataZoo.market.news_cloud import (
+        headline_tone, tone_gradient, tone_colored)
+    assert headline_tone("Stocks rally as profits surge") > 0
+    assert headline_tone("Selloff deepens amid crisis fears") < 0
+    assert headline_tone("Senate panel meets Tuesday") == 0
+    assert headline_tone("Sell-off worsens") < 0  # hyphen folds
+    light, deep = tone_gradient(0.0)
+    assert deep == "#000000"
+    assert tone_gradient(0.8)[1] == "#1A9E4A"
+    assert tone_gradient(-0.8)[1] == "#D62820"
+    assert tone_gradient(99.0) == tone_gradient(0.8)  # clamps
+    heads = [{"title": "AI stocks rally", "link": ""},
+             {"title": "AI rally continues", "link": ""}]
+    topics = [{"term": "AI", "weight": 2, "group": "tech",
+               "canon": "ai", "example_headline": heads[0]["title"],
+               "link": ""}]
+    out = tone_colored(topics, heads)
+    assert out[0]["group"] == "tech"  # family stays metadata
+    assert out[0]["tone"] > 0 and out[0]["tone_color"] != "#000000"

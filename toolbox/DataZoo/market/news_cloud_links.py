@@ -23,6 +23,7 @@ from toolbox.DataZoo.market.news_cloud import (
     _sizes,
     extract_topics_challenger,
     fetch_headlines,
+    tone_colored,
     topic_member_sets,
 )
 
@@ -180,6 +181,16 @@ def linked_cloud_html(topics, edges, caption=None):
             '<linearGradient id="ncg-{}" x1="0" y1="0" x2="0" y2="1">'
             '<stop offset="15%" stop-color="{}"/>'
             '<stop offset="85%" stop-color="{}"/></linearGradient>'.format(fam, light, deep))
+    # Tone gradients: one per topic — the tone scale is
+    # continuous, so no shared family def can carry it.
+    for i, t in enumerate(topics):
+        if "tone_color" in t:
+            grads.append(
+                '<linearGradient id="ncg-tone-{}" x1="0" y1="0" '
+                'x2="0" y2="1"><stop offset="15%" '
+                'stop-color="{}"/><stop offset="85%" '
+                'stop-color="{}"/></linearGradient>'.format(
+                    i, t["tone_light"], t["tone_color"]))
     paths = []
     for k, (a, b, s) in enumerate(triples):
         if a not in nodes or b not in nodes:
@@ -190,18 +201,31 @@ def linked_cloud_html(topics, edges, caption=None):
         d = math.hypot(dx, dy) or 1.0
         bend = 0.10 * d * (1 if k % 2 == 0 else -1)
         cx, cy = mx - dy / d * bend, my + dx / d * bend
-        same = (by_term[a]["group"] == by_term[b]["group"]
-                and by_term[a]["group"] != "neutral")
-        color = (FAMILY_GRADIENTS[by_term[a]["group"]][1]
-                 if same else "#9A8A70")
+        if "tone_color" in by_term[a] \
+                and "tone_color" in by_term[b]:
+            # The link takes the average of its endpoints'
+            # tone colors.
+            ca = [int(by_term[a]["tone_color"][j:j + 2], 16)
+                  for j in (1, 3, 5)]
+            cb = [int(by_term[b]["tone_color"][j:j + 2], 16)
+                  for j in (1, 3, 5)]
+            color = "#{:02X}{:02X}{:02X}".format(
+                *[round((x + y) / 2) for x, y in zip(ca, cb)])
+        else:
+            same = (by_term[a]["group"] == by_term[b]["group"]
+                    and by_term[a]["group"] != "neutral")
+            color = (FAMILY_GRADIENTS[by_term[a]["group"]][1]
+                     if same else "#9A8A70")
         paths.append(
             '<path d="M {:.1f} {:.1f} Q {:.1f} {:.1f} {:.1f} {:.1f}" fill="none" '
             'stroke="{}" stroke-opacity="{:.2f}" stroke-width="{:.1f}" '
             'stroke-linecap="round"/>'.format(na["x"], na["y"], cx, cy, nb["x"], nb["y"], color,
                0.16 + 0.30 * (s / smax), 1.0 + 2.4 * (s / smax)))
     texts = []
-    for t in topics:
+    for i, t in enumerate(topics):
         n = nodes[t["term"]]
+        fill_id = ("tone-{}".format(i) if "tone_color" in t
+                   else t["group"])
         text_el = (
             '<text x="{:.1f}" y="{:.1f}" text-anchor="middle" '
             'dominant-baseline="central" font-size="{}" '
@@ -209,7 +233,7 @@ def linked_cloud_html(topics, edges, caption=None):
             'style="paint-order:stroke;stroke:#FBF7EE;stroke-width:5px">'
             '{}</text>'
             .format(n["x"], n["y"], sizes[t["term"]],
-                    700 if t["weight"] >= 8 else 600, t["group"],
+                    700 if t["weight"] >= 8 else 600, fill_id,
                     html_mod.escape(t["term"])))
         link = t.get("link") or ""
         if link:
@@ -236,6 +260,8 @@ def linked_cloud_html(topics, edges, caption=None):
     caption = dict(caption or {})
     caption["right"] = ("Lines link topics that share headlines · "
                         "Size = distinct stories mentioning the topic"
+                        " · Color = headline tone (green positive,"
+                        " black neutral, red negative)"
                         " · The headlines below link to the source "
                         "articles")
     asof_row = ('<div class="nc-asof">{}</div>'.format(caption.get("left", ""))) if caption.get("left") else ""
@@ -292,7 +318,8 @@ def build_linked_cloud_html(hours=24):
     line to the links explanation."""
     now = datetime.now(timezone.utc)
     headlines, source_counts = fetch_headlines(hours=hours, now=now)
-    topics = extract_topics_challenger(headlines)
+    topics = tone_colored(extract_topics_challenger(headlines),
+                          headlines)
     if not topics:
         return ""
     try:

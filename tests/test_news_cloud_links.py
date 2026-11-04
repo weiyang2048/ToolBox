@@ -128,3 +128,20 @@ def test_cloud_caption_text_uses_the_footnote_gray():
     # (2026-11-01) — not the old tan #6F6555.
     assert "#6F6555" not in html
     assert html.count("#9AA0A6") >= 3
+
+
+def test_linked_cloud_tone_gradient_and_caption():
+    from toolbox.DataZoo.market.news_cloud import tone_gradient
+    from toolbox.DataZoo.market.news_cloud_links import (
+        linked_cloud_html)
+    light, deep = tone_gradient(0.5)
+    topics = [
+        {"term": "AI", "weight": 10, "group": "tech",
+         "tone": 0.5, "tone_light": light, "tone_color": deep,
+         "example_headline": "AI rally", "link": ""},
+        {"term": "Oil", "weight": 6, "group": "commodities",
+         "example_headline": "Oil steady", "link": ""},
+    ]
+    html = linked_cloud_html(topics, [], {"left": "x"})
+    assert 'id="ncg-tone-0"' in html  # per-topic tone gradient
+    assert "headline tone" in html    # the caption explains it

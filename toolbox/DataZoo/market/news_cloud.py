@@ -539,6 +539,89 @@ def _matches(pattern, text):
     return pattern in text
 
 
+# ------------------------------------------------------------------
+# Headline tone — the cloud's color meaning (user direction
+# 2026-11-04: "color by headline tone", as a continuous
+# green-black-red gradient). A topic's tone is the mean over
+# its member headlines of (distinct positive words - distinct
+# negative words); the gradient runs black at 0 to full green
+# / full red at |tone| = TONE_CAP. Lexicon scoring is crude by
+# design — no negation, no context — and the caption says
+# exactly what the color is: the tone of the topic's own
+# headlines, not a market-direction call.
+# ------------------------------------------------------------------
+TONE_POSITIVE = frozenset(
+    "advances advanced approval approves approved beat beats "
+    "boost boosts breakthrough bullish climb climbs climbed "
+    "exceeds exceeded gain gains gained growth higher jump "
+    "jumps jumped lifts lifted optimism optimistic profit "
+    "profits rally rallies rallied rebound rebounds record "
+    "recovery recovers rise rises rose soar soars soared "
+    "strong surge surges surged sweep sweeps tops topped "
+    "upgrade upgrades upgraded victory win wins won".split())
+TONE_NEGATIVE = frozenset(
+    "ban banned bans bearish concerns crash crashes crashed "
+    "crisis decline declines declined default downgrade "
+    "downgrades downgraded drop drops dropped fall falls fell "
+    "fear fears fraud halt halted investigation layoffs loss "
+    "losses loses lost miss misses missed plunge plunges "
+    "plunged probe recall retreats retreated risk risks rout "
+    "scandal selloff sink sinks sank slide slides slid "
+    "slowdown slump slumps strike strikes tension tensions "
+    "threat threatens tumble tumbles tumbled turmoil "
+    "uncertainty volatile warning warns warned war weak "
+    "woes".split())
+TONE_CAP = 0.8
+_TONE_GREEN = (26, 158, 74)
+_TONE_RED = (214, 40, 32)
+
+
+def headline_tone(title):
+    """Net tone of one headline: distinct positive words minus
+    distinct negative words (hyphens folded, so "sell-off"
+    hits "selloff")."""
+    toks = {tok.replace("-", "") for tok in _tokens(title.lower())}
+    return len(toks & TONE_POSITIVE) - len(toks & TONE_NEGATIVE)
+
+
+def _tone_mix(c1, c2, f):
+    return tuple(round(a + (b - a) * f) for a, b in zip(c1, c2))
+
+
+def _tone_hex(rgb):
+    return "#{:02X}{:02X}{:02X}".format(*rgb)
+
+
+def tone_gradient(score):
+    """(light, deep) hex pair for a tone score on the
+    green-black-red scale: black at 0, saturating at
+    +/-TONE_CAP; light is the deep color washed toward
+    white, matching the family gradients' construction."""
+    f = min(abs(score) / TONE_CAP, 1.0)
+    base = _TONE_GREEN if score >= 0 else _TONE_RED
+    deep = _tone_mix((0, 0, 0), base, f)
+    light = _tone_mix(deep, (255, 255, 255), 0.45)
+    return _tone_hex(light), _tone_hex(deep)
+
+
+def tone_colored(topics, headlines):
+    """Copies of the topics with `tone` (the mean headline
+    tone over the topic's member headlines) and its gradient
+    pair (`tone_light`, `tone_color`) attached. The semantic
+    `group` is left untouched: family stays the metadata,
+    tone is the renderers' color key."""
+    members = topic_member_sets(topics, headlines)
+    out = []
+    for t in topics:
+        idxs = members.get(t["term"], ())
+        score = (sum(headline_tone(headlines[i]["title"])
+                     for i in idxs) / len(idxs)) if idxs else 0.0
+        light, deep = tone_gradient(score)
+        out.append({**t, "tone": round(score, 3),
+                    "tone_light": light, "tone_color": deep})
+    return out
+
+
 def _family_of(phrase):
     """Place a mined phrase in a color family by keyword cue.
     Cues of two letters or fewer match on word boundaries —
@@ -1285,6 +1368,9 @@ def render_wordcloud(topics, png_path):
     font = os.path.join(os.path.dirname(matplotlib.__file__), "mpl-data",
                         "fonts", "ttf", "DejaVuSans-Bold.ttf")
     colors = term_colors(topics)
+    for t in topics:
+        if "tone_color" in t:
+            colors[t["term"]] = t["tone_color"]
 
     def color_func(word, **_kwargs):
         return colors.get(word, FAMILY_SHADES["neutral"][0])
@@ -1339,8 +1425,11 @@ def _frame_html(topics, caption=None, max_px=60):
     spans = []
     for pos, term in enumerate(order):
         t = by_term[term]
-        light, deep = FAMILY_GRADIENTS.get(t["group"],
-                                           FAMILY_GRADIENTS["neutral"])
+        if "tone_color" in t:
+            light, deep = t["tone_light"], t["tone_color"]
+        else:
+            light, deep = FAMILY_GRADIENTS.get(
+                t["group"], FAMILY_GRADIENTS["neutral"])
         cls = "nc-w"
         # A slight tilt on a few mid terms — texture, never the leaders.
         # (Vertical terms were tried and dropped on demo day: in a
@@ -1440,7 +1529,8 @@ def build_cloud(png_path=DEFAULT_PNG, json_path=DEFAULT_JSON, hours=24):
     summary dict that is also written to json_path."""
     now = datetime.now(timezone.utc)
     headlines, source_counts = fetch_headlines(hours=hours, now=now)
-    topics = extract_topics_challenger(headlines)
+    topics = tone_colored(extract_topics_challenger(headlines),
+                          headlines)
     try:
         from toolbox.DataZoo.market.eastern import asof_stamp
         asof = asof_stamp(now)
@@ -1451,7 +1541,9 @@ def build_cloud(png_path=DEFAULT_PNG, json_path=DEFAULT_JSON, hours=24):
                 '<span class="nc-hl">{}</span> distinct headlines, '
                 '<span class="nc-hl">{}</span> sources'
                 .format(asof, len(headlines), len(source_counts)),
-        "right": "Size = distinct stories mentioning the topic",
+        "right": "Size = distinct stories mentioning the topic"
+                 " · Color = headline tone (green positive,"
+                 " black neutral, red negative)",
     }
     # Rendering the PNG is best-effort: embedders (the Futures
     # page) consume topics + caption and render HTML themselves,
@@ -1472,7 +1564,7 @@ def build_cloud(png_path=DEFAULT_PNG, json_path=DEFAULT_JSON, hours=24):
         "renderer": renderer,
         "caption": caption,
         "topics": [{"term": t["term"], "weight": t["weight"],
-                    "group": t["group"],
+                    "group": t["group"], "tone": t.get("tone"),
                     "example_headline": t["example_headline"],
                     "link": t.get("link", "")}
                    for t in topics],
