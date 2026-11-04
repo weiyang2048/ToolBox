@@ -274,6 +274,11 @@ def chart_png(data):
     the log-scale price with its power law and ±1σ band, top-right
     the BTC÷gold market-cap ratio with its own fit and the
     flippening line, bottom the two 63-day correlations full width.
+
+    Rendered transparent with a dark-page palette (user
+    direction 2026-11-04): snow ink, brightened series
+    hues, dark glass label boxes — the figure blends into
+    the app's themed page.
     """
     btc, early = data["btc"], data["early"]
     days, trend, lo, hi = (data["days"], data["trend"],
@@ -293,17 +298,17 @@ def chart_png(data):
     ax2 = fig.add_subplot(gs[1, :], sharex=ax1)
 
     # --- Top-left: BTC price power law only ---
-    ax1.fill_between(days, lo, hi, color="#e4dcc9", alpha=0.35, zorder=1)
-    ax1.semilogy(days, trend, color="#1f3a5f", lw=1.4, alpha=0.85,
+    ax1.fill_between(days, lo, hi, color="#e4dcc9", alpha=0.22, zorder=1)
+    ax1.semilogy(days, trend, color="#7FA8D9", lw=1.4, alpha=0.85,
                  zorder=3, label=f"power law (slope {b:.2f})")
     if len(early):
-        ax1.semilogy(early.index, early["p"], ".", color="#8a7f6a",
+        ax1.semilogy(early.index, early["p"], ".", color="#B4A98F",
                      ms=3, alpha=0.6,
                      label="BTC price (2010-2014, sparse)", zorder=2)
-    ax1.semilogy(btc.index, btc, color="#26221c", lw=2.2, alpha=1.0,
+    ax1.semilogy(btc.index, btc, color="#F5F2EA", lw=2.2, alpha=1.0,
                  zorder=5, label="BTC price")
     _lp_x, _lp_y = btc.index[-1], float(btc.iloc[-1])
-    ax1.plot([_lp_x], [_lp_y], marker="o", ms=6, color="#b3543f",
+    ax1.plot([_lp_x], [_lp_y], marker="o", ms=6, color="#E08A70",
              markeredgecolor="white", markeredgewidth=1.0, zorder=7)
     # The annotation's date TEXT is stats["btc_date"] (the
     # displayed Eastern date, _btc_display_date) — only the
@@ -314,66 +319,70 @@ def chart_png(data):
     ax1.annotate(f"${_lp_y:,.0f}\n{st['btc_date']}",
                  xy=(_lp_x, _lp_y), xytext=(-8, -30),
                  textcoords="offset points", ha="right", va="top",
-                 fontsize=8.5, color="#b3543f", fontweight="bold",
-                 bbox=dict(boxstyle="round,pad=0.3", facecolor="white",
-                           alpha=0.9, edgecolor="#b3543f", lw=0.7),
-                 arrowprops=dict(arrowstyle="-", color="#b3543f", lw=0.9))
-    ax1.axhline(300000, color="#2e7d32", ls=":", lw=1.3)
+                 fontsize=8.5, color="#E08A70", fontweight="bold",
+                 bbox=dict(boxstyle="round,pad=0.3", facecolor="#0B1118",
+                           alpha=0.9, edgecolor="#E08A70", lw=0.7),
+                 arrowprops=dict(arrowstyle="-", color="#E08A70", lw=0.9))
+    ax1.axhline(300000, color="#4CAF6E", ls=":", lw=1.3)
     ax1.text(datetime.datetime(2030, 12, 31), 345000, "$300,000 ",
-             color="#2e7d32", fontsize=9, ha="right")
+             color="#4CAF6E", fontsize=9, ha="right")
     # The "today" line marks the annotated last point — the shared
     # `last` (the correlations' data end) sat days away from the
     # point it labelled.
-    ax1.axvline(_lp_x, color="#b3543f", ls="--", lw=1.2)
+    ax1.axvline(_lp_x, color="#E08A70", ls="--", lw=1.2)
     ax1.text(_lp_x + pd.Timedelta(days=8), 40000, "today",
-             color="#b3543f", fontsize=9, va="top")
-    ax1.set_ylabel("BTC-USD (log scale)", color="#1f3a5f")
-    ax1.tick_params(axis="y", colors="#1f3a5f")
-    ax1.set_title("BTC price — power law", fontsize=10)
-    ax1.legend(loc="lower left", fontsize=8)
+             color="#E08A70", fontsize=9, va="top")
+    ax1.set_ylabel("BTC-USD (log scale)", color="#7FA8D9")
+    ax1.tick_params(axis="y", colors="#7FA8D9")
+    ax1.set_title("BTC price — power law", fontsize=10,
+                  color="#E8ECEC")
+    ax1.legend(loc="lower left", fontsize=8,
+               facecolor="#0B1118", framealpha=0.85,
+               edgecolor="#3A4646", labelcolor="#E8ECEC")
     ax1.grid(True, which="major", alpha=0.25)
     ax1.text(0.03, 0.96,
              f"fit 2010\u2013{last.date().year}, n={st['n_fit']}\n"
              f"end-2029 \u2248 ${st['end2029']:,.0f}",
              transform=ax1.transAxes, fontsize=8, va="top", ha="left",
-             bbox=dict(boxstyle="round", facecolor="white", alpha=0.85))
+             color="#E8ECEC",
+             bbox=dict(boxstyle="round", facecolor="#0B1118", alpha=0.85))
     plt.setp(ax1.get_xticklabels(), visible=False)
     ax1.set_xlim(datetime.datetime(2010, 1, 1),
                  datetime.datetime(2030, 12, 31))
 
     # --- Top-right: BTC/gold market-cap ratio power law only ---
     ax1r.fill_between(r_days, r_lo * 100, r_hi * 100, color="#e8d9a8",
-                      alpha=0.45, zorder=1)
-    ax1r.axhline(100, color="#2e7d32", ls=":", lw=1.3, zorder=2)
+                      alpha=0.22, zorder=1)
+    ax1r.axhline(100, color="#4CAF6E", ls=":", lw=1.3, zorder=2)
     ax1r.text(datetime.datetime(2010, 6, 1), 118,
               "flippening \u2014 100%\nmodel \u2248 "
               f"{st['flippening'] or 'n/a'}",
-              color="#2e7d32", fontsize=8.5, va="bottom")
+              color="#4CAF6E", fontsize=8.5, va="bottom")
     ax1r.set_ylim(1e-3, 400)
-    ax1r.semilogy(r_days, r_trend * 100, color="#8B6914", lw=1.8,
+    ax1r.semilogy(r_days, r_trend * 100, color="#C9A227", lw=1.8,
                   ls="--", zorder=3,
                   label=f"ratio power law (slope {b_r:.2f})")
-    ax1r.semilogy(ratio.index, ratio * 100, color="#B8860B", lw=1.4,
+    ax1r.semilogy(ratio.index, ratio * 100, color="#E3B341", lw=1.4,
                   alpha=0.9, zorder=4,
                   label="BTC/gold market cap "
                         f"(latest {st['ratio_pct']:.2f}%)")
     _lr_x, _lr_y = ratio.index[-1], float(ratio.iloc[-1] * 100)
-    ax1r.plot([_lr_x], [_lr_y], marker="o", ms=6, color="#b3543f",
+    ax1r.plot([_lr_x], [_lr_y], marker="o", ms=6, color="#E08A70",
               markeredgecolor="white", markeredgewidth=1.0, zorder=6)
     ax1r.annotate(f"{_lr_y:.2f}%\n{_lr_x.date().isoformat()}",
                   xy=(_lr_x, _lr_y), xytext=(-8, 14),
                   textcoords="offset points", ha="right", va="bottom",
-                  fontsize=8.5, color="#b3543f", fontweight="bold",
-                  bbox=dict(boxstyle="round,pad=0.3", facecolor="white",
-                            alpha=0.9, edgecolor="#b3543f", lw=0.7),
-                  arrowprops=dict(arrowstyle="-", color="#b3543f", lw=0.9))
+                  fontsize=8.5, color="#E08A70", fontweight="bold",
+                  bbox=dict(boxstyle="round,pad=0.3", facecolor="#0B1118",
+                            alpha=0.9, edgecolor="#E08A70", lw=0.7),
+                  arrowprops=dict(arrowstyle="-", color="#E08A70", lw=0.9))
     # The marker line sits on the ratio's own last (sampled)
     # date and says "latest" — the shared `last` line used
     # before sat days away from the point and called it
     # "today", which the sampled date is not.
-    ax1r.axvline(_lr_x, color="#b3543f", ls="--", lw=1.2)
+    ax1r.axvline(_lr_x, color="#E08A70", ls="--", lw=1.2)
     ax1r.text(_lr_x + pd.Timedelta(days=8), 20, "latest",
-              color="#b3543f", fontsize=9, va="top")
+              color="#E08A70", fontsize=9, va="top")
     # Source note, bottom-right in short lines that stay clear
     # of the legend (which ends near x=0.58 of the panel).
     ax1r.text(0.98, 0.02,
@@ -381,31 +390,38 @@ def chart_png(data):
               f"latest {st['ratio_date']} (~4\u20136d sampling)\n"
               "Gold: GC=F \u00d7 WGC above-ground stock",
               transform=ax1r.transAxes, fontsize=7.5, va="bottom",
-              ha="right", color="#777777")
-    ax1r.set_ylabel("BTC \u00f7 gold market cap (%)", color="#B8860B")
-    ax1r.tick_params(axis="y", colors="#B8860B")
-    ax1r.set_title("BTC / gold market cap — power law", fontsize=10)
-    ax1r.legend(loc="lower left", fontsize=8)
+              ha="right", color="#9AA5A5")
+    ax1r.set_ylabel("BTC \u00f7 gold market cap (%)", color="#E3B341")
+    ax1r.tick_params(axis="y", colors="#E3B341")
+    ax1r.set_title("BTC / gold market cap — power law", fontsize=10,
+                   color="#E8ECEC")
+    ax1r.legend(loc="lower left", fontsize=8,
+                facecolor="#0B1118", framealpha=0.85,
+                edgecolor="#3A4646", labelcolor="#E8ECEC")
     ax1r.grid(True, which="major", alpha=0.25)
     plt.setp(ax1r.get_xticklabels(), visible=False)
 
     fig.suptitle("Bitcoin power law and 63-day BTC\u00d7gold / "
-                 "BTC\u00d7SPX correlations", fontsize=11, y=0.98)
+                 "BTC\u00d7SPX correlations", fontsize=11, y=0.98,
+                 color="#E8ECEC")
 
     # --- Bottom row: correlations, spanning both columns ---
-    ax2.plot(eg.index, eg, color="#B8860B", lw=1.0, alpha=0.65)
-    ax2.plot(c_gold.index, c_gold, color="#B8860B", lw=1.5,
+    ax2.plot(eg.index, eg, color="#E3B341", lw=1.0, alpha=0.65)
+    ax2.plot(c_gold.index, c_gold, color="#E3B341", lw=1.5,
              label=f"BTC \u00d7 gold (latest {st['corr_gold']:+.2f})")
-    ax2.plot(es.index, es, color="#4682B4", lw=1.0, alpha=0.65)
-    ax2.plot(c_spx.index, c_spx, color="#4682B4", lw=1.5,
+    ax2.plot(es.index, es, color="#6FA8D8", lw=1.0, alpha=0.65)
+    ax2.plot(c_spx.index, c_spx, color="#6FA8D8", lw=1.5,
              label=f"BTC \u00d7 SPX (latest {st['corr_spx']:+.2f})")
     ax2.set_ylim(floor, 1.2)
-    ax2.axhline(0, color="k", lw=0.8, alpha=0.5)
-    ax2.set_ylabel("63-day rolling correlation")
-    ax2.legend(loc="upper left", fontsize=9)
+    ax2.axhline(0, color="#E8ECEC", lw=0.8, alpha=0.5)
+    ax2.set_ylabel("63-day rolling correlation", color="#E8ECEC")
+    ax2.tick_params(colors="#E8ECEC")
+    ax2.legend(loc="upper left", fontsize=9,
+               facecolor="#0B1118", framealpha=0.85,
+               edgecolor="#3A4646", labelcolor="#E8ECEC")
     ax2.text(0.02, 0.06, "pre-2014: sparse data, thinner lines",
              transform=ax2.transAxes, fontsize=8, va="bottom",
-             color="#777777")
+             color="#9AA5A5")
     ax2.grid(True, alpha=0.25)
     ax2.set_xlim(datetime.datetime(2010, 1, 1),
                  datetime.datetime(2030, 12, 31))
@@ -419,7 +435,10 @@ def chart_png(data):
     # right 120->11, bottom 67->34; nothing clipped.
     fig.subplots_adjust(left=0.072, right=0.99, bottom=0.07,
                         top=0.93)
+    for _ax in (ax1, ax1r, ax2):
+        for _sp in _ax.spines.values():
+            _sp.set_color("#7A8585")
     buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=110)
+    fig.savefig(buf, format="png", dpi=110, transparent=True)
     plt.close(fig)
     return buf.getvalue()

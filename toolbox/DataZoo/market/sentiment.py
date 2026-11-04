@@ -242,19 +242,31 @@ def chart_png(series):
     import matplotlib.dates as mdates
     import matplotlib.pyplot as plt
 
+    # Dark-skin palette (user direction 2026-11-04): the
+    # chart renders transparent and blends into the app's
+    # themed page, so its ink is the page's ink — snow text,
+    # brightened series hues (the module constants stay the
+    # HTML tab's darker ink), dark glass label boxes.
+    _INK = "#E8ECEC"
+    _MUTE = "#A7B3B3"
+    _BOX = "#0B1118"
+    _CNN = "#5B8DEF"
+    _CRYPTO = "#B678D8"
+    _GOLD = "#E3B341"
+
     fig, ax = plt.subplots(figsize=(12, 5.6))
     x0 = min(s.index[0] for s in series.values())
     for lo, hi, label, color in BANDS:
         ax.axhspan(lo, hi, color=color, alpha=0.14, linewidth=0)
-        ax.text(x0, (lo + hi) / 2, label, fontsize=8, color="#555555",
+        ax.text(x0, (lo + hi) / 2, label, fontsize=8, color=_MUTE,
                 va="center", ha="left", alpha=0.9)
     if "cnn" in series:
         s = series["cnn"]
-        ax.plot(s.index, s.values, color=CNN_COLOR, linewidth=1.6,
+        ax.plot(s.index, s.values, color=_CNN, linewidth=1.6,
                 label="CNN (US stocks)")
     if "crypto" in series:
         s = series["crypto"]
-        ax.plot(s.index, s.values, color=CRYPTO_COLOR, linewidth=1.6,
+        ax.plot(s.index, s.values, color=_CRYPTO, linewidth=1.6,
                 label="Crypto (alternative.me)", alpha=0.9)
     ax2 = None
     if "gold" in series:
@@ -272,29 +284,29 @@ def chart_png(series):
         gn = ((g - gmin) / (gmax - gmin) * GOLD_PEAK if gmax > gmin
               else g * 0 + GOLD_PEAK / 2)
         ax2 = ax.twinx()
-        ax2.plot(g.index, gn.values, color=GOLD_COLOR, linewidth=1.6,
+        ax2.plot(g.index, gn.values, color=_GOLD, linewidth=1.6,
                  label="Gold futures (GC=F, $/oz)", alpha=0.95)
         ax2.set_ylim(0, 100)
         ax2.set_ylabel("Gold price ($/oz)", fontsize=11,
-                       color=GOLD_COLOR)
+                       color=_GOLD)
         fracs = (0, 0.25, 0.5, 0.75, 1.0)
         ax2.set_yticks([GOLD_PEAK * f for f in fracs])
         ax2.set_yticklabels(
             [f"${gmin + (gmax - gmin) * f:,.0f}" for f in fracs])
-        ax2.tick_params(colors=GOLD_COLOR)
+        ax2.tick_params(colors=_GOLD)
         ax2.spines["top"].set_visible(False)
-        ax2.scatter([g.index[-1]], [gn.iloc[-1]], color=GOLD_COLOR,
+        ax2.scatter([g.index[-1]], [gn.iloc[-1]], color=_GOLD,
                     s=40, zorder=5, edgecolors="white", linewidths=1)
         ax2.annotate(f"${g.iloc[-1]:,.0f}/oz",
                      xy=(g.index[-1], gn.iloc[-1]),
                      xytext=(-8, 10), textcoords="offset points",
                      ha="right",
-                     fontsize=10, fontweight="bold", color=GOLD_COLOR,
-                     bbox=dict(boxstyle="round,pad=0.3", fc="white",
-                               ec=GOLD_COLOR, alpha=0.9))
+                     fontsize=10, fontweight="bold", color=_GOLD,
+                     bbox=dict(boxstyle="round,pad=0.3", fc=_BOX,
+                               ec=_GOLD, alpha=0.88))
     endpoints = [(name, color, series[name])
-                 for name, color in (("cnn", CNN_COLOR),
-                                     ("crypto", CRYPTO_COLOR))
+                 for name, color in (("cnn", _CNN),
+                                     ("crypto", _CRYPTO))
                  if name in series]
     if endpoints:
         # Label collision handling (2026-11-02, second round):
@@ -316,28 +328,36 @@ def chart_png(series):
                                 label_y),
                         textcoords="data", ha="right", va="center",
                         fontsize=10, fontweight="bold", color=color,
-                        bbox=dict(boxstyle="round,pad=0.3", fc="white",
-                                  ec=color, alpha=0.9))
+                        bbox=dict(boxstyle="round,pad=0.3", fc=_BOX,
+                                  ec=color, alpha=0.88))
     # Headroom (2026-11-02 live fix): the index axis runs to
     # 115 so the 0-100 scale ceiling carries ~15% headroom and
     # endpoint labels sit clear of the axes; gold carries its
     # own 0-100 axis with the peak at GOLD_PEAK (see above).
     # The zone bands themselves stay 0-100 (axhspan above).
     ax.set_ylim(0, 115)
-    ax.set_ylabel("Index (0–100)", fontsize=11)
+    ax.set_ylabel("Index (0–100)", fontsize=11, color=_INK)
+    ax.tick_params(colors=_INK)
     ax.grid(axis="y", alpha=0.25, linestyle="--")
     for spine in ("top", "right"):
         ax.spines[spine].set_visible(False)
+    for spine in ("left", "bottom"):
+        ax.spines[spine].set_color(_MUTE)
+    if ax2 is not None:
+        ax2.spines["right"].set_color(_GOLD)
     h1, l1 = ax.get_legend_handles_labels()
     if ax2 is not None:
         h2, l2 = ax2.get_legend_handles_labels()
         h1, l1 = h1 + h2, l1 + l2
-    ax.legend(h1, l1, frameon=True, loc="upper left", fontsize=10)
+    ax.legend(h1, l1, frameon=True, loc="upper left", fontsize=10,
+              facecolor=_BOX, framealpha=0.85, edgecolor="#3A4646",
+              labelcolor=_INK)
     ax.xaxis.set_major_locator(mdates.MonthLocator())
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %Y"))
     fig.autofmt_xdate(rotation=0, ha="center")
     fig.tight_layout()
     buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=150, bbox_inches="tight")
+    fig.savefig(buf, format="png", dpi=150, bbox_inches="tight",
+                transparent=True)
     plt.close(fig)
     return buf.getvalue()
