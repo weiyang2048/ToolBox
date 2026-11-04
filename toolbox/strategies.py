@@ -929,7 +929,8 @@ def strategy_weights(name: str, R: pd.DataFrame, S: np.ndarray,
 
 
 def snapshot_weights(R: pd.DataFrame, cov_method: str, mean_method: str,
-                     rf_d: float, strategies: list[str]) -> tuple[pd.DataFrame, dict]:
+                     rf_d: float, strategies: list[str],
+                     progress=None) -> tuple[pd.DataFrame, dict]:
     """Current weights of ``strategies`` on the history ``R``.
 
     Combination names (see :data:`COMBO_STRATEGY_NAMES`) are solved
@@ -942,14 +943,23 @@ def snapshot_weights(R: pd.DataFrame, cov_method: str, mean_method: str,
     column per ticker (Average = mean of the other selected
     rules), and the estimation diagnostics of the fallback pair
     on the full ``R``.
+
+    ``progress`` (optional) is called as
+    ``progress(done, total, label)`` — once with ``done == 0``
+    before the estimation starts, then after each strategy is
+    solved with that strategy's name — so a caller can show
+    progress over a many-strategy snapshot (the dashboard's
+    current-weights bar). The default ``None`` reports nothing.
     """
+    base = [s for s in strategies if s != "Average"]
+    if progress is not None:
+        progress(0, len(base), "")
     mu0, S0, info = estimate_inputs(R, cov_method, mean_method, rf_d)
     tickers = list(R.columns)
     rows = {}
-    base = [s for s in strategies if s != "Average"]
     cache = {((cov_method, mean_method), None): (mu0, S0)}
     slices = {((cov_method, mean_method), None): R}
-    for name in base:
+    for i, name in enumerate(base, start=1):
         clean, win = parse_window(name)
         rule, cov_m, mean_m = resolve_strategy(clean)
         pair = (cov_m or cov_method, mean_m or mean_method)
@@ -961,6 +971,8 @@ def snapshot_weights(R: pd.DataFrame, cov_method: str, mean_method: str,
             slices[key] = R_w
         mu, S = cache[key]
         rows[name] = strategy_weights(rule, slices[key], S, mu, rf_d)
+        if progress is not None:
+            progress(i, len(base), name)
     if "Average" in strategies and base:
         rows["Average"] = np.mean([rows[s] for s in base], axis=0)
     order = _strategy_order(list(rows))

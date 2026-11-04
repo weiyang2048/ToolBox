@@ -155,6 +155,22 @@ def test_snapshot_weights_average_is_mean():
     assert np.allclose(W.sum(axis=1).values, 1.0)
 
 
+def test_snapshot_weights_progress_callback():
+    # The progress hook (the dashboard's current-weights
+    # bar): one call before the estimation, then one per
+    # solved strategy, labelled by strategy name; Average
+    # is derived, not solved, so it does not count.
+    R = _returns(n=300)
+    calls = []
+    W, _info = snapshot_weights(
+        R, "sample", "sample", 0.0,
+        ["Min variance", "Max Sharpe", "Average"],
+        progress=lambda d, t, s: calls.append((d, t, s)))
+    assert list(W.index) == ["Min variance", "Max Sharpe", "Average"]
+    assert calls == [(0, 2, ""), (1, 2, "Min variance"),
+                     (2, 2, "Max Sharpe")]
+
+
 def test_walk_forward_backtest_runs_and_is_cost_monotone():
     prices = _prices(n=500)
     out = walk_forward_backtest(
