@@ -118,7 +118,10 @@ GOOGLE_SECTIONS = [
 # close shades so family members read as kin without being clones.
 # Families: tech (AI, chips, platforms), crypto, macro (Fed, rates,
 # data, policy), commodities (energy, metals), market (direction,
-# volatility), neutral (unclassified mined phrases).
+# volatility), politics (elections, government, world affairs —
+# added 2026-11-04: on an election-dominated day nearly every
+# mined topic fell through to neutral and the cloud rendered
+# monochrome), neutral (unclassified mined phrases).
 # ------------------------------------------------------------------
 LEXICON = [
     ("AI spending", ["ai spending", "ai capex", "ai ambitions",
@@ -161,7 +164,7 @@ LEXICON = [
     ("Jobs data", ["jobs report", "unemployment", "payrolls",
                    "labor market"], "macro"),
     ("VIX", ["vix", "volatility"], "market"),
-    ("Midterms", ["midterm"], "macro"),
+    ("Midterms", ["midterm"], "politics"),
     ("Reddit", ["reddit"], "tech"),
 ]
 FAMILY_SHADES = {
@@ -170,10 +173,18 @@ FAMILY_SHADES = {
     "macro": ["#1D4E89", "#2F6690", "#3E7CB1"],
     "commodities": ["#A67C00", "#B8860B", "#8A6D00"],
     "market": ["#B03030", "#C0392B", "#9E2B25"],
+    "politics": ["#B44A12", "#9A3F0D", "#C96A35"],
     "neutral": ["#26343F", "#3D5666", "#546A7A"],
 }
 # Keyword cues that place a mined phrase in a family; first match wins.
 FAMILY_CUES = [
+    ("politics", ["trump", "democrat", "republican", "senate",
+                  "congress", "house", "gop", "midterm", "election",
+                  "ballot", "voter", "campaign", "governor",
+                  "white house", "iran", "israel", "netanyahu",
+                  "ukraine", "russia", "china", "beijing", "europe",
+                  "britain", "uk", "india", "japan", "tokyo",
+                  "asia", "texas", "georgia", "florida"]),
     ("crypto", ["bitcoin", "crypto", "binance", "ether", "solana", "xrp"]),
     ("commodities", ["oil", "gold", "silver", "crude", "brent", "opec",
                      "copper", "gas prices"]),
@@ -183,7 +194,8 @@ FAMILY_CUES = [
               "google", "alphabet", "meta", "openai", "anthropic",
               "intel", "semiconductor", "software"]),
     ("market", ["wall street", "s&p", "nasdaq", "dow", "stocks",
-                "shares", "selloff", "rally", "futures", "vix"]),
+                "stock market", "shares", "selloff", "rally",
+                "futures", "vix"]),
 ]
 
 
@@ -194,6 +206,7 @@ FAMILY_GRADIENTS = {
     "macro": ("#5B8DC9", "#173F6E"),
     "commodities": ("#D9A821", "#7A5C00"),
     "market": ("#D95550", "#8E2320"),
+    "politics": ("#E88A4A", "#8A3A08"),
     "neutral": ("#5B7A8C", "#1E2C38"),
 }
 
@@ -527,10 +540,17 @@ def _matches(pattern, text):
 
 
 def _family_of(phrase):
-    """Place a mined phrase in a color family by keyword cue."""
+    """Place a mined phrase in a color family by keyword cue.
+    Cues of two letters or fewer match on word boundaries —
+    as a bare substring, "ai" fires inside "strait" and
+    painted the Strait of Hormuz as a tech topic."""
     for family, cues in FAMILY_CUES:
-        if any(cue in phrase for cue in cues):
-            return family
+        for cue in cues:
+            if len(cue) <= 2:
+                if re.search(rf"\b{re.escape(cue)}\b", phrase):
+                    return family
+            elif cue in phrase:
+                return family
     return "neutral"
 
 

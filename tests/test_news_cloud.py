@@ -750,3 +750,16 @@ def test_combined_merges_lexicon_and_spacy_sources():
     # and the spaCy layer's Zelensky both present, once each.
     assert "Binance" in terms and "Zelensky" in terms
     assert terms.count("Binance") == 1
+
+
+def test_family_of_politics_and_short_cues():
+    # The 2026-11-04 mono-color fix: politics has its own
+    # family, and two-letter cues respect word boundaries.
+    assert _family_of("trump") == "politics"
+    assert _family_of("democrats sweep senate") == "politics"
+    assert _family_of("iran israel tensions") == "politics"
+    assert _family_of("midterms") == "politics"
+    assert _family_of("trump tariffs") == "politics"
+    assert _family_of("strait of hormuz") != "tech"
+    assert _family_of("ai") == "tech"
+    assert _family_of("ai stocks rally") == "tech"
