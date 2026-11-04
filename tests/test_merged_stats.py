@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from toolbox.DataZoo.market.strategies import asset_stats, merged_stats
+from toolbox.strategies import asset_stats, merged_stats
 from toolbox.DataZoo.market.yahoo_prices import download_close_prices
 
 SECTORS = ["EXI", "IXC", "IXG", "IXJ", "IXN", "IXP",

@@ -1,10 +1,10 @@
-"""Tests for toolbox.DataZoo.market.strategies (cleaning, solvers, backtest)."""
+"""Tests for toolbox.strategies (cleaning, solvers, backtest)."""
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from toolbox.DataZoo.market.strategies import (
+from toolbox.strategies import (
     COMBO_STRATEGY_NAMES,
     STRATEGY_NAMES,
     bbp_clean_corr,
@@ -176,7 +176,7 @@ def test_walk_forward_backtest_runs_and_is_cost_monotone():
 
 
 def test_erc_equalises_risk_contributions():
-    from toolbox.DataZoo.market.strategies import erc_weights
+    from toolbox.strategies import erc_weights
 
     R = _returns()
     S, _ = clean_covariance(R, "sample")
@@ -189,7 +189,7 @@ def test_max_sharpe_all_negative_means_not_minvar():
     # With every excess mean negative the tangency QP (w'μ = 1) is
     # infeasible; the direct maximiser must still find the least-bad
     # Sharpe, which beats the min-variance portfolio's Sharpe.
-    from toolbox.DataZoo.market.strategies import (
+    from toolbox.strategies import (
         max_sharpe_weights,
         minvar_weights,
     )
@@ -323,7 +323,7 @@ def _rs_returns():
 
 
 def test_rs_weights_top_n_equal_weight():
-    from toolbox.DataZoo.market.strategies import rs_weights
+    from toolbox.strategies import rs_weights
 
     R = _rs_returns()
     # Full window: A (0.20) and B (0.17) lead.
@@ -338,7 +338,7 @@ def test_rs_weights_top_n_equal_weight():
 
 
 def test_rs_ties_keep_universe_order():
-    from toolbox.DataZoo.market.strategies import rs_weights
+    from toolbox.strategies import rs_weights
 
     R = _rs_returns()
     R["B"] = R["A"]  # exact tie for the lead
@@ -346,7 +346,7 @@ def test_rs_ties_keep_universe_order():
 
 
 def test_rs_names_resolve_and_rank_before_average():
-    from toolbox.DataZoo.market.strategies import (
+    from toolbox.strategies import (
         COMBO_STRATEGY_NAMES,
         RS_STRATEGY_NAMES,
         _strategy_order,
@@ -383,7 +383,7 @@ def test_rs_snapshot_and_backtest():
 
 
 def test_parse_window_suffix():
-    from toolbox.DataZoo.market.strategies import parse_window
+    from toolbox.strategies import parse_window
 
     assert parse_window("Max Sharpe (LW × sample) @ 252") == (
         "Max Sharpe (LW × sample)", 252)
