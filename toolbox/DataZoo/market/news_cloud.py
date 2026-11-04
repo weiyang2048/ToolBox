@@ -444,7 +444,7 @@ def _fetch(url):
     except Exception:
         out = subprocess.run(
             ["curl", "-sL", "--max-time", "25", "-A", USER_AGENT, url],
-            capture_output=True)
+            capture_output=True, check=False)
         return out.stdout
 
 
@@ -1173,8 +1173,7 @@ def _combined_layer(headlines, max_topics=30, min_weight=2):
     any failure): None is the fallback signal, distinct from
     an empty result."""
     try:
-        from toolbox.DataZoo.market.news_cloud_spacy import (
-            combined_topics)
+        from toolbox.DataZoo.market.news_cloud_spacy import combined_topics
         return combined_topics(headlines, max_topics=max_topics,
                                min_weight=min_weight)
     except Exception:
@@ -1391,7 +1390,7 @@ style="width:1200px;height:600px;">{}</div></body></html>""".format(_frame_html(
         subprocess.run([CHROMIUM, "--headless", "--disable-gpu", "--no-sandbox",
                         "--hide-scrollbars", "--window-size=1240,700",
                         "--screenshot=" + png_path, "file://" + tmp],
-                       capture_output=True, timeout=60)
+                       capture_output=True, timeout=60, check=False)
     except (OSError, subprocess.SubprocessError):
         return False
     finally:

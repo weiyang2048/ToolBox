@@ -624,8 +624,7 @@ def test_mining_rejects_question_fragments():
     heads = []
     for src, tail in (("A", "jobs report"), ("B", "inflation data"),
                       ("C", "tariff ruling"), ("A", "dollar slide")):
-        heads.append({"title": "What does the %s mean for the Fed"
-                               % tail,
+        heads.append({"title": f"What does the {tail} mean for the Fed",
                       "source": src, "link": "", "published": None})
     for src, tail in (("A", "on export hopes"),
                       ("B", "as demand grows"),
@@ -691,8 +690,7 @@ def test_challenger_entry_combined_extraction():
         spacy.load("en_core_web_sm")
     except Exception:
         pytest.skip("en_core_web_sm not installed")
-    from toolbox.DataZoo.market.news_cloud import (
-        extract_topics_challenger)
+    from toolbox.DataZoo.market.news_cloud import extract_topics_challenger
     topics = extract_topics_challenger(_hybrid_pool(),
                                        max_topics=20,
                                        min_weight=3)
@@ -737,8 +735,7 @@ def test_combined_merges_lexicon_and_spacy_sources():
         spacy.load("en_core_web_sm")
     except Exception:
         pytest.skip("en_core_web_sm not installed")
-    from toolbox.DataZoo.market.news_cloud import (
-        extract_topics_challenger)
+    from toolbox.DataZoo.market.news_cloud import extract_topics_challenger
     heads = _hybrid_pool()
     for src, title in (
             ("Wire A", "Binance freezes withdrawals after hack"),

@@ -51,11 +51,11 @@ def open_folder(folder_path):
     system = platform.system().lower()
 
     if system == "windows":
-        subprocess.run(["explorer", folder_path])
+        subprocess.run(["explorer", folder_path], check=False)
     elif system == "darwin":  # macOS
-        subprocess.run(["open", folder_path])
+        subprocess.run(["open", folder_path], check=False)
     elif system == "linux":
-        subprocess.run(["xdg-open", folder_path])
+        subprocess.run(["xdg-open", folder_path], check=False)
     else:
         print(f"❌ Unsupported operating system: {system}")
 

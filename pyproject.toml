@@ -103,8 +103,9 @@ target-version = "py310"
 # enforced (CI lint job). Widen in small batches; the
 # behavior-sensitive E722/BLE001 narrowing goes per package, with tests.
 # UP031 added 2026-11-02 for the modules converted that day.
+# PLW1510 added 2026-11-04: every subprocess.run now spells check=False.
 [tool.ruff.lint]
-select = ["F401", "F841", "I001", "UP006", "UP035", "UP045", "UP031"]
+select = ["F401", "F841", "I001", "UP006", "UP035", "UP045", "UP031", "PLW1510"]
 
 [tool.ruff.lint.per-file-ignores]
 # Intentional public re-exports (the energy package's API surface).

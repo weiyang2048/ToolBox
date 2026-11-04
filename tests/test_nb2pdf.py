@@ -56,7 +56,7 @@ def test_import_is_side_effect_free(tmp_path):
         [sys.executable, "-c", "import toolbox.notebooks.nb2pdf"],
         cwd=tmp_path,
         env={"PYTHONPATH": str(REPO_ROOT), "PATH": "/usr/bin:/bin"},
-        capture_output=True, text=True, timeout=120,
+        capture_output=True, text=True, timeout=120, check=False,
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout == ""
