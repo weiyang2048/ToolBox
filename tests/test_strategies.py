@@ -236,13 +236,14 @@ def test_resolve_strategy_names():
 
 
 def test_combo_names_cover_the_demoed_grid():
-    # 92 since the estimation windows became strategy variants
-    # (user direction 2026-11-02): the 21 window-using bases
-    # (Max Sharpe 3 covs x 3 means, the three cov-only rules x 3
-    # covs, HRP, risk parity, Min CVaR) at four windows each,
-    # plus 1/N, the six RS pairs and Average.
-    assert len(COMBO_STRATEGY_NAMES) == 92
-    assert len(set(COMBO_STRATEGY_NAMES)) == 92
+    # 93 since SPMO joined (user direction 2026-11-04): the 21
+    # window-using bases (Max Sharpe 3 covs x 3 means, the
+    # three cov-only rules x 3 covs, HRP, risk parity, Min CVaR)
+    # at four windows each (the windows became strategy
+    # variants 2026-11-02), plus 1/N, the six RS pairs, SPMO
+    # and Average.
+    assert len(COMBO_STRATEGY_NAMES) == 93
+    assert len(set(COMBO_STRATEGY_NAMES)) == 93
     assert "RS(1, 126)" in COMBO_STRATEGY_NAMES
     for name in COMBO_STRATEGY_NAMES:
         resolve_strategy(name)  # every listed name must resolve
@@ -382,6 +383,80 @@ def test_rs_snapshot_and_backtest():
     assert np.isfinite(out["stats"].values).all()
 
 
+def _spmo_returns(n=300, drifts=None):
+    """Deterministic log returns: a per-ticker drift plus a
+    shared wiggle, so daily volatility is positive everywhere
+    and the drift order drives the momentum order."""
+    if drifts is None:
+        drifts = [0.0002 * j for j in range(10)]
+    wiggle = 0.001 * np.sin(1.7 * np.arange(n))
+    return pd.DataFrame({f"T{j}": d + wiggle
+                         for j, d in enumerate(drifts)})
+
+
+def test_spmo_scores_rank_and_bound():
+    from toolbox.strategies import spmo_scores
+
+    scores = spmo_scores(_spmo_returns())
+    assert len(scores) == 10
+    assert scores.between(0.25, 4.0).all()
+    assert scores.is_monotonic_increasing
+    assert scores.iloc[-1] > 1.0 > scores.iloc[0]
+
+
+def test_spmo_weights_top_quintile_by_score():
+    from toolbox.strategies import spmo_scores, spmo_weights
+
+    R = _spmo_returns()
+    w = spmo_weights(R)
+    scores = spmo_scores(R)
+    # The top quintile of ten is two names: the highest drifts.
+    assert list(np.flatnonzero(w)) == [8, 9]
+    expect = scores.iloc[[8, 9]].to_numpy()
+    assert np.allclose(w[[8, 9]], expect / expect.sum())
+    assert np.isclose(w.sum(), 1.0)
+
+
+def test_spmo_skips_the_most_recent_month():
+    from toolbox.strategies import rs_weights, spmo_weights
+
+    R = _spmo_returns(drifts=[0.001] * 10)
+    wiggle = 0.001 * np.sin(1.7 * np.arange(len(R)))
+    R["T9"] = 0.002 + wiggle
+    R.iloc[-21:, R.columns.get_loc("T9")] = -0.05
+    # The skipped month keeps the crashed leader's score, so
+    # SPMO still holds it; a plain trailing rule ranks it last
+    # and holds none of it.
+    assert spmo_weights(R)[9] > 0
+    assert rs_weights(R, 1, 252)[9] == 0.0
+
+
+def test_spmo_fallback_window_and_short_history():
+    from toolbox.strategies import spmo_scores, spmo_weights
+
+    # 230 rows: under the 273 the 12-month window needs, over
+    # the 210 the 9-month fallback needs — scores still form.
+    R = _spmo_returns(n=230)
+    assert len(spmo_scores(R)) == 10
+    assert np.isclose(spmo_weights(R).sum(), 1.0)
+    # 150 rows: nothing is scorable and the rule is 1/N.
+    R = _spmo_returns(n=150)
+    assert spmo_scores(R).empty
+    assert np.allclose(spmo_weights(R), 0.1)
+
+
+def test_spmo_name_resolves_and_runs():
+    assert "SPMO" in COMBO_STRATEGY_NAMES
+    assert resolve_strategy("SPMO") == ("SPMO", None, None)
+    R = _returns(n=300)
+    W, _info = snapshot_weights(R, "ledoit_wolf", "sample", 0.0,
+                                ["SPMO", "Average"])
+    w = W.loc["SPMO"].values
+    assert np.isclose(w.sum(), 1.0)
+    assert (w > 0).sum() == 2  # top quintile of the 8 names
+    assert np.allclose(W.loc["Average"].values, w)
+
+
 def test_parse_window_suffix():
     from toolbox.strategies import parse_window
 
@@ -398,8 +473,9 @@ def test_parse_window_suffix():
 
 
 def test_windowed_grid_shape():
-    # 21 window-using bases x 4 windows + 1/N + 6 RS + Average.
-    assert len(COMBO_STRATEGY_NAMES) == 92
+    # 21 window-using bases x 4 windows + 1/N + 6 RS + SPMO
+    # + Average.
+    assert len(COMBO_STRATEGY_NAMES) == 93
     assert "Max Sharpe (LW × sample) @ 252" in COMBO_STRATEGY_NAMES
     assert "Max Sharpe (LW × sample) @ All" in COMBO_STRATEGY_NAMES
     assert "Min variance (LW) @ 126" in COMBO_STRATEGY_NAMES

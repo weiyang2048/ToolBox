@@ -22,7 +22,10 @@ universes of ETFs / stocks:
   variance, maximum diversification, NCO (nested clustered
   optimisation), HRP, risk parity (ERC), minimum CVaR (95%),
   maximum Sharpe (tangency), and the ensemble Average of the
-  selected rules. A strategy may also be named as a *combination*
+  selected rules. Two rules read returns alone, with no cleaned
+  inputs: the RS(n, w) relative-strength rules and SPMO, the
+  S&P 500 Momentum Index rule (see :func:`spmo_weights`).
+  A strategy may also be named as a *combination*
   (:data:`COMBO_STRATEGY_NAMES`) that carries its own cleaning
   pair — the briefs' allocation-table convention — in which case
   the caller's pair is only the fallback for unqualified names.
@@ -40,6 +43,8 @@ application coupling: callers pass price frames (see
 """
 
 from __future__ import annotations
+
+import math
 
 import numpy as np
 import pandas as pd
@@ -73,6 +78,7 @@ STRATEGY_NAMES = (
     "Risk parity",
     "Min CVaR",
     "Max Sharpe",
+    "SPMO",
     "Average",
 )
 
@@ -151,6 +157,7 @@ COMBO_STRATEGY_NAMES = (
           for base in _WINDOWED_BASES for w in STRATEGY_WINDOWS)
     + ("1/N",)
     + RS_STRATEGY_NAMES
+    + ("SPMO",)
     + ("Average",)
 )
 
@@ -794,6 +801,96 @@ def rs_weights(R: pd.DataFrame, n: int, w: int) -> np.ndarray:
     return out
 
 
+# SPMO (user direction 2026-11-04): the S&P 500 Momentum Index
+# rule (the benchmark of Invesco's SPMO), from the S&P DJI
+# momentum appendix. On each rebalance, a ticker's momentum
+# value is its price change over the 12 months ending one
+# month before the rebalance — the most recent month is
+# skipped against short-term reversal — divided by the
+# standard deviation of its daily price returns over the same
+# window. The risk-adjusted values are z-scored across the
+# universe, the z-scores capped at +/-3, and mapped to a
+# strictly positive score: 1 + z above zero, 1 / (1 - z)
+# below it, so scores live in [0.25, 4] and negative momentum
+# down-weights rather than excludes. The index then holds
+# the top 20% by score, weighted by float-adjusted market
+# cap x score. A ticker without 12 months of history uses a
+# 9-month window (and under 10 months it is not eligible).
+# Months are trading days here, as everywhere in this engine:
+# 252 + a 21-day skip, 189 for the fallback.
+#
+# Adaptations of a prices-only engine, stated plainly: there
+# are no market caps, so the selected names are weighted by
+# score alone; the index's 20% turnover buffer needs
+# incumbency state a weights function does not carry, so
+# selection is the plain top quintile; and the single-name
+# cap (the lower of 9% or 3x the parent-index weight) and
+# the sector constraint are defined relative to the parent
+# index, so they do not apply. The semiannual March /
+# September cadence is the caller's rebalance schedule.
+SPMO_SKIP_DAYS = 21
+SPMO_WINDOW_DAYS = 252
+SPMO_FALLBACK_DAYS = 189
+SPMO_FRACTION = 0.20
+SPMO_Z_CAP = 3.0
+
+
+def spmo_scores(R: pd.DataFrame) -> pd.Series:
+    """S&P momentum scores on the estimation window ``R``
+    (log returns), indexed by the tickers that carry one.
+
+    Each ticker is measured on its own valid history: the
+    252-day window ending 21 days before the window's end,
+    or the 189-day fallback when 252 are not available;
+    a ticker with neither is absent from the result (and
+    from the cross-sectional mean and standard deviation,
+    as the methodology excludes missing values there).
+    """
+    values = {}
+    for col in R.columns:
+        r = R[col].dropna()
+        for span in (SPMO_WINDOW_DAYS, SPMO_FALLBACK_DAYS):
+            if len(r) < span + SPMO_SKIP_DAYS:
+                continue
+            window = r.iloc[-(span + SPMO_SKIP_DAYS):-SPMO_SKIP_DAYS]
+            simple = np.expm1(window.to_numpy())
+            sd = float(np.std(simple, ddof=1))
+            if sd > 0:
+                values[col] = float(np.expm1(window.sum())) / sd
+                break
+    if not values:
+        return pd.Series(dtype=float)
+    x = pd.Series(values)
+    sd_cs = float(x.std(ddof=1)) if len(x) > 1 else 0.0
+    if sd_cs > 0:
+        z = ((x - float(x.mean())) / sd_cs).clip(
+            -SPMO_Z_CAP, SPMO_Z_CAP)
+    else:
+        z = pd.Series(0.0, index=x.index)
+    return pd.Series(
+        np.where(z > 0, 1.0 + z,
+                 np.where(z < 0, 1.0 / (1.0 - z), 1.0)),
+        index=x.index)
+
+
+def spmo_weights(R: pd.DataFrame) -> np.ndarray:
+    """SPMO weights on the estimation window ``R``: the top
+    quintile of :func:`spmo_scores` (at least one name),
+    weighted in proportion to score. With no scorable
+    ticker — a window shorter than the 189-day fallback
+    plus the skip — the rule is 1/N."""
+    p = R.shape[1]
+    scores = spmo_scores(R)
+    if scores.empty:
+        return np.ones(p) / p
+    k = max(1, math.ceil(SPMO_FRACTION * len(scores)))
+    top = scores.sort_values(ascending=False, kind="stable").index[:k]
+    chosen = scores[top]
+    out = pd.Series(0.0, index=R.columns)
+    out[top] = chosen / chosen.sum()
+    return out.to_numpy()
+
+
 def strategy_weights(name: str, R: pd.DataFrame, S: np.ndarray,
                      mu: np.ndarray, rf_d: float) -> np.ndarray:
     """Weights of one strategy on one estimation window.
@@ -823,6 +920,8 @@ def strategy_weights(name: str, R: pd.DataFrame, S: np.ndarray,
         return cvar_weights(R.values - rf_d)
     if name == "Max Sharpe":
         return max_sharpe_weights(S, mu)
+    if name == "SPMO":
+        return spmo_weights(R)
     rs = _parse_rs(name)
     if rs is not None:
         return rs_weights(R, rs[0], rs[1])
