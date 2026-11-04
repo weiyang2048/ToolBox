@@ -152,3 +152,83 @@ def test_label_plate_clears_overlay_and_band():
                     # it: every such point sits at least
                     # 3px below the plate's bottom edge.
                     assert y >= py1 + 3.0
+
+
+# --- The anchored live overlay (2026-11-04): the current
+# cycle is indexed at the election-day close and extends
+# past day 0 as post-vote sessions complete.
+
+import pandas as pd
+
+from toolbox.DataZoo.market.election_cycle import (
+    _anchor_cycle,
+    _composite,
+)
+
+
+def _closes():
+    # 90 sessions ending Fri Nov 6, 2026, so the election
+    # (Tue Nov 3) sits 3 sessions before the end; give the
+    # election session a distinctive close of 200.
+    idx = pd.bdate_range(end="2026-11-06", periods=90)
+    vals = [100.0 + i for i in range(len(idx))]
+    pos = idx.get_loc(pd.Timestamp("2026-11-03"))
+    vals[pos] = 200.0
+    return pd.Series(vals, index=idx), pos
+
+
+def test_anchor_cycle_indexes_at_the_election_close():
+    closes, pos = _closes()
+    start, vals = _anchor_cycle(closes)
+    # Day 0 sits at position -start in the values and is
+    # exactly 100 (indexed at the election close).
+    assert vals[-start] == pytest.approx(100.0)
+    assert start == -pos  # full run-up kept (pos < 252)
+    # Sessions after the vote extend the path past 0.
+    assert start + len(vals) - 1 == 3
+    # Values are ratios to the election close of 200.
+    assert vals[-1] == pytest.approx(
+        closes.iloc[-1] / 200.0 * 100)
+
+
+def test_anchor_cycle_none_when_the_series_is_stale():
+    # 70 sessions ending more than two weeks before the
+    # vote: the last session is no election-day anchor.
+    idx = pd.bdate_range(end="2026-10-16", periods=70)
+    closes = pd.Series([100.0] * len(idx), index=idx)
+    assert _anchor_cycle(closes) is None
+
+
+def test_anchor_cycle_uses_the_previous_session_when_closed():
+    # A market closed on election day itself (no Nov 3
+    # session) anchors to its Nov 2 session: day 0 is
+    # that close, and the path ends at day 0.
+    idx = pd.bdate_range(end="2026-11-02", periods=90)
+    closes = pd.Series([100.0 + i for i in range(len(idx))],
+                       index=idx)
+    start, vals = _anchor_cycle(closes)
+    assert vals[-start] == pytest.approx(100.0)
+    assert start + len(vals) - 1 == 0
+
+
+def test_composite_ends_at_the_second_latest_leg():
+    a = (-2, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0])   # days -2..3
+    b = (-2, [2.0, 2.0, 2.0, 2.0, 2.0])        # days -2..2
+    start, comp = _composite([a, b])
+    assert start == -2
+    # Day +3 has only one leg: the composite stops at +2.
+    assert len(comp) == 5
+    assert comp[0] == pytest.approx(1.5)
+    assert comp[-1] == pytest.approx(3.5)
+
+
+def test_render_live_label_once_past_the_vote():
+    cur = {"us": [98.0, 99.0, 100.0, 101.0, 102.0, 103.0],
+           "us_start": -2,
+           "xus": [97.0, 99.0, 100.0, 100.5, 101.0, 101.5],
+           "xus_start": -2}
+    out = render_election_cycle(election_series(), cur)
+    head, tail = out.split(">Presidential elections<", 1)
+    assert head.count("2026 (live)") == 2
+    assert LABEL not in head
+    assert "2026 (live)" not in tail

@@ -28,12 +28,17 @@ presidential ex-US 15 (1968-2024). Price returns
 throughout — dividends excluded; non-US markets in
 local currency, so no FX moves are in them either. The
 2026 overlay belongs to the midterm set only: 2026 is
-a midterm year.
+a midterm year. The overlay is anchored the same way as
+the historical paths — each market indexed to 100 at
+its own election-day close (Nov 3, 2026) — and extends
+past election day as new sessions complete (user
+direction 2026-11-04: the current cycle continues into
+the future side of the panel).
 """
 
+import datetime
 import html
 import os
-import time
 from concurrent.futures import ThreadPoolExecutor
 
 from toolbox.DataZoo.market.svg_charts import line_path, scale, svg_elems
@@ -47,6 +52,13 @@ _ACCENT = "#FFB066"
 _OVERLAY = "#7FB3D5"
 _XUS = ("^N225", "^HSI", "^FTSE", "^GDAXI", "^FCHI")
 _DAYS = 252  # trading days on each side of election day
+_ELECTION_DAY = "2026-11-03"  # the 2026 midterm vote (a Tuesday)
+# The overlay's fetch window opens 400 days before the
+# vote — enough for the full 252-session run-up — and is
+# anchored to the election rather than to today, so the
+# window never slides forward and eats the run-up.
+_FETCH_P1 = int(datetime.datetime(
+    2025, 9, 29, tzinfo=datetime.timezone.utc).timestamp())
 
 # Tab structure: (subhead, panels). Each panel: (series
 # key, overlay key or None, title, the 12m-before mean,
@@ -90,57 +102,95 @@ def election_series():
     return pd.read_csv(SERIES_CSV)
 
 
+def _anchor_cycle(closes):
+    """Anchor one market's daily closes to the 2026
+    election: (start_day, [values]) with trading days
+    counted in the market's own sessions from its
+    election-day session — the last session on or before
+    Nov 3, 2026, at most 4 calendar days earlier (a
+    market closed on the day itself anchors to its
+    previous session; a series ending well before the
+    vote is stale, not anchored) — values indexed to 100
+    at that session's close, clipped to ±_DAYS. Sessions
+    after the vote extend the path past day 0 as they
+    complete. None when the series never reaches the
+    election or holds fewer than 60 sessions in the
+    window."""
+    import pandas as pd
+
+    pos = closes.index.searchsorted(
+        pd.Timestamp(_ELECTION_DAY), side="right") - 1
+    if pos < 0:
+        return None
+    if (pd.Timestamp(_ELECTION_DAY)
+            - closes.index[pos]).days > 4:
+        return None
+    base = closes.iloc[pos]
+    if not base:
+        return None
+    lo = max(0, pos - _DAYS)
+    hi = min(len(closes), pos + _DAYS + 1)
+    vals = (closes.iloc[lo:hi] / base * 100).tolist()
+    if len(vals) < 60:
+        return None
+    return lo - pos, vals
+
+
 def _indexed(sym, p1):
-    """One ticker's closes over the window, indexed to 100
-    at its last close; returns (start_day, [values]) with
-    values running start_day..0, or None on failure."""
+    """One ticker's closes anchored to the 2026 election
+    (see _anchor_cycle); returns (start_day, [values])
+    with values running start_day..start_day+len-1, or
+    None on failure."""
     try:
         closes = with_retry(lambda: yahoo_daily(sym, p1=p1),
                             "yahoo " + sym).dropna()
     except Exception:
         return None
-    if len(closes) < 60:
-        return None
-    closes = closes.iloc[-(_DAYS + 1):]
-    vals = (closes / closes.iloc[-1] * 100).tolist()
-    return -len(vals) + 1, vals
+    return _anchor_cycle(closes)
 
 
 def _composite(legs):
     """Equal-weight composite of (start, values) legs over
-    days -_DAYS..0, kept only where at least 2 legs cover
-    the day; returns (start_day, [values]) or None."""
+    days -_DAYS..+_DAYS, kept only where at least 2 legs
+    cover the day; returns (start_day, [values]) or None.
+    The kept span is contiguous from its first covered
+    day, so the composite ends where the second-latest
+    leg ends."""
     comp = []
-    start = 0
-    for day in range(-_DAYS, 1):
-        pts = [vals[day - s] for s, vals in legs if s <= day]
+    start = None
+    for day in range(-_DAYS, _DAYS + 1):
+        pts = [vals[day - s] for s, vals in legs
+               if s <= day < s + len(vals)]
         if len(pts) >= 2:
-            if not comp:
+            if start is None:
                 start = day
             comp.append(sum(pts) / len(pts))
-        elif comp:
+        elif start is not None:
             break
-    if not comp:
+    if start is None:
         return None
     return start, comp
 
 
 def current_cycle_paths():
-    """The 2026 midterm cycle's path into today's vote
-    (Nov 3, 2026 IS election day), live from Yahoo via
+    """The 2026 midterm cycle's path, live from Yahoo via
     the canonical yahoo_prices helpers: ^GSPC for the
     US, and the five ex-US indices (^N225, ^HSI, ^FTSE,
     ^GDAXI, ^FCHI) composited equal-weight over
-    whichever fetched (at least two required), each
-    indexed to 100 at its last available close, which
-    is aligned to day 0. Returns {"us": [...],
+    whichever fetched (at least two required). Each
+    market is anchored to its own election-day session
+    and indexed to 100 at that close (see
+    _anchor_cycle), so the path runs from up to 252
+    trading days before the vote through the latest
+    completed session — past election day as post-vote
+    sessions accrue. Returns {"us": [...],
     "us_start": int, "xus": [...], "xus_start": int}
     for whichever sides fetched. Any failure degrades:
     a missing side is simply absent, and a total
     failure returns {} rather than raising, so the tab
     falls back to the historical series alone."""
     try:
-        p1 = int(time.time()) - 560 * 86400  # trailing ~18 months
+        p1 = _FETCH_P1  # anchored to the vote, see above
         syms = ("^GSPC",) + _XUS
         with ThreadPoolExecutor(max_workers=6) as pool:
             got = dict(zip(syms, pool.map(
@@ -164,9 +214,10 @@ def _panel(days, mean, q25, q75, title, overlay, overlay_start):
     """One average-path panel as SVG: IQR band, mean line,
     the 100 reference, a dashed marker at election day,
     and the optional 2026 overlay (dashed, days
-    overlay_start..0, labelled in the sky above its end
-    near day 0 — the plate clears both the line and the
-    band, see ceil_v)."""
+    overlay_start..its end — day 0 on election day,
+    later as post-vote sessions complete — labelled in
+    the sky above its end; the plate clears both the
+    line and the band, see ceil_v)."""
     w, h = 1120, 250
     L, R, T, B = 52, 118, 46, 24
     allv = list(q75) + list(q25)
@@ -182,7 +233,8 @@ def _panel(days, mean, q25, q75, title, overlay, overlay_start):
         # The overlay label's ceiling: the higher of the
         # overlay's own values and the band's top (q75)
         # over the plate's day span (the plate is
-        # right-aligned to just left of day 0; its width
+        # right-aligned to just left of the overlay's
+        # end; its width
         # in days follows from the text length). The
         # plate is placed with its bottom edge a margin
         # above this ceiling, in the empty sky, so it
@@ -195,15 +247,22 @@ def _panel(days, mean, q25, q75, title, overlay, overlay_start):
         # (the plate is 20px and the margin 5px, so the
         # ceiling may use at most (180-27)/180 of the
         # range — see the placement below).
-        lab_w = len("2026 (into today's vote)") * 6.3 + 16
+        end_day = overlay_start + len(overlay) - 1
+        # (Not `lab`: the axis-label loop below reuses
+        # that name — the plate reads this one.)
+        olab = ("2026 (into today's vote)" if end_day <= 0
+                else "2026 (live)")
+        lab_w = len(olab) * 6.3 + 16
         px_day = (w - R - L) / (2 * _DAYS)
-        d_lo = int(np.ceil(-6 / px_day - lab_w / px_day))
+        d_lo = end_day + int(np.ceil(-6 / px_day
+                                     - lab_w / px_day))
         pos = {d: i for i, d in enumerate(days)}
         ceil_v = max(
             [overlay[d - overlay_start]
-             for d in range(d_lo, 1)
+             for d in range(d_lo, end_day + 1)
              if 0 <= d - overlay_start < len(overlay)]
-            + [q75[pos[d]] for d in range(d_lo, 1)])
+            + [q75[pos[d]] for d in range(d_lo, end_day + 1)
+               if d in pos])
         hi = max(hi, lo + (ceil_v - lo) / 0.85)
 
     step = 10 ** np.floor(np.log10((hi - lo) / 4))
@@ -292,8 +351,9 @@ def _panel(days, mean, q25, q75, title, overlay, overlay_start):
                       'stroke-width="1.8" stroke-dasharray="6 4" '
                       'stroke-linejoin="round"/>')
         # Label in the empty sky above the overlay's
-        # end: right-aligned to just left of day 0, its
-        # plate's bottom edge 5px above ceil_v — the
+        # end: right-aligned to just left of the end
+        # day, its plate's bottom edge 5px above
+        # ceil_v — the
         # higher of the overlay and the band top over
         # the plate's span, computed with the scale
         # above — so the dashed line runs visibly all
@@ -303,10 +363,9 @@ def _panel(days, mean, q25, q75, title, overlay, overlay_start):
         # #2E2A24) at near-full opacity, sized to the
         # text with real padding, and the glyphs carry
         # a paint-order halo in the plate color.
-        lx2 = X(0) - 6
+        lx2 = X(end_day) - 6
         plate_bot = Y(ceil_v) - 5
-        lab = "2026 (into today's vote)"
-        tw = len(lab) * 6.3  # ~0.60em/char: bold-safe
+        tw = len(olab) * 6.3  # ~0.60em/char: bold-safe
         body.append(f'<rect x="{lx2 - tw - 8:.1f}" '
                     f'y="{plate_bot - 20:.1f}" '
                     f'width="{tw + 16:.1f}" height="20" '
@@ -319,7 +378,7 @@ def _panel(days, mean, q25, q75, title, overlay, overlay_start):
                     f'text-anchor="end" fill="{_OVERLAY}" '
                     f'stroke="#171512" stroke-width="3" '
                     f'paint-order="stroke" '
-                    f'stroke-linejoin="round">{lab}</text>')
+                    f'stroke-linejoin="round">{olab}</text>')
     return svg_elems(w, h, "".join(body))
 
 
@@ -357,8 +416,8 @@ def render_election_cycle(df, current=None):
             + ';font-weight:700">100 at the election-day '
             'close</span>; the band is the middle half of '
             'elections, and the dashed blue line on the '
-            'midterm panels is the 2026 cycle into '
-            'today\'s vote.</div>')
+            'midterm panels is the 2026 cycle, live '
+            'through the latest completed session.</div>')
     parts = [lede]
     for subhead, panels in SECTIONS:
         parts.append(
@@ -400,9 +459,13 @@ def render_election_cycle(df, current=None):
             'dividends excluded; non-US markets in local '
             'currency, so no FX moves are in them. The '
             '2026 overlay on the midterm panels is the '
-            'current cycle\'s path into today\'s vote, '
-            'each market indexed to 100 at its last close. '
-            'Computed 2026-11-03 from Yahoo daily closes.'
+            'current cycle\'s path, each market indexed '
+            'to 100 at its own Nov 3, 2026 election-day '
+            'close and extending past election day as '
+            'new sessions complete, fetched live from '
+            'Yahoo daily closes. The historical series '
+            'were computed 2026-11-03 from Yahoo daily '
+            'closes.'
             '</div>')
     return ('<div style="max-width:1120px;margin:0 auto">'
             + "".join(parts) + note + "</div>")
