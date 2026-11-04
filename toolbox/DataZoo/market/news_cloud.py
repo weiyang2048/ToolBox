@@ -73,9 +73,9 @@ USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) news_cloud/1.0"
 # ------------------------------------------------------------------
 FEEDS = [
     ("CNBC Top News", "https://www.cnbc.com/id/100003114/device/rss/rss.html"),
-    ("CNBC Markets", "https://www.cnbc.com/id/20910258/device/rss/rss.html"),
     ("MarketWatch", "https://feeds.content.dowjones.io/public/rss/mw_topstories"),
-    ("WSJ Markets", "https://feeds.a.dj.com/rss/RSSMarketsMain.xml"),
+    # WSJ Markets and CNBC Markets were removed at the user's
+    # direction 2026-11-04 (Nov 3 audit: 0 and 1 headlines).
     ("Bloomberg Markets", "https://feeds.bloomberg.com/markets/news.rss"),
     ("FT Markets", "https://www.ft.com/markets?format=rss"),
     # UK business desks (added 2026-11-01, live-tested the same day).
