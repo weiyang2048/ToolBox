@@ -175,6 +175,27 @@ def test_walk_forward_backtest_runs_and_is_cost_monotone():
             <= free["stats"].loc["Max Sharpe", "total_return"] + 1e-12)
 
 
+def test_walk_forward_progress_callback():
+    # The progress hook (the dashboard's progress bar): one
+    # call before the loop with done == 0, then one after
+    # each rebalance, ending at (total, total) with total
+    # equal to the run's rebalance count; the dates are the
+    # rebalance dates in order.
+    prices = _prices(n=500)
+    calls = []
+    out = walk_forward_backtest(
+        prices, strategies=["1/N", "Min variance"],
+        cov_method="bbp", mean_method="james_stein", seed=126,
+        hold=21, progress=lambda d, t, w: calls.append((d, t, w)))
+    assert out is not None
+    total = out["n_rebalances"]
+    assert [c[0] for c in calls] == list(range(total + 1))
+    assert all(c[1] == total for c in calls)
+    hist_dates = [h["date"] for h in out["weights_history"]]
+    assert [c[2] for c in calls[1:]] == hist_dates
+    assert calls[0][2] == hist_dates[0]
+
+
 def test_erc_equalises_risk_contributions():
     from toolbox.strategies import erc_weights
 

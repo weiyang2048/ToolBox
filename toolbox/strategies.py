@@ -1234,6 +1234,7 @@ def walk_forward_backtest(
     cost_bps: float = 0.0,
     window: int | None = None,
     rf_annual_pct: pd.Series | None = None,
+    progress=None,
 ) -> dict | None:
     """Walk-forward backtest of ``strategies`` on ``prices``.
 
@@ -1264,6 +1265,15 @@ def walk_forward_backtest(
     :func:`parse_window`), which overrides ``window`` for that
     strategy — the estimation slice and its risk-free mean follow
     the strategy's own window. Unsuffixed names use ``window``.
+
+    ``progress`` (optional) is a callable invoked as
+    ``progress(done, total, rebalance_date)``: once before the
+    loop with ``done == 0`` and after each completed rebalance,
+    where ``total`` is the rebalance count and ``rebalance_date``
+    the date the most recent (or, for ``done == 0``, the first)
+    rebalance's weights take effect. It exists for callers that
+    surface progress (the dashboard's progress bar); the default
+    ``None`` reports nothing and changes nothing.
 
     Returns ``None`` when the common history cannot seed plus hold.
     Otherwise a dict with the OOS daily ``returns`` and ``equity``
@@ -1298,7 +1308,10 @@ def walk_forward_backtest(
     drift: dict[str, np.ndarray | None] = {lab: None for lab in labels}
     weights_history: list[dict] = []
     n_reb = 0
-    for start in range(seed, len(simple), hold):
+    reb_starts = list(range(seed, len(simple), hold))
+    if progress is not None:
+        progress(0, len(reb_starts), simple.index[reb_starts[0]])
+    for start in reb_starts:
         end = min(start + hold, len(simple))
         cache: dict = {}
         slices: dict = {}
@@ -1343,6 +1356,8 @@ def walk_forward_backtest(
                 s = wcur.sum()
                 wcur = wcur / s if s > 0 else np.ones_like(wcur) / len(wcur)
             drift[lab] = wcur
+        if progress is not None:
+            progress(n_reb, len(reb_starts), simple.index[start])
     dates = simple.index[seed:]
     rf_oos = rf_all[seed:]
     returns = pd.DataFrame(port, index=dates)
