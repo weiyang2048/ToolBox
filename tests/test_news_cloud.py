@@ -777,6 +777,8 @@ def test_headline_tone_and_gradient():
     assert tone_gradient(0.8)[1] == "#1A9E4A"
     assert tone_gradient(-0.8)[1] == "#D62820"
     assert tone_gradient(99.0) == tone_gradient(0.8)  # clamps
+    import os
+    os.environ["NEWS_CLOUD_TONE_MODEL"] = "off"
     heads = [{"title": "AI stocks rally", "link": ""},
              {"title": "AI rally continues", "link": ""}]
     topics = [{"term": "AI", "weight": 2, "group": "tech",
@@ -785,3 +787,23 @@ def test_headline_tone_and_gradient():
     out = tone_colored(topics, heads)
     assert out[0]["group"] == "tech"  # family stays metadata
     assert out[0]["tone"] > 0 and out[0]["tone_color"] != "#000000"
+
+
+def test_tone_colored_prefers_the_model(monkeypatch):
+    from toolbox.DataZoo.market.news_cloud import tone_gradient
+    import toolbox.DataZoo.market.news_cloud_tone as tone_mod
+    monkeypatch.setattr(
+        tone_mod, "model_headline_tones",
+        lambda titles: [-0.9] * len(titles))
+    from toolbox.DataZoo.market.news_cloud import tone_colored
+    heads = [{"title": "AI panel meets on Tuesday", "link": ""},
+             {"title": "AI hearing scheduled", "link": ""}]
+    topics = [{"term": "AI", "weight": 2, "group": "tech",
+               "canon": "ai",
+               "example_headline": "AI panel meets on Tuesday",
+               "link": ""}]
+    out = tone_colored(topics, heads)
+    assert out[0]["tone"] == -0.9
+    from toolbox.DataZoo.market.news_cloud import TONE_CAP_MODEL
+    assert out[0]["tone_color"] == tone_gradient(
+        -0.9, cap=TONE_CAP_MODEL)[1]

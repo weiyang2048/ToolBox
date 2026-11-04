@@ -542,13 +542,17 @@ def _matches(pattern, text):
 # ------------------------------------------------------------------
 # Headline tone — the cloud's color meaning (user direction
 # 2026-11-04: "color by headline tone", as a continuous
-# green-black-red gradient). A topic's tone is the mean over
-# its member headlines of (distinct positive words - distinct
-# negative words); the gradient runs black at 0 to full green
-# / full red at |tone| = TONE_CAP. Lexicon scoring is crude by
-# design — no negation, no context — and the caption says
-# exactly what the color is: the tone of the topic's own
-# headlines, not a market-direction call.
+# green-black-red gradient; "use a model" the same morning).
+# A topic's tone is the mean of its member headlines' tones;
+# the gradient runs black at 0 to full green / full red at
+# |tone| = TONE_CAP. Headline tones come from FinBERT
+# (news_cloud_tone: P(positive) - P(negative) per headline),
+# with the lexicon below as the fail-soft fallback when the
+# model is unavailable — the lexicon scorer is crude (no
+# negation, no context), which is why it is the fallback and
+# not the scorer. Either way the caption says exactly what
+# the color is: the tone of the topic's own headlines, not a
+# market-direction call.
 # ------------------------------------------------------------------
 TONE_POSITIVE = frozenset(
     "advances advanced approval approves approved beat beats "
@@ -572,6 +576,11 @@ TONE_NEGATIVE = frozenset(
     "uncertainty volatile warning warns warned war weak "
     "woes".split())
 TONE_CAP = 0.8
+# The model's topic means live on a compressed scale:
+# averaging dozens of mostly-neutral wire headlines dilutes
+# them (observed range on a live pool: |mean| <= ~0.31), so
+# the model path saturates the gradient at a lower cap.
+TONE_CAP_MODEL = 0.35
 _TONE_GREEN = (26, 158, 74)
 _TONE_RED = (214, 40, 32)
 
@@ -592,16 +601,34 @@ def _tone_hex(rgb):
     return "#{:02X}{:02X}{:02X}".format(*rgb)
 
 
-def tone_gradient(score):
+def tone_gradient(score, cap=TONE_CAP):
     """(light, deep) hex pair for a tone score on the
     green-black-red scale: black at 0, saturating at
-    +/-TONE_CAP; light is the deep color washed toward
-    white, matching the family gradients' construction."""
-    f = min(abs(score) / TONE_CAP, 1.0)
+    +/-cap; light is the deep color washed toward white,
+    matching the family gradients' construction."""
+    f = min(abs(score) / cap, 1.0)
     base = _TONE_GREEN if score >= 0 else _TONE_RED
     deep = _tone_mix((0, 0, 0), base, f)
     light = _tone_mix(deep, (255, 255, 255), 0.45)
     return _tone_hex(light), _tone_hex(deep)
+
+
+def _headline_scores(headlines):
+    """(per-headline tones, from_model): FinBERT where
+    available (news_cloud_tone), the lexicon scorer
+    otherwise. The flag picks the gradient cap — the two
+    scorers' topic means live on different scales."""
+    try:
+        from toolbox.DataZoo.market.news_cloud_tone import (
+            model_headline_tones)
+        scores = model_headline_tones(
+            [h["title"] for h in headlines])
+    except Exception:
+        scores = None
+    if scores is not None:
+        return scores, True
+    return [float(headline_tone(h["title"]))
+            for h in headlines], False
 
 
 def tone_colored(topics, headlines):
@@ -611,12 +638,14 @@ def tone_colored(topics, headlines):
     `group` is left untouched: family stays the metadata,
     tone is the renderers' color key."""
     members = topic_member_sets(topics, headlines)
+    scores, from_model = _headline_scores(headlines)
+    cap = TONE_CAP_MODEL if from_model else TONE_CAP
     out = []
     for t in topics:
         idxs = members.get(t["term"], ())
-        score = (sum(headline_tone(headlines[i]["title"])
-                     for i in idxs) / len(idxs)) if idxs else 0.0
-        light, deep = tone_gradient(score)
+        score = (sum(scores[i] for i in idxs)
+                 / len(idxs)) if idxs else 0.0
+        light, deep = tone_gradient(score, cap=cap)
         out.append({**t, "tone": round(score, 3),
                     "tone_light": light, "tone_color": deep})
     return out
