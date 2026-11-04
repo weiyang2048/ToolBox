@@ -627,16 +627,19 @@ def tone_gradient(score, cap=TONE_CAP):
     return _tone_hex(light), _tone_hex(deep)
 
 
-def _headline_scores(headlines):
+def _headline_scores(headlines, progress=None):
     """(per-headline tones, from_model): FinBERT where
     available (news_cloud_tone), the lexicon scorer
     otherwise. The flag picks the gradient cap — the two
-    scorers' topic means live on different scales."""
+    scorers' topic means live on different scales.
+    ``progress`` is forwarded to the model scorer (the
+    lexicon fallback is a single pass and reports
+    nothing)."""
     try:
         from toolbox.DataZoo.market.news_cloud_tone import (
             model_headline_tones)
         scores = model_headline_tones(
-            [h["title"] for h in headlines])
+            [h["title"] for h in headlines], progress=progress)
     except Exception:
         scores = None
     if scores is not None:
@@ -645,14 +648,16 @@ def _headline_scores(headlines):
             for h in headlines], False
 
 
-def tone_colored(topics, headlines):
+def tone_colored(topics, headlines, progress=None):
     """Copies of the topics with `tone` (the mean headline
     tone over the topic's member headlines) and its gradient
     pair (`tone_light`, `tone_color`) attached. The semantic
     `group` is left untouched: family stays the metadata,
-    tone is the renderers' color key."""
+    tone is the renderers' color key. ``progress`` is
+    forwarded to the headline scorer."""
     members = topic_member_sets(topics, headlines)
-    scores, from_model = _headline_scores(headlines)
+    scores, from_model = _headline_scores(headlines,
+                                          progress=progress)
     cap = TONE_CAP_MODEL if from_model else TONE_CAP
     out = []
     for t in topics:

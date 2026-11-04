@@ -319,20 +319,34 @@ def build_linked_cloud_html(hours=24, progress=None):
     build_cloud's left line; linked_cloud_html sets the right
     line to the links explanation.
 
-    ``progress`` (optional) is forwarded to fetch_headlines
-    (per-feed reports) and then called twice more at the full
-    count with stage labels — extracting/scoring, then laying
-    out — so a caller's bar can name the finishing stages.
-    The default ``None`` reports nothing."""
+    ``progress`` (optional) reports the WHOLE build, stage
+    by stage (user direction 2026-11-04: everything between
+    the wait starting and the results showing): per feed
+    from fetch_headlines, a stage label at the full feed
+    count before topic extraction (which names the headline
+    count it works on), per-batch headline counts from the
+    tone scorer — re-labelled "scoring tone (FinBERT)"
+    unless the scorer named the step itself (the model
+    load) — and a closing stage label for the layout. The
+    default ``None`` reports nothing."""
     now = datetime.now(timezone.utc)
     headlines, source_counts = fetch_headlines(
         hours=hours, now=now, progress=progress)
     n_feeds = len(FEEDS) + len(GOOGLE_SECTIONS)
     if progress is not None:
         progress(n_feeds, n_feeds,
-                 "headlines in — extracting topics & scoring tone")
-    topics = tone_colored(extract_topics_challenger(headlines),
-                          headlines)
+                 f"extracting topics from {len(headlines)} "
+                 "headlines")
+    topics = extract_topics_challenger(headlines)
+    if topics:
+        def _tone_progress(done, total, label):
+            progress(done, total,
+                     label or "scoring tone (FinBERT)")
+
+        topics = tone_colored(
+            topics, headlines,
+            progress=_tone_progress if progress is not None
+            else None)
     if not topics:
         return ""
     if progress is not None:

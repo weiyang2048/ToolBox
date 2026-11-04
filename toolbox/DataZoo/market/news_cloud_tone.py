@@ -57,14 +57,25 @@ def _load():
     return _state or None
 
 
-def model_headline_tones(titles):
+def model_headline_tones(titles, progress=None):
     """FinBERT tone per headline: P(positive) - P(negative).
-    None when the model is disabled or unavailable."""
+    None when the model is disabled or unavailable.
+
+    ``progress`` (optional) is called as
+    ``progress(done, total, label)`` — once with ``done == 0``
+    (labelled with the model load when this call has to load
+    it: the cold-container download is the longest silent
+    stretch in the cloud build), then after each inference
+    batch. The default ``None`` reports nothing."""
     if os.environ.get("NEWS_CLOUD_TONE_MODEL", "").lower() == "off":
         return None
+    if progress is not None and _state is None:
+        progress(0, len(titles), "loading the tone model (first run)")
     loaded = _load()
     if loaded is None:
         return None
+    if progress is not None:
+        progress(0, len(titles), "")
     sess, tok = loaded
     import numpy as np
     names = {i.name for i in sess.get_inputs()}
@@ -86,6 +97,8 @@ def model_headline_tones(titles):
             p = np.exp(logits - logits.max(axis=1, keepdims=True))
             p /= p.sum(axis=1, keepdims=True)
             out.extend((p[:, 0] - p[:, 1]).tolist())
+            if progress is not None:
+                progress(len(out), len(titles), "")
     except Exception:
         return None
     return out

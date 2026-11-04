@@ -815,7 +815,7 @@ def test_tone_colored_prefers_the_model(monkeypatch):
     import toolbox.DataZoo.market.news_cloud_tone as tone_mod
     monkeypatch.setattr(
         tone_mod, "model_headline_tones",
-        lambda titles: [-0.9] * len(titles))
+        lambda titles, progress=None: [-0.9] * len(titles))
     from toolbox.DataZoo.market.news_cloud import tone_colored
     heads = [{"title": "AI panel meets on Tuesday", "link": ""},
              {"title": "AI hearing scheduled", "link": ""}]
@@ -828,3 +828,55 @@ def test_tone_colored_prefers_the_model(monkeypatch):
     from toolbox.DataZoo.market.news_cloud import TONE_CAP_MODEL
     assert out[0]["tone_color"] == tone_gradient(
         -0.9, cap=TONE_CAP_MODEL)[1]
+
+
+def test_model_headline_tones_progress_batches(monkeypatch):
+    # The progress hook (the dashboard mood bar's tone
+    # stage): one call before the batches, then one per
+    # inference batch, the counter reaching the title count.
+    import numpy as np
+
+    import toolbox.DataZoo.market.news_cloud_tone as tone_mod
+
+    # An earlier test leaves the kill switch set in os.environ.
+    monkeypatch.delenv("NEWS_CLOUD_TONE_MODEL", raising=False)
+
+    class _Enc:
+        ids = [1, 2]
+        attention_mask = [1, 1]
+
+    class _Tok:
+        def encode(self, _t):
+            return _Enc()
+
+    class _Sess:
+        def get_inputs(self):
+            return []
+
+        def run(self, _o, feed):
+            return [np.zeros((len(feed["input_ids"]), 3))]
+
+    monkeypatch.setattr(tone_mod, "_state", (_Sess(), _Tok()))
+    calls = []
+    out = tone_mod.model_headline_tones(
+        ["t"] * 40,
+        progress=lambda d, t, s: calls.append((d, t, s)))
+    assert out == [0.0] * 40
+    assert calls == [(0, 40, ""), (32, 40, ""), (40, 40, "")]
+
+
+def test_model_headline_tones_progress_load_label(monkeypatch):
+    # A cold call names the model load before it happens —
+    # on a fresh container that download is the longest
+    # silent stretch in the cloud build.
+    import toolbox.DataZoo.market.news_cloud_tone as tone_mod
+
+    monkeypatch.delenv("NEWS_CLOUD_TONE_MODEL", raising=False)
+    monkeypatch.setattr(tone_mod, "_state", None)
+    monkeypatch.setattr(tone_mod, "_load", lambda: None)
+    calls = []
+    out = tone_mod.model_headline_tones(
+        ["a", "b", "c"],
+        progress=lambda d, t, s: calls.append((d, t, s)))
+    assert out is None
+    assert calls == [(0, 3, "loading the tone model (first run)")]
