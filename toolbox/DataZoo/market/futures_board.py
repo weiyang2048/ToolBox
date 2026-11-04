@@ -45,7 +45,7 @@ import datetime
 import json
 import urllib.parse
 import urllib.request
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from toolbox.DataZoo.market.eastern import ET, asof_stamp
 from toolbox.DataZoo.market.yahoo_prices import YAHOO_UA, chart_payload
@@ -404,7 +404,7 @@ def group_year_average(rows):
     return sum(ys) / len(ys) if ys else None
 
 
-def fetch_board(now=None, groups=None):
+def fetch_board(now=None, groups=None, progress=None):
     """Pull the whole board, or only the named groups.
 
     groups (user request 2026-10-30, for the dashboard's
@@ -429,6 +429,14 @@ def fetch_board(now=None, groups=None):
     date of its market time (the instant "mtime" renders); for a
     completed-close fallback row, the date of its last completed
     bar; None when neither is known (a null row).
+
+    ``progress`` (optional) is a callable invoked as
+    ``progress(done, total, symbol)``: once before the fetches
+    complete with ``done == 0``, then once per completed line
+    fetch (the lines run concurrently, so completions arrive
+    out of board order; ``done`` counts them). It exists for
+    callers that surface progress (the dashboard's progress
+    bars); the default ``None`` reports nothing.
     """
     now = now or datetime.datetime.now(ET)
     # The shared Eastern as-of stamp (eastern.asof_stamp) — one
@@ -452,6 +460,17 @@ def fetch_board(now=None, groups=None):
     with ThreadPoolExecutor(max_workers=8) as pool:
         futs = {sym: pool.submit(_fetch_row, sym)
                 for _, sym, _, _, _ in order}
+        # Collect the fetches as they complete (progress
+        # reports each), then assemble in board order below —
+        # the values assembled are identical either way.
+        results = {}
+        if progress is not None:
+            progress(0, len(futs), "")
+        by_fut = {f: s for s, f in futs.items()}
+        for fut in as_completed(futs.values()):
+            results[by_fut[fut]] = fut.result()
+            if progress is not None:
+                progress(len(results), len(futs), by_fut[fut])
         for gname, sym, label, dec, kind in order:
             rows = data.setdefault(gname, [])
             row = {"sym": sym, "label": label, "dec": dec, "kind": kind,
@@ -459,7 +478,7 @@ def fetch_board(now=None, groups=None):
                    "date": None, "ls": (None, None, None)}
             for key, _n in HORIZONS:
                 row[key] = None
-            got, closes, last_bar_date = futs[sym].result()
+            got, closes, last_bar_date = results[sym]
             if isinstance(got, Exception):  # 404, timeout, bad JSON...
                 notes.append("futures: {} unavailable ({})".format(sym, got))
                 got = None

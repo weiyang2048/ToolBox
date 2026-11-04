@@ -483,20 +483,32 @@ def _parse_date(text):
     return dt
 
 
-def fetch_headlines(hours=24, now=None):
+def fetch_headlines(hours=24, now=None, progress=None):
     """All distinct headlines from the last `hours` hours.
 
     Returns (headlines, source_counts): headlines are dicts with
     title / source / published; source_counts says how many usable
-    in-window items each feed contributed."""
+    in-window items each feed contributed.
+
+    ``progress`` (optional) is a callable invoked as
+    ``progress(done, total, feed_name)``: once before the feeds
+    with ``done == 0``, then after each feed, failed feeds
+    included (the attempt completed). For callers that surface
+    progress; the default ``None`` reports nothing."""
     now = now or datetime.now(timezone.utc)
     cutoff = now - timedelta(hours=hours)
     urls = list(FEEDS) + list(GOOGLE_SECTIONS)
     seen, headlines, source_counts = set(), [], Counter()
-    for name, url in urls:
+    if progress is not None:
+        progress(0, len(urls), "")
+    for _fi, (name, url) in enumerate(urls, start=1):
         try:
             root = ET.fromstring(_fetch(url))
         except Exception:
+            root = None
+        if root is None:
+            if progress is not None:
+                progress(_fi, len(urls), name)
             continue
         # Namespace-agnostic item walk: RSS 2.0 uses bare <item>,
         # RSS 1.0 (Nikkei Asia) namespaced <item> with <dc:date>.
@@ -527,6 +539,8 @@ def fetch_headlines(hours=24, now=None):
                               "link": (_field("link") or "").strip(),
                               "published": published})
             source_counts[name] += 1
+        if progress is not None:
+            progress(_fi, len(urls), name)
     return headlines, source_counts
 
 

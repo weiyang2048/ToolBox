@@ -122,6 +122,27 @@ def test_mining_dedupes_hyphen_variants_of_lexicon_terms():
     assert "Tech Sell-Off" not in terms and "Tech Selloff" not in terms
 
 
+def test_fetch_headlines_progress_callback(monkeypatch):
+    # The progress hook (the dashboard's cloud bar): one
+    # call before the feeds, then one per feed, the counter
+    # running 0..total over FEEDS + GOOGLE_SECTIONS.
+    from toolbox.DataZoo.market import news_cloud as nc
+
+    monkeypatch.setattr(
+        nc, "_fetch",
+        lambda url: b'<rss version="2.0"><channel></channel></rss>')
+    calls = []
+    headlines, _counts = nc.fetch_headlines(
+        progress=lambda d, t, s: calls.append((d, t, s)))
+    total = len(nc.FEEDS) + len(nc.GOOGLE_SECTIONS)
+    assert headlines == []
+    assert [c[0] for c in calls] == list(range(total + 1))
+    assert all(c[1] == total for c in calls)
+    assert [c[2] for c in calls[1:]] == [n for n, _u in
+                                         list(nc.FEEDS)
+                                         + list(nc.GOOGLE_SECTIONS)]
+
+
 def test_render_html_without_chromium_returns_false(monkeypatch):
     import toolbox.DataZoo.market.news_cloud as nc
     monkeypatch.setattr(nc, "CHROMIUM", "/nonexistent/chromium")

@@ -199,20 +199,32 @@ def fetch_gold():
     return _cap_to_eastern_today(s)
 
 
-def fetch_sentiment():
+def fetch_sentiment(progress=None):
     """All three series + latest readings, or None if every
     source failed. Each present key of ``latest`` is a dict with
-    the value (and zone, for the two indices)."""
+    the value (and zone, for the two indices).
+
+    ``progress`` (optional) is a callable invoked as
+    ``progress(done, total, source_label)``: once before the
+    sources with ``done == 0``, then after each source attempt
+    (failures included — the attempt completed). For callers
+    that surface progress; the default ``None`` reports
+    nothing."""
     series = {}
-    for name, fn in (("cnn", fetch_cnn), ("crypto", fetch_crypto),
-                     ("gold", fetch_gold)):
+    sources = (("cnn", "CNN Fear & Greed", fetch_cnn),
+               ("crypto", "Crypto Fear & Greed", fetch_crypto),
+               ("gold", "Gold", fetch_gold))
+    if progress is not None:
+        progress(0, len(sources), "")
+    for i, (name, label, fn) in enumerate(sources, start=1):
         try:
             s = fn().dropna()
-            if len(s) < 30:
-                continue
-            series[name] = s
+            if len(s) >= 30:
+                series[name] = s
         except Exception:  # noqa: BLE001 - degrade per source
-            continue
+            pass
+        if progress is not None:
+            progress(i, len(sources), label)
     if not series:
         return None
     latest = {}

@@ -175,6 +175,22 @@ def test_walk_forward_backtest_runs_and_is_cost_monotone():
             <= free["stats"].loc["Max Sharpe", "total_return"] + 1e-12)
 
 
+def test_merged_stats_progress_callback():
+    # The progress hook (the dashboard's stats-table bar):
+    # one call before the per-ticker loop, then one per
+    # ticker, labelled by ticker, ending at (n, n).
+    from toolbox.strategies import merged_stats
+
+    prices = _prices(n=300, p=4)
+    calls = []
+    out = merged_stats(prices,
+                       progress=lambda d, t, s: calls.append((d, t, s)))
+    assert out is not None and len(out) == 4
+    assert [c[0] for c in calls] == [0, 1, 2, 3, 4]
+    assert all(c[1] == 4 for c in calls)
+    assert [c[2] for c in calls[1:]] == list(prices.columns)
+
+
 def test_walk_forward_progress_callback():
     # The progress hook (the dashboard's progress bar): one
     # call before the loop with done == 0, then one after

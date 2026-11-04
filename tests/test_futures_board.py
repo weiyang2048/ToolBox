@@ -80,6 +80,34 @@ def _fake_fetch_board(monkeypatch, closes_by_sym):
     return fb.fetch_board(now=datetime.datetime(2026, 10, 29, 12, 0))
 
 
+def test_fetch_board_progress_callback(monkeypatch):
+    # The progress hook (the dashboard's board bars): one
+    # call before the fetches complete, then one per
+    # completed line, the counter running 0..total where
+    # total is the board's unique-symbol count.
+    closes = {"ES=F": [100.0, 101.0, 102.0]}
+
+    def fake_fetch(sym):
+        return 103.0, 102.0, 1_700_000_000
+
+    def fake_bars(sym):
+        return [(datetime.date(2026, 10, 28), c)
+                for c in closes.get(sym, [100.0, 101.0])]
+
+    monkeypatch.setattr(fb, "fetch", fake_fetch)
+    monkeypatch.setattr(fb, "_history_bars", fake_bars)
+    calls = []
+    rep = fb.fetch_board(
+        now=datetime.datetime(2026, 10, 29, 12, 0),
+        progress=lambda d, t, s: calls.append((d, t, s)))
+    total = len({sym for _g, contracts in fb.all_groups()
+                 for sym, *_ in contracts})
+    assert rep["available"] > 0
+    assert [c[0] for c in calls] == list(range(total + 1))
+    assert all(c[1] == total for c in calls)
+    assert calls[0][2] == "" and calls[-1][0] == total
+
+
 def test_fetch_board_assembly(monkeypatch):
     closes = {sym: [100.0] * 300
               for _g, contracts in fb.all_groups()

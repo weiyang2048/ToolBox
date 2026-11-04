@@ -20,6 +20,8 @@ from datetime import datetime, timezone
 from toolbox.DataZoo.market.news_cloud import (
     _FRAME_CSS,
     FAMILY_GRADIENTS,
+    FEEDS,
+    GOOGLE_SECTIONS,
     _sizes,
     extract_topics_challenger,
     fetch_headlines,
@@ -310,18 +312,31 @@ def linked_cloud_html(topics, edges, caption=None):
                caption.get("right", "")))
 
 
-def build_linked_cloud_html(hours=24):
+def build_linked_cloud_html(hours=24, progress=None):
     """Fetch -> extract -> linked frame HTML. Returns "" when
     the fetch produced no topics (the caller renders nothing
     rather than a broken panel). The footer caption matches
     build_cloud's left line; linked_cloud_html sets the right
-    line to the links explanation."""
+    line to the links explanation.
+
+    ``progress`` (optional) is forwarded to fetch_headlines
+    (per-feed reports) and then called twice more at the full
+    count with stage labels — extracting/scoring, then laying
+    out — so a caller's bar can name the finishing stages.
+    The default ``None`` reports nothing."""
     now = datetime.now(timezone.utc)
-    headlines, source_counts = fetch_headlines(hours=hours, now=now)
+    headlines, source_counts = fetch_headlines(
+        hours=hours, now=now, progress=progress)
+    n_feeds = len(FEEDS) + len(GOOGLE_SECTIONS)
+    if progress is not None:
+        progress(n_feeds, n_feeds,
+                 "headlines in — extracting topics & scoring tone")
     topics = tone_colored(extract_topics_challenger(headlines),
                           headlines)
     if not topics:
         return ""
+    if progress is not None:
+        progress(n_feeds, n_feeds, "laying out the cloud")
     try:
         from toolbox.DataZoo.market.eastern import asof_stamp
         asof = asof_stamp(now)

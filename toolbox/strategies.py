@@ -1090,7 +1090,8 @@ def _weekly_win_rate(w: pd.Series, bench: pd.Series) -> float:
 def merged_stats(prices: pd.DataFrame,
                  benchmark: pd.Series | None = None,
                  win_benchmarks: pd.DataFrame | None = None,
-                 rf_annual_pct: pd.Series | None = None) -> pd.DataFrame:
+                 rf_annual_pct: pd.Series | None = None,
+                 progress=None) -> pd.DataFrame:
     """The one merged per-asset stats table (user direction
     2026-11-02): the union of the Strategies page's table
     (:func:`asset_stats`, plus the page's Rebased column) and the
@@ -1144,6 +1145,13 @@ def merged_stats(prices: pd.DataFrame,
       briefs' definition), from the ``win_benchmarks`` closes;
       NaN when no benchmark frame is supplied.
 
+    ``progress`` (optional) is a callable invoked as
+    ``progress(done, total, ticker)``: once before the
+    per-ticker loop with ``done == 0``, then after each
+    ticker's row. For callers that surface progress (the
+    dashboard's progress bars); the default ``None`` reports
+    nothing.
+
     Units: every rate-like column is a FRACTION (the briefs store
     percents — divide-by-100 is the only unit change); ``rebased``
     is index points (start = 100), the trend states are bool /
@@ -1151,7 +1159,9 @@ def merged_stats(prices: pd.DataFrame,
     """
     base = asset_stats(prices, benchmark)
     rows = {}
-    for t in base.index:
+    if progress is not None:
+        progress(0, len(base.index), "")
+    for i, t in enumerate(base.index, start=1):
         px = prices[t].dropna().sort_index()
         w = px.iloc[-TRADING_DAYS:]
         row = {k: base.loc[t, k] for k in base.columns}
@@ -1209,6 +1219,8 @@ def merged_stats(prices: pd.DataFrame,
         else:
             row["win_rate"] = float("nan")
         rows[t] = row
+        if progress is not None:
+            progress(i, len(base.index), t)
     cols = ["rebased", "day_chg", "wk_chg", "mo_chg", "q_chg",
             "ytd_chg", "yr_chg", "px_ema20", "ema_long", "ema_regime",
             "mu_ann",

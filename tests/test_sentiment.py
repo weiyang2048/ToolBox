@@ -4,6 +4,24 @@ import pandas as pd
 from toolbox.DataZoo.market import sentiment as sm
 
 
+def test_fetch_sentiment_progress_callback(monkeypatch):
+    # The progress hook (the dashboard's sentiment bar): one
+    # call before the sources, then one per source attempt,
+    # labelled, in source order.
+    import numpy as np
+
+    idx = pd.date_range("2026-01-01", periods=40, freq="D")
+    series = pd.Series(np.linspace(30.0, 50.0, 40), index=idx)
+    for fn in ("fetch_cnn", "fetch_crypto", "fetch_gold"):
+        monkeypatch.setattr(sm, fn, lambda s=series: s)
+    calls = []
+    out = sm.fetch_sentiment(
+        progress=lambda d, t, s: calls.append((d, t, s)))
+    assert out is not None
+    assert calls == [(0, 3, ""), (1, 3, "CNN Fear & Greed"),
+                     (2, 3, "Crypto Fear & Greed"), (3, 3, "Gold")]
+
+
 def test_fetch_cnn_builds_on_canonical_graph(monkeypatch):
     import datetime
 
