@@ -50,6 +50,7 @@ import tempfile
 import urllib.request
 import xml.etree.ElementTree as ET
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 
@@ -483,44 +484,31 @@ def _parse_date(text):
     return dt
 
 
-def fetch_headlines(hours=24, now=None, progress=None):
-    """All distinct headlines from the last `hours` hours.
+def _item_field(item, name):
+    for child in item:
+        if child.tag == name or child.tag.endswith("}" + name):
+            return child.text
+    return None
 
-    Returns (headlines, source_counts): headlines are dicts with
-    title / source / published; source_counts says how many usable
-    in-window items each feed contributed.
 
-    ``progress`` (optional) is a callable invoked as
-    ``progress(done, total, feed_name)``: once before the feeds
-    with ``done == 0``, then after each feed, failed feeds
-    included (the attempt completed). For callers that surface
-    progress; the default ``None`` reports nothing."""
-    now = now or datetime.now(timezone.utc)
-    cutoff = now - timedelta(hours=hours)
-    urls = list(FEEDS) + list(GOOGLE_SECTIONS)
-    seen, headlines, source_counts = set(), [], Counter()
-    if progress is not None:
-        progress(0, len(urls), "")
-    for _fi, (name, url) in enumerate(urls, start=1):
-        try:
-            root = ET.fromstring(_fetch(url))
-        except Exception:
-            root = None
-        if root is None:
-            if progress is not None:
-                progress(_fi, len(urls), name)
-            continue
+def _feed_items(url, cutoff):
+    """One feed's in-window items as (title, link, published)
+    triples in feed order; None on any fetch/parse failure.
+
+    Pure worker for the thread pool in fetch_headlines — no
+    shared state, so the feeds fetch in parallel while the
+    merge stays in feed order and the result is identical to
+    the sequential fetch this replaced (speed pass
+    2026-11-05: 16 sequential feeds cost ~11 s)."""
+    try:
+        root = ET.fromstring(_fetch(url))
         # Namespace-agnostic item walk: RSS 2.0 uses bare <item>,
         # RSS 1.0 (Nikkei Asia) namespaced <item> with <dc:date>.
         items = [el for el in root.iter()
                  if el.tag == "item" or el.tag.endswith("}item")]
+        out = []
         for item in items:
-            def _field(name):
-                for child in item:
-                    if child.tag == name or child.tag.endswith("}" + name):
-                        return child.text
-                return None
-            title = (_field("title") or "").strip()
+            title = (_item_field(item, "title") or "").strip()
             if not title:
                 continue
             # Google News appends " - Publisher" to every title
@@ -528,19 +516,61 @@ def fetch_headlines(hours=24, now=None, progress=None):
             # Broadcasting Corporation"); strip twice for safety.
             for _ in range(2):
                 title = re.sub(r"\s+-\s+[^-]{2,64}$", "", title)
-            published = _parse_date(_field("pubDate") or _field("date"))
+            published = _parse_date(_item_field(item, "pubDate")
+                                    or _item_field(item, "date"))
             if published is not None and published < cutoff:
                 continue
+            out.append((title,
+                        (_item_field(item, "link") or "").strip(),
+                        published))
+        return out
+    except Exception:
+        return None
+
+
+def fetch_headlines(hours=24, now=None, progress=None):
+    """All distinct headlines from the last `hours` hours.
+
+    Returns (headlines, source_counts): headlines are dicts with
+    title / source / published; source_counts says how many usable
+    in-window items each feed contributed.
+
+    The feeds fetch in parallel (8 workers); the merge runs in
+    feed order, so the result is the sequential fetch's result.
+
+    ``progress`` (optional) is a callable invoked as
+    ``progress(done, total, feed_name)``: once before the feeds
+    with ``done == 0``, then as each feed completes, failed
+    feeds included — so counts run 0..total while labels arrive
+    in completion order. For callers that surface progress; the
+    default ``None`` reports nothing."""
+    now = now or datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=hours)
+    urls = list(FEEDS) + list(GOOGLE_SECTIONS)
+    if progress is not None:
+        progress(0, len(urls), "")
+    per_feed = [None] * len(urls)
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futures = {pool.submit(_feed_items, url, cutoff): i
+                   for i, (_name, url) in enumerate(urls)}
+        done = 0
+        for fut in as_completed(futures):
+            i = futures[fut]
+            per_feed[i] = fut.result()
+            done += 1
+            if progress is not None:
+                progress(done, len(urls), urls[i][0])
+    seen, headlines, source_counts = set(), [], Counter()
+    for (name, _url), items in zip(urls, per_feed):
+        for title, link, published in items or []:
             key = re.sub(r"\W+", " ", title.lower()).strip()
             if key in seen:
                 continue
             seen.add(key)
             headlines.append({"title": title, "source": name,
-                              "link": (_field("link") or "").strip(),
+                              "link": link,
                               "published": published})
             source_counts[name] += 1
-        if progress is not None:
-            progress(_fi, len(urls), name)
     return headlines, source_counts
 
 

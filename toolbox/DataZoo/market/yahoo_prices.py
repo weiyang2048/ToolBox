@@ -29,6 +29,7 @@ import json
 import threading
 import time
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -76,8 +77,10 @@ def download_close_prices(
     one call at 0 before the first fetch, one after each
     completed chunk, and a label-only beat before any stub
     refills. Passing it splits the batch into chunks of
-    ``_PROGRESS_CHUNK``; the assembled frame, refills and
-    tail patch are exactly the no-progress path's.
+    ``_PROGRESS_CHUNK``, downloaded in parallel (counts
+    report in completion order); the assembled frame,
+    refills and tail patch are exactly the no-progress
+    path's.
     """
     symbols = list(dict.fromkeys(tickers))
     if not symbols:
@@ -91,13 +94,26 @@ def download_close_prices(
             prices = _close_frame(_history(symbols, period))
             progress(len(symbols), len(symbols), symbols[-1])
         else:
-            frames = []
+            chunks = [symbols[i:i + _PROGRESS_CHUNK]
+                      for i in range(0, len(symbols), _PROGRESS_CHUNK)]
+            frames = [None] * len(chunks)
             done = 0
-            for i in range(0, len(symbols), _PROGRESS_CHUNK):
-                chunk = symbols[i:i + _PROGRESS_CHUNK]
-                frames.append(_close_frame(_history(chunk, period)))
-                done += len(chunk)
-                progress(done, len(symbols), chunk[-1])
+            # Chunks download in parallel (speed pass
+            # 2026-11-05: sequential chunks cost ~6 s each —
+            # a 505-ticker pull spent ~2.5 min in this loop).
+            # Counts still report as each chunk lands, and
+            # the frames concat in chunk order, so the
+            # assembled frame is the sequential one's; a
+            # chunk that raises fails the download, exactly
+            # as the sequential loop did.
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                futures = {pool.submit(_history, chunk, period): i
+                           for i, chunk in enumerate(chunks)}
+                for fut in as_completed(futures):
+                    i = futures[fut]
+                    frames[i] = _close_frame(fut.result())
+                    done += len(chunks[i])
+                    progress(done, len(symbols), chunks[i][-1])
             prices = pd.concat(frames, axis=1)
             prices = prices.reindex(
                 columns=[s for s in symbols if s in prices.columns])

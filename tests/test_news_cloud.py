@@ -124,8 +124,10 @@ def test_mining_dedupes_hyphen_variants_of_lexicon_terms():
 
 def test_fetch_headlines_progress_callback(monkeypatch):
     # The progress hook (the dashboard's cloud bar): one
-    # call before the feeds, then one per feed, the counter
-    # running 0..total over FEEDS + GOOGLE_SECTIONS.
+    # call before the feeds, then one per feed as it
+    # completes (parallel fetch, 2026-11-05 — counts run
+    # 0..total, labels arrive in completion order, so the
+    # label set is the feed names, in any order).
     from toolbox.DataZoo.market import news_cloud as nc
 
     monkeypatch.setattr(
@@ -138,9 +140,40 @@ def test_fetch_headlines_progress_callback(monkeypatch):
     assert headlines == []
     assert [c[0] for c in calls] == list(range(total + 1))
     assert all(c[1] == total for c in calls)
-    assert [c[2] for c in calls[1:]] == [n for n, _u in
-                                         list(nc.FEEDS)
-                                         + list(nc.GOOGLE_SECTIONS)]
+    assert sorted(c[2] for c in calls[1:]) == sorted(
+        n for n, _u in list(nc.FEEDS) + list(nc.GOOGLE_SECTIONS))
+
+
+def test_fetch_headlines_parallel_merge_matches_feed_order(monkeypatch):
+    # The parallel fetch merges in feed order: a duplicate
+    # title in two feeds belongs to the EARLIER feed, and
+    # per-feed failures skip just that feed.
+    from toolbox.DataZoo.market import news_cloud as nc
+
+    def rss(*titles):
+        items = "".join(
+            f"<item><title>{t}</title><link>http://x/{t}</link>"
+            f"<pubDate>Wed, 05 Nov 2026 12:00:00 GMT</pubDate></item>"
+            for t in titles)
+        return (f'<rss version="2.0"><channel>{items}</channel>'
+                f"</rss>").encode()
+
+    payloads = {}
+    feeds = list(nc.FEEDS) + list(nc.GOOGLE_SECTIONS)
+    for i, (_n, url) in enumerate(feeds):
+        payloads[url] = rss(f"Story {i}", "Shared Story")
+    payloads[feeds[3][1]] = b"not xml at all"
+    monkeypatch.setattr(nc, "_fetch", lambda url: payloads[url])
+    from datetime import datetime, timezone
+    headlines, counts = nc.fetch_headlines(
+        now=datetime(2026, 11, 5, 13, 0, tzinfo=timezone.utc))
+    names = [h["source"] for h in headlines]
+    assert names[0] == feeds[0][0]
+    assert [h["title"] for h in headlines].count("Shared Story") == 1
+    assert headlines[[h["title"] for h in headlines]
+                     .index("Shared Story")]["source"] == feeds[0][0]
+    assert counts[feeds[3][0]] == 0
+    assert sum(counts.values()) == len(headlines)
 
 
 def test_render_html_without_chromium_returns_false(monkeypatch):

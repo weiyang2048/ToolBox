@@ -463,9 +463,11 @@ def test_yahoo_daily_slices_a_wider_cached_window(monkeypatch):
 
 
 def test_download_progress_chunks_and_reports_counts(monkeypatch):
-    # 45 tickers at a chunk of 20: the callback sees 0, then
-    # 20 / 40 / 45, and the batch is fetched in three calls
-    # whose frames assemble in request order.
+    # 45 tickers at a chunk of 20: the batch is fetched in
+    # three chunk calls whose frames assemble in request
+    # order; the callback sees 0, then each chunk's landing
+    # (parallel fetch, 2026-11-05 — counts arrive in
+    # completion order, so compare the sorted counts).
     tickers = [f"T{i:02d}" for i in range(45)]
     calls = []
 
@@ -479,10 +481,35 @@ def test_download_progress_chunks_and_reports_counts(monkeypatch):
     out = yp.download_close_prices(
         tickers, period="5y",
         progress=lambda d, t, label: seen.append((d, t)))
-    assert [len(c) for c in calls] == [20, 20, 5]
-    assert seen == [(0, 45), (20, 45), (40, 45), (45, 45)]
+    assert sorted(len(c) for c in calls) == [5, 20, 20]
+    assert seen[0] == (0, 45)
+    assert seen[-1] == (45, 45)
+    assert sorted(d for d, _t in seen) == [0, 20, 40, 45]
     assert list(out.columns) == tickers
     assert int(out["T44"].notna().sum()) == 100
+
+
+def test_download_parallel_chunks_assemble_in_request_order(monkeypatch):
+    # Later chunks finishing FIRST must not scramble the
+    # assembled frame: values stay with their own tickers.
+    import time as _time
+
+    tickers = [f"T{i:02d}" for i in range(45)]
+
+    def fake_history(ts, period):
+        # the first chunk sleeps longest: completion order
+        # is the reverse of request order
+        _time.sleep(0.05 * (3 - tickers.index(ts[0]) // 20))
+        return _batch_frame({t: [float(tickers.index(t))] * 100
+                             for t in ts})
+
+    monkeypatch.setattr(yp, "_history", fake_history)
+    out = yp.download_close_prices(
+        tickers, period="5y",
+        progress=lambda d, t, label: None)
+    assert list(out.columns) == tickers
+    assert float(out["T00"].iloc[0]) == 0.0
+    assert float(out["T44"].iloc[0]) == 44.0
 
 
 def test_download_progress_small_batch_is_one_call(monkeypatch):
