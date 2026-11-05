@@ -59,6 +59,14 @@ def test_linked_cloud_html_structure_and_mobile_style():
     assert "@media (max-width: 640px)" in html
     assert ".nc-topbar .t { font-size:12px" in html
     assert ".nc-cap { font-size:10.5px" in html
+    # The topbar sits on the host page's DARK background (it is
+    # outside the white frame), so its colors are the light
+    # pair — never the framed variant's on-white navy/gray
+    # (user screenshot 2026-11-05: the title was not visible).
+    # (The framed variant's own .nc-title rule still rides in
+    # the shared _FRAME_CSS text; it matches no element here.)
+    assert "letter-spacing:2.6px; color:#EAF2FB" in html
+    assert ".nc-topbar .w { font-size:12px; color:#C9D4DC" in html
 
 
 def test_linked_cloud_html_topics_are_clickable():

@@ -277,10 +277,16 @@ def linked_cloud_html(topics, edges, caption=None):
             ".nc-topbar {{ display:flex;"
             " justify-content:space-between; align-items:baseline;"
             " padding:0 2px 6px; margin-bottom:10px; }}"
+            # The topbar sits OUTSIDE the white frame, on the
+            # host page's dark background (user screenshot
+            # 2026-11-05: the title was "not very visible") —
+            # the on-white navy #1D4E89 and mid gray #9AA0A6
+            # from the framed variant do not read there, so
+            # the bar carries its own light colors.
             ".nc-topbar .t {{ font-size:15px; letter-spacing:2.6px;"
-            " color:#1D4E89; font-variant:small-caps;"
+            " color:#EAF2FB; font-variant:small-caps;"
             " font-weight:700; }}"
-            ".nc-topbar .w {{ font-size:12px; color:#9AA0A6;"
+            ".nc-topbar .w {{ font-size:12px; color:#C9D4DC;"
             " font-style:italic; }}"
             ".nc-asof {{ padding:0 2px 8px; font-size:12px;"
             " color:#9AA0A6; }}"
