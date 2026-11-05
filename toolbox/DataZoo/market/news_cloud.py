@@ -636,8 +636,7 @@ def _headline_scores(headlines, progress=None):
     lexicon fallback is a single pass and reports
     nothing)."""
     try:
-        from toolbox.DataZoo.market.news_cloud_tone import (
-            model_headline_tones)
+        from toolbox.DataZoo.market.news_cloud_tone import model_headline_tones
         scores = model_headline_tones(
             [h["title"] for h in headlines], progress=progress)
     except Exception:
@@ -1500,7 +1499,7 @@ def _frame_html(topics, caption=None, max_px=60):
                                    quote=True),
                    label))
         else:
-            spans.append('<span class="{}" style="{}">{}</span>'.format(cls, style, label))
+            spans.append(f'<span class="{cls}" style="{style}">{label}</span>')
     caption = caption or {}
     # Caption lines are trusted HTML (built by build_cloud from a
     # format string and integer counts — the date and counts carry
@@ -1528,11 +1527,11 @@ def render_html(topics, png_path, caption=None):
     """The fancy renderer as a PNG: the same frame at a fixed
     1200x600, screenshotted with headless Chromium (demo / offline
     use; the live page embeds cloud_html() instead)."""
-    page = """<!doctype html><html><head><meta charset="utf-8"><style>
+    page = f"""<!doctype html><html><head><meta charset="utf-8"><style>
 * {{ margin:0; padding:0; box-sizing:border-box; }}
 body {{ background:#FFFFFF; }}
 </style></head><body><div class="nc-frame"
-style="width:1200px;height:600px;">{}</div></body></html>""".format(_frame_html(topics, caption, max_px=76))
+style="width:1200px;height:600px;">{_frame_html(topics, caption, max_px=76)}</div></body></html>"""
     if not os.path.exists(CHROMIUM):
         return False
     with tempfile.NamedTemporaryFile("w", suffix=".html",
@@ -1585,10 +1584,9 @@ def build_cloud(png_path=DEFAULT_PNG, json_path=DEFAULT_JSON, hours=24):
     except Exception:
         asof = now.strftime("%Y-%m-%d %H:%M UTC")
     caption = {
-        "left": 'As of <span class="nc-hl">{}</span> · '
-                '<span class="nc-hl">{}</span> distinct headlines, '
-                '<span class="nc-hl">{}</span> sources'
-                .format(asof, len(headlines), len(source_counts)),
+        "left": f'As of <span class="nc-hl">{asof}</span> · '
+                f'<span class="nc-hl">{len(headlines)}</span> distinct headlines, '
+                f'<span class="nc-hl">{len(source_counts)}</span> sources',
         "right": "Size = distinct stories mentioning the topic"
                  " · Color = headline tone (green positive,"
                  " black neutral, red negative)",
@@ -1606,7 +1604,7 @@ def build_cloud(png_path=DEFAULT_PNG, json_path=DEFAULT_JSON, hours=24):
     except Exception:
         renderer = "none"
     summary = {
-        "window": "past {} hours ending {}".format(hours, now.isoformat()),
+        "window": f"past {hours} hours ending {now.isoformat()}",
         "headlines": len(headlines),
         "sources": dict(source_counts),
         "renderer": renderer,

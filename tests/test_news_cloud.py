@@ -349,7 +349,7 @@ def _fold_pair(members_x, members_y, wx=10, wy=7):
          "canon": ("midterm", "election"),
          "example_headline": "", "link": ""},
     ]
-    heads = [{"title": "H{}".format(i), "source": "Test", "link": "",
+    heads = [{"title": f"H{i}", "source": "Test", "link": "",
               "published": None} for i in range(12)]
     members = {"Midterms": members_x, "Midterm Elections": members_y}
     return _fold_containment(topics, heads, members)
@@ -788,7 +788,10 @@ def test_family_of_politics_and_short_cues():
 
 def test_headline_tone_and_gradient():
     from toolbox.DataZoo.market.news_cloud import (
-        headline_tone, tone_gradient, tone_colored)
+        headline_tone,
+        tone_colored,
+        tone_gradient,
+    )
     assert headline_tone("Stocks rally as profits surge") > 0
     assert headline_tone("Selloff deepens amid crisis fears") < 0
     assert headline_tone("Senate panel meets Tuesday") == 0
@@ -811,8 +814,8 @@ def test_headline_tone_and_gradient():
 
 
 def test_tone_colored_prefers_the_model(monkeypatch):
-    from toolbox.DataZoo.market.news_cloud import tone_gradient
     import toolbox.DataZoo.market.news_cloud_tone as tone_mod
+    from toolbox.DataZoo.market.news_cloud import tone_gradient
     monkeypatch.setattr(
         tone_mod, "model_headline_tones",
         lambda titles, progress=None: [-0.9] * len(titles))

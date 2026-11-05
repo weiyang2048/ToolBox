@@ -132,8 +132,7 @@ def test_cloud_caption_text_uses_the_footnote_gray():
 
 def test_linked_cloud_tone_gradient_and_caption():
     from toolbox.DataZoo.market.news_cloud import tone_gradient
-    from toolbox.DataZoo.market.news_cloud_links import (
-        linked_cloud_html)
+    from toolbox.DataZoo.market.news_cloud_links import linked_cloud_html
     light, deep = tone_gradient(0.5)
     topics = [
         {"term": "AI", "weight": 10, "group": "tech",

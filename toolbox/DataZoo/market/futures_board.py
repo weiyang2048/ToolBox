@@ -480,7 +480,7 @@ def fetch_board(now=None, groups=None, progress=None):
                 row[key] = None
             got, closes, last_bar_date = results[sym]
             if isinstance(got, Exception):  # 404, timeout, bad JSON...
-                notes.append("futures: {} unavailable ({})".format(sym, got))
+                notes.append(f"futures: {sym} unavailable ({got})")
                 got = None
             if got is not None:
                 last, settle, mtime = got
@@ -504,7 +504,7 @@ def fetch_board(now=None, groups=None, progress=None):
             elif dec is None:
                 row["dec"] = cash_dec(None)
             if isinstance(closes, Exception):  # horizons degrade to null
-                notes.append("futures: {} history unavailable ({})".format(sym, closes))
+                notes.append(f"futures: {sym} history unavailable ({closes})")
                 closes = []
             if got is None and len(closes) >= 2 and closes[-2]:
                 # No live quote but a usable history (Yahoo serves
@@ -525,8 +525,8 @@ def fetch_board(now=None, groups=None, progress=None):
                 if dec is None:  # cash index: decimals from its level
                     row["dec"] = cash_dec(row["last"])
                 available += 1
-                notes.append("futures: {} quote unavailable; last/day "
-                             "from completed closes".format(sym))
+                notes.append(f"futures: {sym} quote unavailable; last/day "
+                             "from completed closes")
             row["ls"] = ls_states(closes)
             for key, n in HORIZONS:
                 if len(closes) > n:

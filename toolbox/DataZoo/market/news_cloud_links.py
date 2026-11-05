@@ -180,9 +180,9 @@ def linked_cloud_html(topics, edges, caption=None):
     grads = []
     for fam, (light, deep) in FAMILY_GRADIENTS.items():
         grads.append(
-            '<linearGradient id="ncg-{}" x1="0" y1="0" x2="0" y2="1">'
-            '<stop offset="15%" stop-color="{}"/>'
-            '<stop offset="85%" stop-color="{}"/></linearGradient>'.format(fam, light, deep))
+            f'<linearGradient id="ncg-{fam}" x1="0" y1="0" x2="0" y2="1">'
+            f'<stop offset="15%" stop-color="{light}"/>'
+            f'<stop offset="85%" stop-color="{deep}"/></linearGradient>')
     # Tone gradients: one per topic — the tone scale is
     # continuous, so no shared family def can carry it.
     for i, t in enumerate(topics):
@@ -226,7 +226,7 @@ def linked_cloud_html(topics, edges, caption=None):
     texts = []
     for i, t in enumerate(topics):
         n = nodes[t["term"]]
-        fill_id = ("tone-{}".format(i) if "tone_color" in t
+        fill_id = (f"tone-{i}" if "tone_color" in t
                    else t["group"])
         text_el = (
             '<text x="{:.1f}" y="{:.1f}" text-anchor="middle" '
@@ -357,10 +357,9 @@ def build_linked_cloud_html(hours=24, progress=None):
     except Exception:
         asof = now.strftime("%Y-%m-%d %H:%M UTC")
     caption = {
-        "left": 'As of <span class="nc-hl">{}</span> · '
-                '<span class="nc-hl">{}</span> distinct headlines, '
-                '<span class="nc-hl">{}</span> sources'
-                .format(asof, len(headlines), len(source_counts)),
+        "left": f'As of <span class="nc-hl">{asof}</span> · '
+                f'<span class="nc-hl">{len(headlines)}</span> distinct headlines, '
+                f'<span class="nc-hl">{len(source_counts)}</span> sources',
     }
     edges = cooccurrence_edges(topics, topic_members(topics, headlines))
     return linked_cloud_html(topics, edges, caption)
