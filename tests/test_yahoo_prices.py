@@ -457,3 +457,59 @@ def test_yahoo_daily_slices_a_wider_cached_window(monkeypatch):
                         lambda t, a, b: payload)
     s = yp.yahoo_daily("XXX", p1=p1, p2=p2, include_partial=True)
     assert list(s.values) == [1.0, 2.0, 3.0]
+
+
+# --- download_close_prices progress contract (2026-11-05) -----------------
+
+
+def test_download_progress_chunks_and_reports_counts(monkeypatch):
+    # 45 tickers at a chunk of 20: the callback sees 0, then
+    # 20 / 40 / 45, and the batch is fetched in three calls
+    # whose frames assemble in request order.
+    tickers = [f"T{i:02d}" for i in range(45)]
+    calls = []
+
+    def fake_history(ts, period):
+        calls.append(list(ts))
+        return _batch_frame({t: [100.0 + j for j in range(100)]
+                             for t in ts})
+
+    monkeypatch.setattr(yp, "_history", fake_history)
+    seen = []
+    out = yp.download_close_prices(
+        tickers, period="5y",
+        progress=lambda d, t, label: seen.append((d, t)))
+    assert [len(c) for c in calls] == [20, 20, 5]
+    assert seen == [(0, 45), (20, 45), (40, 45), (45, 45)]
+    assert list(out.columns) == tickers
+    assert int(out["T44"].notna().sum()) == 100
+
+
+def test_download_progress_small_batch_is_one_call(monkeypatch):
+    calls = []
+
+    def fake_history(ts, period):
+        calls.append(list(ts))
+        return _batch_frame({t: [1.0] * 100 for t in ts})
+
+    monkeypatch.setattr(yp, "_history", fake_history)
+    seen = []
+    yp.download_close_prices(
+        ["AAA", "BBB"], period="5y",
+        progress=lambda d, t, label: seen.append((d, t)))
+    assert calls == [["AAA", "BBB"]]
+    assert seen == [(0, 2), (2, 2)]
+
+
+def test_download_without_progress_stays_one_batch_call(monkeypatch):
+    calls = []
+
+    def fake_history(ts, period):
+        calls.append(list(ts))
+        return _batch_frame({t: [1.0] * 100 for t in ts})
+
+    monkeypatch.setattr(yp, "_history", fake_history)
+    tickers = [f"T{i:02d}" for i in range(45)]
+    out = yp.download_close_prices(tickers, period="5y")
+    assert calls == [tickers]
+    assert list(out.columns) == tickers

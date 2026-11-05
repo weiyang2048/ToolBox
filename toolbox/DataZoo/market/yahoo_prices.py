@@ -46,11 +46,21 @@ def normalize_close_prices(prices: pd.DataFrame) -> pd.DataFrame:
     return prices.div(bases, axis=1)
 
 
+# Tickers per batch call when a download reports progress:
+# the batch is split into chunks of this size so the caller
+# sees real per-chunk counts (user request 2026-11-05 — a
+# 100-ticker download otherwise sat at its opening label
+# for the whole fetch). Without a progress callback the
+# download stays the one batch call it has always been.
+_PROGRESS_CHUNK = 20
+
+
 def download_close_prices(
     tickers: list[str],
     period: str = "5y",
     *,
     normalize: bool = False,
+    progress=None,
 ) -> pd.DataFrame:
     """Adjusted close prices for ``tickers`` over ``period``.
 
@@ -60,12 +70,43 @@ def download_close_prices(
     A ticker the batch download returns as a stub (missing or
     nearly empty — Yahoo throttling the batch) is refilled
     whole from the repaired chart path; see _refill_stubs.
+
+    ``progress`` is the shared callback contract —
+    ``progress(done, total, label)`` with counts in tickers:
+    one call at 0 before the first fetch, one after each
+    completed chunk, and a label-only beat before any stub
+    refills. Passing it splits the batch into chunks of
+    ``_PROGRESS_CHUNK``; the assembled frame, refills and
+    tail patch are exactly the no-progress path's.
     """
     symbols = list(dict.fromkeys(tickers))
     if not symbols:
         return pd.DataFrame()
 
-    prices = _close_frame(_history(symbols, period))
+    if progress is None:
+        prices = _close_frame(_history(symbols, period))
+    else:
+        progress(0, len(symbols), "downloading prices")
+        if len(symbols) <= _PROGRESS_CHUNK:
+            prices = _close_frame(_history(symbols, period))
+            progress(len(symbols), len(symbols), symbols[-1])
+        else:
+            frames = []
+            done = 0
+            for i in range(0, len(symbols), _PROGRESS_CHUNK):
+                chunk = symbols[i:i + _PROGRESS_CHUNK]
+                frames.append(_close_frame(_history(chunk, period)))
+                done += len(chunk)
+                progress(done, len(symbols), chunk[-1])
+            prices = pd.concat(frames, axis=1)
+            prices = prices.reindex(
+                columns=[s for s in symbols if s in prices.columns])
+        stubs = [s for s in symbols
+                 if s not in prices.columns
+                 or int(prices[s].notna().sum()) < STUB_MIN_OBS]
+        if stubs:
+            progress(len(symbols), len(symbols),
+                     "repairing throttled tickers")
     prices = _strip_timezone(prices)
     prices = _refill_stubs(prices, symbols, period)
     prices = _patch_tail(prices)
