@@ -165,3 +165,15 @@ def test_fetch_powerlaw_in_progress_bar_gets_et_today(monkeypatch):
     assert live["btc"].index.equals(done["btc"].index)
     assert live["stats"]["btc_last"] == done["stats"]["btc_last"]
     assert live["stats"]["slope"] == done["stats"]["slope"]
+
+
+def test_chart_png_does_not_call_tight_layout():
+    # Regression pin (2026-11-06): chart_png's twin axes are
+    # incompatible with tight_layout — the call bailed to
+    # the default subplot params and emitted a UserWarning
+    # on every render (the app-log warning). The explicit
+    # subplots_adjust pins the geometry; the call must not
+    # come back.
+    import inspect
+
+    assert "tight_layout(" not in inspect.getsource(bp.chart_png)

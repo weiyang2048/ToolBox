@@ -427,10 +427,17 @@ def chart_png(data):
                  datetime.datetime(2030, 12, 31))
     ax2.xaxis.set_major_locator(mdates.YearLocator(2))
     ax2.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
-    fig.tight_layout(rect=[0, 0, 1, 0.95])
-    # tight_layout leaves ~120px of white on the right and
-    # ~65px at the bottom of the 1210x814 canvas (measured);
-    # pull the outer margins in (user request 2026-11-01).
+    # Geometry is pinned by the explicit subplots_adjust
+    # below, never tight_layout: the figure's twin axes are
+    # incompatible with tight_layout, which bailed out to
+    # the default subplot params and emitted a UserWarning
+    # on every render (the app-log warning the user flagged
+    # 2026-11-06; removal verified byte-identical on the
+    # same data — the call was a measured no-op). The
+    # starting canvas carried ~120px of white on the right
+    # and ~65px at the bottom of the 1210x814 canvas
+    # (measured); pull the outer margins in (user request
+    # 2026-11-01).
     # Ink margins measured after the change: left 81->17,
     # right 120->11, bottom 67->34; nothing clipped.
     fig.subplots_adjust(left=0.072, right=0.99, bottom=0.07,
