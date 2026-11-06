@@ -347,3 +347,41 @@ def test_zillow_urls_are_https_csvs():
     for url in (ZillowZipData.ZHVI_URL, ZillowZipData.ZHVF_URL):
         assert url.startswith("https://")
         assert url.endswith(".csv")
+
+
+def test_download_ticker_sectors_maps_and_marks_missing(monkeypatch):
+    import sys
+    import types
+
+    from toolbox.DataZoo.market.yahoo_prices import download_ticker_sectors
+
+    infos = {
+        "ASML": {"sector": "Technology"},
+        "HSBC": {"sector": "Financial Services"},
+        "IXC": {},  # a fund: no sector reported
+    }
+
+    class _FakeTicker:
+        def __init__(self, symbol):
+            self._symbol = symbol
+
+        @property
+        def info(self):
+            if self._symbol == "BOOM":
+                raise RuntimeError("network down")
+            return infos[self._symbol]
+
+    fake_yf = types.ModuleType("yfinance")
+    fake_yf.Ticker = _FakeTicker
+    monkeypatch.setitem(sys.modules, "yfinance", fake_yf)
+
+    seen = []
+    out = download_ticker_sectors(
+        ["ASML", "HSBC", "IXC", "BOOM", "ASML"],
+        progress=lambda d, t, label: seen.append((d, t)))
+    assert list(out.index) == ["ASML", "HSBC", "IXC", "BOOM"]
+    assert out["ASML"] == "Technology"
+    assert out["HSBC"] == "Financial Services"
+    assert out["IXC"] is None  # missing surfaces as missing
+    assert out["BOOM"] is None  # a failed read, never a guess
+    assert seen[0] == (0, 4) and seen[-1] == (4, 4)

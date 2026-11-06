@@ -200,6 +200,50 @@ def download_shares_outstanding(
     return pd.Series(out, dtype=float).reindex(symbols)
 
 
+def download_ticker_sectors(
+    tickers: list[str],
+    *,
+    progress=None,
+) -> pd.Series:
+    """Yahoo sector per ticker — the asset profile's sector
+    string ('Technology', 'Financial Services', ...), for
+    coloring or grouping names by sector.
+
+    Per ticker: yfinance's ``info`` sector field. None
+    where Yahoo reports none — funds and ETFs carry no
+    sector, and an unknown sector must surface as missing,
+    never as a guess. The per-ticker calls are independent
+    network reads and run on a thread pool, mirroring
+    :func:`download_shares_outstanding`. ``progress``
+    follows the module's shared callback contract —
+    ``progress(done, total, label)`` in tickers, in
+    completion order. No caching here: session caching
+    stays with the caller, as for prices.
+    """
+    import yfinance as yf
+
+    symbols = list(dict.fromkeys(tickers))
+
+    def _one(t):
+        try:
+            sector = yf.Ticker(t).info.get("sector")
+            return sector if sector else None
+        except Exception:
+            return None
+
+    out = {}
+    if progress is not None:
+        progress(0, len(symbols), "fetching sectors")
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futures = {pool.submit(_one, t): t for t in symbols}
+        for i, fut in enumerate(as_completed(futures)):
+            t = futures[fut]
+            out[t] = fut.result()
+            if progress is not None:
+                progress(i + 1, len(symbols), t)
+    return pd.Series(out, dtype=object).reindex(symbols)
+
+
 def _period_start(period: str) -> int:
     """Epoch seconds for the start of a yfinance period string
     ("5y", "6mo"); unrecognized strings fall back to 10y back —
