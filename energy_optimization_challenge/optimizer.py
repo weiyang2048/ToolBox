@@ -144,10 +144,10 @@ class OptimalBiddingStrategy:
                 try:
                     rev_i = pe.value(scenario_revenue(model, i))
                     expected_rev_values.append(rev_i)
-                except:
+                except Exception:  # noqa: BLE001 - a scenario that cannot be valued counts as 0.0, by design
                     expected_rev_values.append(0.0)
             expected_rev_value = sum(expected_rev_values) / self.num_samples
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - documented safe-calculation fallback: expected revenue is 0.0 on any failure
             print(f"Error calculating expected revenue: {e}")
             expected_rev_value = 0.0
 

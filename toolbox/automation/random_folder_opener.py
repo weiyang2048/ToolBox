@@ -35,7 +35,7 @@ def get_all_subfolders(root_path):
                 subfolders.append(full_path)
     except PermissionError:
         print(f"⚠️  Permission denied accessing some folders in {root_path}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - any other scan failure returns the folders collected so far
         print(f"❌ Error scanning folders: {e}")
 
     return subfolders

@@ -67,7 +67,7 @@ class TestObjectiveFunctions(unittest.TestCase):
         # Convert PyomoExpression to value if needed
         try:
             revenue_0_val = pe.value(revenue_0)
-        except:
+        except Exception:  # noqa: BLE001 - pe.value fallback: a non-expression value passes through unchanged
             revenue_0_val = revenue_0
             
         self.assertAlmostEqual(revenue_0_val, expected_revenue_0)
@@ -89,7 +89,7 @@ class TestObjectiveFunctions(unittest.TestCase):
         # Convert PyomoExpression to value if needed
         try:
             revenue_1_val = pe.value(revenue_1)
-        except:
+        except Exception:  # noqa: BLE001 - pe.value fallback: a non-expression value passes through unchanged
             revenue_1_val = revenue_1
             
         self.assertAlmostEqual(revenue_1_val, expected_revenue_1)
@@ -141,7 +141,7 @@ class TestObjectiveFunctions(unittest.TestCase):
         # Convert PyomoExpression to value if needed
         try:
             result_risk_neutral_val = pe.value(result_risk_neutral)
-        except:
+        except Exception:  # noqa: BLE001 - pe.value fallback: a non-expression value passes through unchanged
             result_risk_neutral_val = result_risk_neutral
             
         expected_risk_neutral = 500.0  # Should just be the expected revenue
@@ -156,7 +156,7 @@ class TestObjectiveFunctions(unittest.TestCase):
         # Convert PyomoExpression to value if needed
         try:
             result_risk_averse_val = pe.value(result_risk_averse)
-        except:
+        except Exception:  # noqa: BLE001 - pe.value fallback: a non-expression value passes through unchanged
             result_risk_averse_val = result_risk_averse
             
         expected_risk_averse = test_model.cvar  # Should just be the CVaR value
@@ -171,7 +171,7 @@ class TestObjectiveFunctions(unittest.TestCase):
         # Convert PyomoExpression to value if needed
         try:
             result_mixed_val = pe.value(result_mixed)
-        except:
+        except Exception:  # noqa: BLE001 - pe.value fallback: a non-expression value passes through unchanged
             result_mixed_val = result_mixed
             
         expected_mixed = 0.75 * 500.0 + 0.25 * test_model.cvar

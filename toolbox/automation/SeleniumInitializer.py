@@ -51,11 +51,11 @@ def initialize_selenium_driver(
     # Find and fill login form
     try:
         username_field = driver.find_element(By.ID, "username")
-    except:
+    except Exception:  # noqa: BLE001 - any ID lookup failure falls back to the NAME lookup
         username_field = driver.find_element(By.NAME, "username")
     try:
         password_field = driver.find_element(By.ID, "password")
-    except:
+    except Exception:  # noqa: BLE001 - any ID lookup failure falls back to the NAME lookup
         password_field = driver.find_element(By.NAME, "password")
 
     username_field.send_keys(username)

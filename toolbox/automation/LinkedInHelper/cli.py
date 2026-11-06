@@ -82,7 +82,7 @@ def main():
         # wait for user input to close the browser
         logger.info("Process completed")
         input("Press Enter to close the browser...")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - top-level CLI guard: log any failure, still offer browser close
         logger.error(f"Error in execution: {e}")
         if driver:
             input("Press Enter to close the browser...")

@@ -180,11 +180,11 @@ def download_shares_outstanding(
                     val = float(full.iloc[-1])
                     if val > 0 and val == val:
                         return val
-            except Exception:
+            except Exception:  # noqa: BLE001 - any get_shares_full failure falls back to fast_info, by design
                 pass
             val = float(tk.fast_info["shares"])
             return val if val > 0 and val == val else float("nan")
-        except Exception:
+        except Exception:  # noqa: BLE001 - documented NaN-on-any-failure contract (unknown count surfaces as missing)
             return float("nan")
 
     out = {}
@@ -228,7 +228,7 @@ def download_ticker_sectors(
         try:
             sector = yf.Ticker(t).info.get("sector")
             return sector if sector else None
-        except Exception:
+        except Exception:  # noqa: BLE001 - documented None-on-any-failure contract (unknown sector surfaces as missing)
             return None
 
     out = {}

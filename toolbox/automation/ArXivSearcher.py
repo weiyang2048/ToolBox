@@ -78,7 +78,7 @@ def scraper_arxiv():
             with open(filename, "wb") as f:
                 print(f"Downloading {title} from {link} to {filename}")
                 f.write(requests.get(link).content)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - one bad result is skipped; the scrape continues
             print(f"Failed to download {title}: {e}")
 
 

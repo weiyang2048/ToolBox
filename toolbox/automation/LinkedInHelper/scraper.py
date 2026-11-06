@@ -120,7 +120,7 @@ def get_all_saved_jobs(driver):
                         "No jobs found on current page, reached end of pagination"
                     )
                     next_page = False
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - a failed page ends pagination with the jobs collected so far
             logger.error(f"Error fetching jobs: {e}")
             next_page = False
             logger.info("No more pages")
@@ -202,7 +202,7 @@ def open_applied_jobs(driver, jobs, applied_jobs_file):
                     logger.debug("Clicking unsave button")
                     saved_buttons[-1].click()
                     time.sleep(1)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - one failed unsave is logged; the remaining jobs still process
                 logger.error(f"Error unsaving job: {e}")
 
     # random display 10 jobs
