@@ -289,14 +289,15 @@ def test_resolve_strategy_names():
 
 
 def test_combo_names_cover_the_demoed_grid():
-    # 93 since SPMO joined (user direction 2026-11-04): the 21
-    # window-using bases (Max Sharpe 3 covs x 3 means, the
-    # three cov-only rules x 3 covs, HRP, risk parity, Min CVaR)
-    # at four windows each (the windows became strategy
-    # variants 2026-11-02), plus 1/N, the six RS pairs, SPMO
-    # and Average.
-    assert len(COMBO_STRATEGY_NAMES) == 93
-    assert len(set(COMBO_STRATEGY_NAMES)) == 93
+    # 94 since SPMO (cap × score) joined as a lone tweak
+    # (user direction 2026-11-06): the 21 window-using bases
+    # (Max Sharpe 3 covs x 3 means, the three cov-only rules
+    # x 3 covs, HRP, risk parity, Min CVaR) at four windows
+    # each (the windows became strategy variants 2026-11-02),
+    # plus 1/N, the six RS pairs, SPMO, its cap-weighted
+    # sibling and Average.
+    assert len(COMBO_STRATEGY_NAMES) == 94
+    assert len(set(COMBO_STRATEGY_NAMES)) == 94
     assert "RS(1, 126)" in COMBO_STRATEGY_NAMES
     for name in COMBO_STRATEGY_NAMES:
         resolve_strategy(name)  # every listed name must resolve
@@ -604,8 +605,8 @@ def test_parse_window_suffix():
 
 def test_windowed_grid_shape():
     # 21 window-using bases x 4 windows + 1/N + 6 RS + SPMO
-    # + Average.
-    assert len(COMBO_STRATEGY_NAMES) == 93
+    # + SPMO (cap × score) + Average.
+    assert len(COMBO_STRATEGY_NAMES) == 94
     assert "Max Sharpe (LW × sample) @ 252" in COMBO_STRATEGY_NAMES
     assert "Max Sharpe (LW × sample) @ All" in COMBO_STRATEGY_NAMES
     assert "Min variance (LW) @ 126" in COMBO_STRATEGY_NAMES
@@ -647,3 +648,87 @@ def test_backtest_name_window_overrides_global():
         prices, strategies=["Min variance (raw)"], **kw)
     assert np.allclose(expanding["returns"].values,
                        plain["returns"].values)
+
+
+def test_spmo_cap_score_name_resolves_and_sits_beside_spmo():
+    from toolbox.strategies import SPMO_CAP_SCORE_NAME, _strategy_order
+
+    assert SPMO_CAP_SCORE_NAME == "SPMO (cap × score)"
+    i = COMBO_STRATEGY_NAMES.index("SPMO")
+    assert COMBO_STRATEGY_NAMES[i + 1] == SPMO_CAP_SCORE_NAME
+    # A parameterized rule in the RS idiom: it resolves to
+    # itself, and lives in the combination grid only — not
+    # among the bare base names.
+    assert resolve_strategy(SPMO_CAP_SCORE_NAME) == (
+        SPMO_CAP_SCORE_NAME, None, None)
+    assert SPMO_CAP_SCORE_NAME not in STRATEGY_NAMES
+    order = _strategy_order(
+        ["Average", SPMO_CAP_SCORE_NAME, "SPMO", "1/N"])
+    assert order == ["1/N", "SPMO", SPMO_CAP_SCORE_NAME, "Average"]
+
+
+def test_spmo_cap_score_named_strategy_is_the_variant():
+    from toolbox.strategies import (
+        SPMO_CAP_SCORE_NAME,
+        spmo_variant_weights,
+    )
+
+    R = _spmo_returns()
+    mu, S, _info = estimate_inputs(R, "ledoit_wolf", "sample", 0.0)
+    caps = pd.Series({t: 1.0 for t in R.columns})
+    caps["T8"] = 3.0
+    w = strategy_weights(SPMO_CAP_SCORE_NAME, R, S, mu, 0.0,
+                         caps=caps)
+    # The named strategy IS the canonical variant — the same
+    # function the study gates ran — not a second copy.
+    assert np.array_equal(w, spmo_variant_weights(R, caps=caps))
+    # The caps bite: not the score-only rule's weights.
+    assert not np.allclose(
+        w, strategy_weights("SPMO", R, S, mu, 0.0))
+    # Without caps the name refuses rather than silently
+    # degrading to score-only.
+    with pytest.raises(ValueError):
+        strategy_weights(SPMO_CAP_SCORE_NAME, R, S, mu, 0.0)
+
+
+def test_spmo_cap_score_snapshot_and_backtest():
+    from toolbox.strategies import (
+        SPMO_CAP_SCORE_NAME,
+        spmo_variant_weights,
+    )
+
+    R = _spmo_returns()
+    caps = pd.Series({t: float(j + 1)
+                      for j, t in enumerate(R.columns)})
+    W, _info = snapshot_weights(R, "ledoit_wolf", "sample", 0.0,
+                                [SPMO_CAP_SCORE_NAME], caps=caps)
+    assert np.allclose(W.loc[SPMO_CAP_SCORE_NAME].values,
+                       spmo_variant_weights(R, caps=caps))
+
+    prices = _prices(n=500)
+    shares = pd.Series({t: 100.0 * (j + 1)
+                        for j, t in enumerate(prices.columns)})
+    out = walk_forward_backtest(
+        prices, strategies=[SPMO_CAP_SCORE_NAME],
+        cov_method="bbp", mean_method="sample", seed=252,
+        hold=21, caps_shares=shares)
+    assert out is not None
+    assert set(out["stats"].index) == {SPMO_CAP_SCORE_NAME}
+    assert np.isfinite(out["stats"].values).all()
+    # The first rebalance is the variant struck on the seed
+    # window with caps = shares x the close at its last
+    # session — the backtest's strike convention.
+    logret = np.log(prices / prices.shift(1)).dropna()
+    R_w = logret.iloc[:252]
+    struck = shares.reindex(prices.columns) * prices.loc[R_w.index[-1]]
+    expect = spmo_variant_weights(R_w, caps=struck)
+    first = out["weights_history"][0]["weights"][SPMO_CAP_SCORE_NAME]
+    got = np.array([first[t] for t in prices.columns])
+    assert np.allclose(got, expect)
+    # Selecting the rule without share counts raises up
+    # front, before any rebalance runs.
+    with pytest.raises(ValueError):
+        walk_forward_backtest(
+            prices, strategies=[SPMO_CAP_SCORE_NAME],
+            cov_method="bbp", mean_method="sample", seed=252,
+            hold=21)

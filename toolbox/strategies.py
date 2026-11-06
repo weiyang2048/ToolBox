@@ -112,6 +112,20 @@ _COV_ONLY_RULES = ("Min variance", "Max diversification", "NCO")
 RS_PAIRS = ((1, 21), (1, 126), (1, 252), (2, 63), (3, 126), (5, 252))
 RS_STRATEGY_NAMES = tuple(f"RS({n}, {w})" for n, w in RS_PAIRS)
 
+# The SPMO family's cap-weighted rung as a standalone named
+# strategy (user direction 2026-11-06: "add cap x score as
+# also a lone tweak" beside the SPMO strategies subpage). The
+# qualifier rides in the name like the cleaning pairs do, and
+# the rule resolves to itself like the RS names. It is the
+# canonical variant — :func:`spmo_variant_weights` with caps
+# — never a second implementation: the only difference from
+# "SPMO" is the weighting (cap × score instead of score
+# alone), struck at each caller's rebalance from the caps it
+# supplies. It carries no estimation window (the SPMO rule's
+# lookback is its own), so it sits unsuffixed beside "SPMO"
+# in the combination grid, and it is in no default set.
+SPMO_CAP_SCORE_NAME = "SPMO (cap × score)"
+
 # Estimation windows as strategy variants (user direction
 # 2026-11-02): there is no global estimation-window parameter —
 # each window creates a new strategy, exactly as RS(n, w)
@@ -157,7 +171,7 @@ COMBO_STRATEGY_NAMES = (
           for base in _WINDOWED_BASES for w in STRATEGY_WINDOWS)
     + ("1/N",)
     + RS_STRATEGY_NAMES
-    + ("SPMO",)
+    + ("SPMO", SPMO_CAP_SCORE_NAME)
     + ("Average",)
 )
 
@@ -190,6 +204,8 @@ def resolve_strategy(name: str) -> tuple[str, str | None, str | None]:
     if name in STRATEGY_NAMES:
         return name, None, None
     if _parse_rs(name) is not None:
+        return name, None, None
+    if name == SPMO_CAP_SCORE_NAME:
         return name, None, None
     if " (" in name and name.endswith(")"):
         base, qual = name[:-1].split(" (", 1)
@@ -986,7 +1002,8 @@ def spmo_reference_date(sessions: pd.DatetimeIndex,
 
 
 def strategy_weights(name: str, R: pd.DataFrame, S: np.ndarray,
-                     mu: np.ndarray, rf_d: float) -> np.ndarray:
+                     mu: np.ndarray, rf_d: float,
+                     caps: pd.Series | None = None) -> np.ndarray:
     """Weights of one strategy on one estimation window.
 
     ``R`` log returns, ``S`` the (possibly cleaned) covariance,
@@ -996,6 +1013,13 @@ def strategy_weights(name: str, R: pd.DataFrame, S: np.ndarray,
     as the mean of the other selected rules. An ``RS(n, w)`` name
     resolves to itself and is solved by :func:`rs_weights` from
     ``R`` alone.
+
+    ``caps`` (a per-ticker market-cap series struck at the
+    window's end) is read by exactly one rule:
+    :data:`SPMO_CAP_SCORE_NAME`, which solves through
+    :func:`spmo_variant_weights` with those caps and raises
+    ValueError when they are missing — a cap-weighted name
+    must never silently degrade to the score-only rule.
     """
     p = R.shape[1]
     if name == "1/N":
@@ -1016,6 +1040,13 @@ def strategy_weights(name: str, R: pd.DataFrame, S: np.ndarray,
         return max_sharpe_weights(S, mu)
     if name == "SPMO":
         return spmo_weights(R)
+    if name == SPMO_CAP_SCORE_NAME:
+        if caps is None:
+            raise ValueError(
+                f"{SPMO_CAP_SCORE_NAME} requires caps "
+                "(per-ticker market caps struck at the "
+                "window's end)")
+        return spmo_variant_weights(R, caps=caps)
     rs = _parse_rs(name)
     if rs is not None:
         return rs_weights(R, rs[0], rs[1])
@@ -1024,7 +1055,9 @@ def strategy_weights(name: str, R: pd.DataFrame, S: np.ndarray,
 
 def snapshot_weights(R: pd.DataFrame, cov_method: str, mean_method: str,
                      rf_d: float, strategies: list[str],
-                     progress=None) -> tuple[pd.DataFrame, dict]:
+                     progress=None,
+                     caps: pd.Series | None = None
+                     ) -> tuple[pd.DataFrame, dict]:
     """Current weights of ``strategies`` on the history ``R``.
 
     Combination names (see :data:`COMBO_STRATEGY_NAMES`) are solved
@@ -1044,6 +1077,12 @@ def snapshot_weights(R: pd.DataFrame, cov_method: str, mean_method: str,
     solved with that strategy's name — so a caller can show
     progress over a many-strategy snapshot (the dashboard's
     current-weights bar). The default ``None`` reports nothing.
+
+    ``caps`` (per-ticker market caps struck at the end of
+    ``R``) is passed through to :func:`strategy_weights` for
+    the one rule that reads it, :data:`SPMO_CAP_SCORE_NAME`;
+    every window slice ends at ``R``'s last date, so one
+    strike serves all slices.
     """
     base = [s for s in strategies if s != "Average"]
     if progress is not None:
@@ -1064,7 +1103,8 @@ def snapshot_weights(R: pd.DataFrame, cov_method: str, mean_method: str,
                                          rf_d)[:2]
             slices[key] = R_w
         mu, S = cache[key]
-        rows[name] = strategy_weights(rule, slices[key], S, mu, rf_d)
+        rows[name] = strategy_weights(rule, slices[key], S, mu, rf_d,
+                                      caps=caps)
         if progress is not None:
             progress(i, len(base), name)
     if "Average" in strategies and base:
@@ -1353,6 +1393,7 @@ def walk_forward_backtest(
     window: int | None = None,
     rf_annual_pct: pd.Series | None = None,
     progress=None,
+    caps_shares: pd.Series | None = None,
 ) -> dict | None:
     """Walk-forward backtest of ``strategies`` on ``prices``.
 
@@ -1383,6 +1424,15 @@ def walk_forward_backtest(
     :func:`parse_window`), which overrides ``window`` for that
     strategy — the estimation slice and its risk-free mean follow
     the strategy's own window. Unsuffixed names use ``window``.
+
+    ``caps_shares`` (optional, per-ticker shares outstanding)
+    is read by exactly one rule, :data:`SPMO_CAP_SCORE_NAME`:
+    at each rebalance its caps are struck as ``caps_shares``
+    × the close at the estimation window's last session —
+    one share count per ticker held fixed across the run,
+    the caller's convention to label. Selecting that rule
+    without ``caps_shares`` raises ValueError up front
+    rather than degrading it to the score-only rule.
 
     ``progress`` (optional) is a callable invoked as
     ``progress(done, total, rebalance_date)``: once before the
@@ -1418,6 +1468,11 @@ def walk_forward_backtest(
         # A name's own @ window wins; an unsuffixed name falls
         # back to the call's ``window`` (None = expanding).
         eff_window[name] = w_suf if " @ " in name else window
+    if caps_shares is None and any(
+            r[0] == SPMO_CAP_SCORE_NAME for r in resolved.values()):
+        raise ValueError(
+            f"{SPMO_CAP_SCORE_NAME} requires caps_shares "
+            "(per-ticker shares outstanding)")
     labels = list(base) + (["Average"] if "Average" in strategies and base else [])
     if not labels:
         return None
@@ -1448,7 +1503,15 @@ def walk_forward_backtest(
                 slices[key] = (R_w, rf_w)
             mu, S = cache[key]
             R_w, rf_w = slices[key]
-            W[name] = strategy_weights(rule, R_w, S, mu, rf_w)
+            caps = None
+            if rule == SPMO_CAP_SCORE_NAME:
+                # Caps struck at this window's end: the
+                # caller's share counts × the close at the
+                # estimation window's last session.
+                caps = (caps_shares.reindex(px.columns)
+                        * px.loc[R_w.index[-1]])
+            W[name] = strategy_weights(rule, R_w, S, mu, rf_w,
+                                       caps=caps)
         if "Average" in labels:
             W["Average"] = np.mean([W[s] for s in base], axis=0)
         n_reb += 1

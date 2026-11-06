@@ -4,6 +4,10 @@
 and drops timezone info. Pass ``normalize=True`` to scale each series to its
 first valid print. Session caching and universe filters stay with the caller.
 
+:func:`download_shares_outstanding` is the market-cap sibling: the latest
+shares outstanding per ticker (filing-based, fast_info fallback, NaN where
+Yahoo reports neither) for cap-weighted constructions.
+
 :func:`yahoo_daily` is the single-ticker sibling on the raw v8 chart API
 (adjclose events), with a complete-trading-day rule: the in-progress
 session's partial bar is dropped, so a series always ends at the latest
@@ -137,6 +141,63 @@ def download_close_prices(
 # its IXN column on 2026-11-02 — the default universe silently
 # rendered, weighted and backtested on 10 of its 11 sectors).
 STUB_MIN_OBS = 60
+
+
+def download_shares_outstanding(
+    tickers: list[str],
+    *,
+    progress=None,
+) -> pd.Series:
+    """Latest shares outstanding per ticker from Yahoo — the
+    market-cap input for cap-weighted constructions (the SPMO
+    family's cap × score rung).
+
+    Per ticker: the last value of yfinance's ``get_shares_full``
+    history (SEC-filing based), with the ``fast_info`` shares
+    figure as fallback; NaN where Yahoo reports neither (an
+    unknown share count must surface as missing, never as a
+    fabricated cap). One count per ticker — the live convention
+    is a single latest count held fixed across a caller's whole
+    window, struck against prices at each rebalance date; it is
+    NOT point-in-time as-filed shares.
+
+    The per-ticker calls are independent network reads and run
+    on a thread pool. ``progress`` follows the module's shared
+    callback contract — ``progress(done, total, label)`` in
+    tickers, in completion order. No caching here: session
+    caching stays with the caller, as for prices.
+    """
+    import yfinance as yf
+
+    symbols = list(dict.fromkeys(tickers))
+
+    def _one(t):
+        try:
+            tk = yf.Ticker(t)
+            try:
+                full = tk.get_shares_full()
+                if full is not None and len(full):
+                    val = float(full.iloc[-1])
+                    if val > 0 and val == val:
+                        return val
+            except Exception:
+                pass
+            val = float(tk.fast_info["shares"])
+            return val if val > 0 and val == val else float("nan")
+        except Exception:
+            return float("nan")
+
+    out = {}
+    if progress is not None:
+        progress(0, len(symbols), "fetching shares outstanding")
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futures = {pool.submit(_one, t): t for t in symbols}
+        for i, fut in enumerate(as_completed(futures)):
+            t = futures[fut]
+            out[t] = fut.result()
+            if progress is not None:
+                progress(i + 1, len(symbols), t)
+    return pd.Series(out, dtype=float).reindex(symbols)
 
 
 def _period_start(period: str) -> int:
