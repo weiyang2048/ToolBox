@@ -10,8 +10,10 @@ the real implementations first.
 
 import importlib
 
+import numpy as np
 import pytest
 
+from toolbox.DataZoo.image import generate_dataset
 from toolbox.vision.data.folder_loader import get_image_paths_and_labels
 
 
@@ -88,17 +90,23 @@ def test_image_loader_len_getitem_and_collate():
     import tempfile
     from pathlib import Path
 
+    # The canonical synthetic generator replaces the hand-rolled
+    # solid-color PNGs: two seeded shape images, saved losslessly.
+    arrays, _, _ = generate_dataset(
+        1, classes=("circle", "rectangle"), size=32, seed=0, noise=0.0
+    )
     with tempfile.TemporaryDirectory() as tmp:
-        for i, color in enumerate(["red", "blue"]):
+        for i, array in enumerate(arrays):
             path = Path(tmp) / f"img{i}.png"
-            Image.new("RGB", (8, 8), color=color).save(path)
+            Image.fromarray(array).save(path)
             paths.append(str(path))
 
         loader = ImageLoader(paths, [3, 5])
         assert len(loader) == 2
         image, label = loader[1]
-        assert image.size == (8, 8)
+        assert image.size == (32, 32)
         assert label == 5
+        np.testing.assert_array_equal(np.asarray(image), arrays[1])
 
         tensor_loader = ImageLoader(
             paths, [3, 5], transform=lambda img: torch.zeros(3, 4, 4)
@@ -119,7 +127,11 @@ def test_train_test_transformations_shapes():
     )
 
     _, test_transform = train_test_image_transformations(resize=16)
-    tensor = test_transform(Image.new("RGB", (24, 10)))
+    # A seeded generated shape image replaces the hand-rolled blank:
+    # the asserted property is the transform's output shape, which
+    # does not depend on the input's content.
+    arrays, _, _ = generate_dataset(1, classes=("bars",), size=32, seed=0, noise=0.0)
+    tensor = test_transform(Image.fromarray(arrays[0]))
     assert tensor.shape == (3, 16, 16)
 
 
