@@ -360,7 +360,7 @@ def build_linked_cloud_html(hours=24, progress=None):
     try:
         from toolbox.DataZoo.market.eastern import asof_stamp
         asof = asof_stamp(now)
-    except Exception:
+    except Exception:  # noqa: BLE001 - stamp fallback must never break the build (import can fail non-ImportError, e.g. missing tzdata)
         asof = now.strftime("%Y-%m-%d %H:%M UTC")
     caption = {
         "left": f'As of <span class="nc-hl">{asof}</span> · '

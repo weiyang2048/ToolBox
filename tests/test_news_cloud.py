@@ -742,7 +742,7 @@ def test_challenger_entry_combined_extraction():
     try:
         import spacy
         spacy.load("en_core_web_sm")
-    except Exception:
+    except Exception:  # noqa: BLE001 - availability probe: any spaCy load failure means skip
         pytest.skip("en_core_web_sm not installed")
     from toolbox.DataZoo.market.news_cloud import extract_topics_challenger
     topics = extract_topics_challenger(_hybrid_pool(),
@@ -787,7 +787,7 @@ def test_combined_merges_lexicon_and_spacy_sources():
     try:
         import spacy
         spacy.load("en_core_web_sm")
-    except Exception:
+    except Exception:  # noqa: BLE001 - availability probe: any spaCy load failure means skip
         pytest.skip("en_core_web_sm not installed")
     from toolbox.DataZoo.market.news_cloud import extract_topics_challenger
     heads = _hybrid_pool()

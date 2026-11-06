@@ -455,7 +455,7 @@ def _fetch(url):
     try:
         with urllib.request.urlopen(req, timeout=25) as resp:
             return resp.read()
-    except Exception:
+    except Exception:  # noqa: BLE001 - any urllib failure falls back to curl, by design
         out = subprocess.run(
             ["curl", "-sL", "--max-time", "25", "-A", USER_AGENT, url],
             capture_output=True, check=False)
@@ -524,7 +524,7 @@ def _feed_items(url, cutoff):
                         (_item_field(item, "link") or "").strip(),
                         published))
         return out
-    except Exception:
+    except Exception:  # noqa: BLE001 - documented None-on-any-failure contract (one bad feed drops out)
         return None
 
 
@@ -669,7 +669,7 @@ def _headline_scores(headlines, progress=None):
         from toolbox.DataZoo.market.news_cloud_tone import model_headline_tones
         scores = model_headline_tones(
             [h["title"] for h in headlines], progress=progress)
-    except Exception:
+    except Exception:  # noqa: BLE001 - optional FinBERT layer; any failure falls back to the lexicon scorer
         scores = None
     if scores is not None:
         return scores, True
@@ -1356,7 +1356,7 @@ def _combined_layer(headlines, max_topics=30, min_weight=2):
         from toolbox.DataZoo.market.news_cloud_spacy import combined_topics
         return combined_topics(headlines, max_topics=max_topics,
                                min_weight=min_weight)
-    except Exception:
+    except Exception:  # noqa: BLE001 - documented None-on-any-failure contract (spaCy layer is optional)
         return None
 
 
@@ -1593,7 +1593,7 @@ style="width:1200px;height:600px;">{_frame_html(topics, caption, max_px=76)}</di
             box = (max(int(cols.min()) - 4, 0), max(int(rows.min()) - 4, 0),
                    int(cols.max()) + 5, int(rows.max()) + 5)
             Image.open(png_path).crop(box).save(png_path)
-    except Exception:
+    except Exception:  # noqa: BLE001 - cosmetic trim is best-effort; the screenshot stands either way
         pass
     return True
 
@@ -1611,7 +1611,7 @@ def build_cloud(png_path=DEFAULT_PNG, json_path=DEFAULT_JSON, hours=24):
     try:
         from toolbox.DataZoo.market.eastern import asof_stamp
         asof = asof_stamp(now)
-    except Exception:
+    except Exception:  # noqa: BLE001 - stamp fallback must never break the build (import can fail non-ImportError, e.g. missing tzdata)
         asof = now.strftime("%Y-%m-%d %H:%M UTC")
     caption = {
         "left": f'As of <span class="nc-hl">{asof}</span> · '
@@ -1631,7 +1631,7 @@ def build_cloud(png_path=DEFAULT_PNG, json_path=DEFAULT_JSON, hours=24):
                     else "wordcloud")
         if renderer != "html-fancy":
             render_wordcloud(topics, png_path)
-    except Exception:
+    except Exception:  # noqa: BLE001 - rendering is best-effort by documented contract; never cost the data
         renderer = "none"
     summary = {
         "window": f"past {hours} hours ending {now.isoformat()}",

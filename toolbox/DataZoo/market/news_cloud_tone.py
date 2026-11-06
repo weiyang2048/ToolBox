@@ -67,7 +67,7 @@ def _load():
         sess = ort.InferenceSession(str(d / "finbert_int8.onnx"),
                                     providers=["CPUExecutionProvider"])
         _state = (sess, Tokenizer.from_file(str(d / "tokenizer.json")))
-    except Exception:
+    except Exception:  # noqa: BLE001 - memoized unavailable-on-any-failure contract (native load/download failures are open-ended)
         _state = False
     return _state or None
 
@@ -134,7 +134,7 @@ def model_headline_tones(titles, progress=None):
             resolved += len(batch_idx)
             if progress is not None:
                 progress(resolved, len(titles), "")
-    except Exception:
+    except Exception:  # noqa: BLE001 - any inference failure returns None; caller falls back to the lexicon scorer
         return None
     while len(_TONE_CACHE) > _TONE_CACHE_MAX:
         _TONE_CACHE.pop(next(iter(_TONE_CACHE)))
