@@ -833,6 +833,15 @@ SPMO_WINDOW_DAYS = 252
 SPMO_FALLBACK_DAYS = 189
 SPMO_FRACTION = 0.20
 SPMO_Z_CAP = 3.0
+# The index's turnover buffer, as a retained-rank fraction:
+# an incumbent is kept while its rank stays within the top
+# 24% — the top quintile widened by the methodology's 20%
+# buffer (the band's exact form is not published; this is
+# the SPMO replication study's labeled interpretation,
+# 2026-11-05, and its turnover effect is what the study
+# measured: the buffered replica's turnover falls at every
+# universe size).
+SPMO_BUFFER_FRACTION = 0.24
 
 
 def spmo_scores(R: pd.DataFrame) -> pd.Series:
@@ -873,6 +882,33 @@ def spmo_scores(R: pd.DataFrame) -> pd.Series:
         index=x.index)
 
 
+def spmo_select(scores: pd.Series,
+                prev_selected=None,
+                retain_fraction: float | None = None,
+                fraction: float = SPMO_FRACTION) -> pd.Index:
+    """The SPMO selection on a score cross-section: the top
+    ``fraction`` by score (at least one name), in descending
+    score order, ties keeping universe order (the sort is
+    stable).
+
+    With ``retain_fraction`` set — the index's turnover
+    buffer — names in ``prev_selected`` (the previously held
+    set) whose rank stays within the top ``retain_fraction``
+    are selected as well, so the book can hold more than the
+    entry quintile. The SPMO replication study's labeled
+    interpretation of the methodology's 20% buffer is
+    ``retain_fraction=SPMO_BUFFER_FRACTION`` (0.24)."""
+    order = scores.sort_values(ascending=False, kind="stable")
+    k_in = max(1, math.ceil(fraction * len(order)))
+    if retain_fraction is None or not prev_selected:
+        return order.index[:k_in]
+    k_keep = max(1, math.ceil(retain_fraction * len(order)))
+    entrants = set(order.index[:k_in])
+    prev = set(prev_selected)
+    return pd.Index([t for t in order.index[:k_keep]
+                     if t in entrants or t in prev])
+
+
 def spmo_weights(R: pd.DataFrame) -> np.ndarray:
     """SPMO weights on the estimation window ``R``: the top
     quintile of :func:`spmo_scores` (at least one name),
@@ -883,12 +919,70 @@ def spmo_weights(R: pd.DataFrame) -> np.ndarray:
     scores = spmo_scores(R)
     if scores.empty:
         return np.ones(p) / p
-    k = max(1, math.ceil(SPMO_FRACTION * len(scores)))
-    top = scores.sort_values(ascending=False, kind="stable").index[:k]
+    top = spmo_select(scores)
     chosen = scores[top]
     out = pd.Series(0.0, index=R.columns)
     out[top] = chosen / chosen.sum()
     return out.to_numpy()
+
+
+def spmo_variant_weights(R: pd.DataFrame,
+                         caps: pd.Series | None = None,
+                         prev_selected=None,
+                         retain_fraction: float | None = None
+                         ) -> np.ndarray:
+    """SPMO construction variants on the estimation window
+    ``R`` (the SPMO replication study's faithful-replica
+    rungs, ported 2026-11-06). The score cross-section and
+    the selection are :func:`spmo_scores` / :func:`spmo_select`
+    as in :func:`spmo_weights`; the knobs compose:
+
+    - ``caps`` (a per-ticker market-cap series): weights in
+      proportion to cap × score — the index's own weighting
+      (rung R1) — instead of score alone. A selected name
+      with a missing or non-positive cap drops out, as in
+      the study.
+    - ``prev_selected`` + ``retain_fraction``: the buffered
+      selection (see :func:`spmo_select`).
+
+    The score strike is the window's own end: a caller
+    wanting the methodology reference dates passes ``R``
+    ending at :func:`spmo_reference_date` of its decision
+    (rungs R3 / R3+B) and applies the weights at the
+    decision. With no caps and no buffer this is exactly
+    :func:`spmo_weights`; with no scorable ticker the rule
+    is 1/N, and likewise if caps erase the whole selection.
+    """
+    p = R.shape[1]
+    scores = spmo_scores(R)
+    if scores.empty:
+        return np.ones(p) / p
+    sel = spmo_select(scores, prev_selected=prev_selected,
+                      retain_fraction=retain_fraction)
+    base = scores[sel]
+    if caps is not None:
+        base = base * caps.reindex(base.index)
+    base = base[base.notna() & (base > 0)]
+    if base.empty:
+        return np.ones(p) / p
+    out = pd.Series(0.0, index=R.columns)
+    out[base.index] = base / base.sum()
+    return out.to_numpy()
+
+
+def spmo_reference_date(sessions: pd.DatetimeIndex,
+                        decision) -> pd.Timestamp:
+    """The methodology reference date for a rebalance
+    decision: the last session on or before the last
+    calendar day of the month before the decision month —
+    end-February for a March decision, end-August for
+    September. Replica scores and caps are struck at the
+    reference date; the resulting weights take effect at
+    the decision (the third Friday, in the study)."""
+    prev_month_end = (pd.Timestamp(decision).replace(day=1)
+                      - pd.Timedelta(days=1))
+    prior = sessions[sessions <= prev_month_end]
+    return prior[-1]
 
 
 def strategy_weights(name: str, R: pd.DataFrame, S: np.ndarray,

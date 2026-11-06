@@ -498,6 +498,83 @@ def test_spmo_fallback_window_and_short_history():
     assert np.allclose(spmo_weights(R), 0.1)
 
 
+def test_spmo_variant_defaults_match_plain():
+    from toolbox.strategies import spmo_variant_weights, spmo_weights
+
+    R = _spmo_returns()
+    assert np.array_equal(spmo_variant_weights(R), spmo_weights(R))
+    # Nothing scorable: both fall back to 1/N.
+    short = _spmo_returns(n=150)
+    assert np.allclose(spmo_variant_weights(short), 0.1)
+
+
+def test_spmo_variant_cap_times_score():
+    from toolbox.strategies import spmo_scores, spmo_variant_weights
+
+    R = _spmo_returns()
+    scores = spmo_scores(R)
+    caps = pd.Series({t: 1.0 for t in R.columns})
+    caps["T8"] = 3.0
+    w = spmo_variant_weights(R, caps=caps)
+    # Same two selected names as the plain rule, reweighted
+    # in proportion to cap x score.
+    assert list(np.flatnonzero(w)) == [8, 9]
+    expect = scores.iloc[[8, 9]].to_numpy() * np.array([3.0, 1.0])
+    assert np.allclose(w[[8, 9]], expect / expect.sum())
+    # A selected name with no cap drops out entirely, and
+    # the survivor takes the whole book.
+    caps["T9"] = np.nan
+    w = spmo_variant_weights(R, caps=caps)
+    assert list(np.flatnonzero(w)) == [8]
+    assert np.isclose(w[8], 1.0)
+
+
+def test_spmo_select_buffer_retention():
+    from toolbox.strategies import spmo_select
+
+    scores = pd.Series({f"T{j}": float(j) for j in range(10)})
+    # Plain: the top quintile of ten is two names.
+    assert list(spmo_select(scores)) == ["T9", "T8"]
+    # The buffer keeps an incumbent ranked within the top
+    # 24% (top 3 of ten): T7 (3rd) stays, T6 (4th) goes.
+    sel = spmo_select(scores, prev_selected={"T7", "T6"},
+                      retain_fraction=0.24)
+    assert list(sel) == ["T9", "T8", "T7"]
+    # No incumbents, or an empty previous book: plain again.
+    assert list(spmo_select(scores, prev_selected=None,
+                            retain_fraction=0.24)) == ["T9", "T8"]
+    assert list(spmo_select(scores, prev_selected=set(),
+                            retain_fraction=0.24)) == ["T9", "T8"]
+
+
+def test_spmo_variant_buffer_holds_the_band():
+    from toolbox.strategies import SPMO_BUFFER_FRACTION
+    from toolbox.strategies import spmo_variant_weights, spmo_weights
+
+    R = _spmo_returns()
+    # Scores increase with the drift, so T7 ranks third:
+    # outside the entry quintile, inside the buffer band.
+    w = spmo_variant_weights(R, prev_selected={"T7"},
+                             retain_fraction=SPMO_BUFFER_FRACTION)
+    assert list(np.flatnonzero(w)) == [7, 8, 9]
+    assert np.isclose(w.sum(), 1.0)
+    assert list(np.flatnonzero(spmo_weights(R))) == [8, 9]
+
+
+def test_spmo_reference_date():
+    from toolbox.strategies import spmo_reference_date
+
+    sessions = pd.bdate_range("2026-01-05", "2026-09-30")
+    # A March decision strikes at the last session of
+    # February (Feb 28, 2026 is a Saturday, so Feb 27).
+    assert spmo_reference_date(sessions, pd.Timestamp("2026-03-20")) \
+        == pd.Timestamp("2026-02-27")
+    # A September decision strikes at end-August (a Monday
+    # session here).
+    assert spmo_reference_date(sessions, pd.Timestamp("2026-09-18")) \
+        == pd.Timestamp("2026-08-31")
+
+
 def test_spmo_name_resolves_and_runs():
     assert "SPMO" in COMBO_STRATEGY_NAMES
     assert resolve_strategy("SPMO") == ("SPMO", None, None)
