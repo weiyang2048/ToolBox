@@ -170,7 +170,7 @@ class StockIndices:
             return next(
                 t for t in tables if column in t.columns and len(t) >= min_rows
             )
-        except Exception:
+        except Exception:  # noqa: BLE001 - documented None-on-failure contract
             return None
 
     def get(self, name: str, *, as_frame: bool = False) -> list[str] | pd.DataFrame:

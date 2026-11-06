@@ -144,7 +144,7 @@ def _indexed(sym, p1):
     try:
         closes = with_retry(lambda: yahoo_daily(sym, p1=p1),
                             "yahoo " + sym).dropna()
-    except Exception:
+    except Exception:  # noqa: BLE001 - one failed leg drops out, composite survives
         return None
     return _anchor_cycle(closes)
 
@@ -206,7 +206,7 @@ def current_cycle_paths():
         if len(legs) >= 2:
             put("xus", _composite(legs))
         return out
-    except Exception:
+    except Exception:  # noqa: BLE001 - documented empty-on-failure contract
         return {}
 
 

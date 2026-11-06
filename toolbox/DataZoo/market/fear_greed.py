@@ -124,7 +124,7 @@ class FearGreed:
         """
         try:
             graph = fetch_cnn_graph()
-        except Exception:
+        except Exception:  # noqa: BLE001 - documented empty-on-failure contract
             return pd.DataFrame() if return_df else []
         history = []
         for key, label in CNN_SERIES_LABELS.items():
@@ -179,7 +179,7 @@ class FearGreed:
                 "score": int(entries[-1]["value"]),
                 "rating": entries[-1]["value_classification"],
             }
-        except Exception:
+        except Exception:  # noqa: BLE001 - documented empty-on-failure contract
             return {}
 
     def fear_greed_history(self, limit: int = 365) -> pd.DataFrame:

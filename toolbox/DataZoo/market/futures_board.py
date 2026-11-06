@@ -384,13 +384,13 @@ def _fetch_row(sym):
     """
     try:
         got = fetch(sym)
-    except Exception as exc:  # 404, timeout, bad JSON...
+    except Exception as exc:  # noqa: BLE001 - 404, timeout, bad JSON...
         got = exc
     try:
         bars = _history_bars(sym)
         closes = [c for _d, c in bars]
         last_date = bars[-1][0] if bars else None
-    except Exception as exc:  # horizons degrade to null, no crash
+    except Exception as exc:  # noqa: BLE001 - horizons degrade to null, no crash
         closes = exc
         last_date = None
     return got, closes, last_date
