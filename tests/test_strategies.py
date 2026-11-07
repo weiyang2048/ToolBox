@@ -549,8 +549,11 @@ def test_spmo_select_buffer_retention():
 
 
 def test_spmo_variant_buffer_holds_the_band():
-    from toolbox.strategies import SPMO_BUFFER_FRACTION
-    from toolbox.strategies import spmo_variant_weights, spmo_weights
+    from toolbox.strategies import (
+        SPMO_BUFFER_FRACTION,
+        spmo_variant_weights,
+        spmo_weights,
+    )
 
     R = _spmo_returns()
     # Scores increase with the drift, so T7 ranks third:

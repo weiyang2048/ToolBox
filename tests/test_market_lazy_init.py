@@ -42,6 +42,6 @@ print("lazy-ok")
 def test_market_package_imports_lazily():
     out = subprocess.run(
         [sys.executable, "-c", _PROBE],
-        capture_output=True, text=True, timeout=120)
+        capture_output=True, text=True, timeout=120, check=False)
     assert out.returncode == 0, out.stderr
     assert "lazy-ok" in out.stdout

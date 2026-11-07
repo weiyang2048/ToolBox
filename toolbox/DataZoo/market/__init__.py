@@ -42,15 +42,15 @@ __all__ = [
 def __getattr__(name):
     if name in _EXPORTS:
         module = importlib.import_module(
-            ".%s" % _EXPORTS[name], __name__)
+            f".{_EXPORTS[name]}", __name__)
         return getattr(module, name)
     try:
         return importlib.import_module(
-            ".%s" % name, __name__)
+            f".{name}", __name__)
     except ModuleNotFoundError:
         raise AttributeError(
-            "module %r has no attribute %r"
-            % (__name__, name)) from None
+            f"module {__name__!r} has no attribute {name!r}"
+        ) from None
 
 
 def __dir__():
