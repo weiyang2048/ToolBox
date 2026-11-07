@@ -832,7 +832,7 @@ def _mine_phrases(headlines, known_terms, top_n=10, min_weight=3):
     key_sources = {}
     pool_outlets = len({h.get("source", "") for h in headlines})
     surf_example, surf_example_link = {}, {}
-    surf_free, surf_free_link = {}, {}
+    surf_best, surf_best_link, surf_best_rank = {}, {}, {}
     for h in headlines:
         words = _tokens(h["title"])
         grams = set()
@@ -863,14 +863,16 @@ def _mine_phrases(headlines, known_terms, top_n=10, min_weight=3):
                 sc[gram] += 1
                 surf_example.setdefault(gram, h["title"])
                 surf_example_link.setdefault(gram, h.get("link", ""))
-                # The first NON-paywalled example per surface is
-                # tracked alongside: a mined topic's link prefers
-                # it (the representative rule in _representative,
-                # applied here at collection time).
-                if not _paywalled(h.get("source", "")):
-                    surf_free.setdefault(gram, h["title"])
-                    surf_free_link.setdefault(gram,
-                                               h.get("link", ""))
+                # The best-ranked example per surface is
+                # tracked alongside: a mined topic's link
+                # prefers it (the representative rule in
+                # _representative, applied here at collection
+                # time — NYT first, then free, then paywalled).
+                rank = _link_rank(h.get("source", ""))
+                if rank < surf_best_rank.get(gram, 3):
+                    surf_best_rank[gram] = rank
+                    surf_best[gram] = h["title"]
+                    surf_best_link[gram] = h.get("link", "")
     # Template/boilerplate phrases are not topics: regional
     # editions carry formulaic headlines ("Q2 results 2026: X share
     # price ...") whose scaffolding would otherwise top the cloud.
@@ -946,9 +948,9 @@ def _mine_phrases(headlines, known_terms, top_n=10, min_weight=3):
             continue
         mined.append({"term": _display(surface.split(" ")),
                       "weight": weight,
-                      "example_headline": surf_free.get(
+                      "example_headline": surf_best.get(
                           surface, surf_example[surface]),
-                      "link": surf_free_link.get(
+                      "link": surf_best_link.get(
                           surface, surf_example_link.get(surface, "")),
                       "group": _family_of(surface), "mined": True,
                       "canon": key,
@@ -1164,17 +1166,20 @@ def _fold_windows(mined, headlines, known_terms):
 # ------------------------------------------------------------------
 # Representative link choice
 # ------------------------------------------------------------------
-# Outlets whose articles sit behind a paywall. A topic's link
-# prefers a non-paywalled source (user request 2026-11-01) and
-# falls back to a paywalled one only when no free source covers
-# the topic. Matched against the headline's source name — the
-# feed's name for direct feeds, the publisher for Google News.
+# A topic's link follows a source ranking: the New York Times
+# first — the user holds a subscription (directive 2026-11-07,
+# superseding NYT's place in the paywall tier below) — then a
+# non-paywalled source (user request 2026-11-01), falling back
+# to a paywalled one only when neither covers the topic.
+# Matched against the headline's source name — the feed's name
+# for direct feeds, the publisher for Google News.
 _PAYWALLED_PHRASES = ("wall street journal", "bloomberg",
                       "financial times", "nikkei", "marketwatch",
                       "barron", "seeking alpha", "economist",
-                      "new york times", "washington post",
-                      "telegraph", "fortune")
+                      "washington post", "telegraph", "fortune")
 _PAYWALLED_TOKENS = {"wsj", "ft"}
+_SUBSCRIBED_PHRASES = ("new york times",)
+_SUBSCRIBED_TOKENS = {"nyt"}
 
 
 def _paywalled(source):
@@ -1185,13 +1190,26 @@ def _paywalled(source):
                for tok in re.split(r"[^a-z]+", s))
 
 
+def _subscribed(source):
+    s = (source or "").lower()
+    if any(p in s for p in _SUBSCRIBED_PHRASES):
+        return True
+    return any(tok in _SUBSCRIBED_TOKENS
+               for tok in re.split(r"[^a-z]+", s))
+
+
+def _link_rank(source):
+    """Lower links first: subscribed NYT 0, free 1, paywalled 2."""
+    if _subscribed(source):
+        return 0
+    return 2 if _paywalled(source) else 1
+
+
 def _representative(hits):
-    """The headline a topic links to: the first non-paywalled
-    hit, else the first hit."""
-    for h in hits:
-        if not _paywalled(h.get("source", "")):
-            return h
-    return hits[0]
+    """The headline a topic links to: the best-ranked hit
+    (NYT, then free, then paywalled); ties keep pool order."""
+    return min(hits,
+               key=lambda h: _link_rank(h.get("source", "")))
 
 
 def topic_member_sets(topics, headlines):

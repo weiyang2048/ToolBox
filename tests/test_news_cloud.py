@@ -11,8 +11,10 @@ from toolbox.DataZoo.market.news_cloud import (
     _join_windows,
     _matches,
     _mine_phrases,
+    _link_rank,
     _parse_date,
     _paywalled,
+    _subscribed,
     _shape_ok,
     _story_clusters,
     _template_bound,
@@ -280,6 +282,14 @@ def test_paywalled_source_classification():
     assert not _paywalled("BBC Business")
     assert not _paywalled("Google News Business (US)")
     assert not _paywalled("Reuters")
+    # NYT left the paywall tier on 2026-11-07: the user
+    # subscribes, so it ranks as a subscribed source.
+    assert not _paywalled("The New York Times")
+    assert _subscribed("The New York Times")
+    assert _subscribed("NYT")
+    assert not _subscribed("Reuters")
+    assert _link_rank("NYT") < _link_rank("Reuters")
+    assert _link_rank("Reuters") < _link_rank("WSJ Markets")
 
 
 def test_topic_links_prefer_non_paywalled_sources():
@@ -295,6 +305,21 @@ def test_topic_links_prefer_non_paywalled_sources():
     # The paywalled hit comes first in the pool, but the
     # topic's link comes from the free source.
     assert topics["Bitcoin"]["link"] == "https://example.com/cnbc-btc"
+
+
+def test_topic_links_prefer_nyt_over_free_sources():
+    heads = ([{"title": "Bitcoin rally lifts crypto sentiment",
+               "source": "CNBC Markets",
+               "link": "https://example.com/cnbc-btc",
+               "published": None} for _ in range(2)]
+             + [{"title": "Bitcoin rally lifts crypto sentiment",
+                 "source": "The New York Times",
+                 "link": "https://example.com/nyt-btc",
+                 "published": None} for _ in range(2)])
+    topics = {t["term"]: t for t in extract_topics(heads)}
+    # The subscribed NYT hit wins over the free source
+    # (user directive 2026-11-07).
+    assert topics["Bitcoin"]["link"] == "https://example.com/nyt-btc"
 
 
 def test_topic_links_fall_back_to_paywalled_when_only_source():
@@ -318,6 +343,20 @@ def test_mined_links_prefer_non_paywalled_sources():
     mined = _mine_phrases(heads, known_terms=[])
     jio = [m for m in mined if m["term"].startswith("Jio Platforms")]
     assert jio and jio[0]["link"] == "https://example.com/bbc-jio"
+
+
+def test_mined_links_prefer_nyt_over_free_sources():
+    heads = ([{"title": "Jio Platforms unveils new data centre plan",
+               "source": "BBC Business",
+               "link": "https://example.com/bbc-jio",
+               "published": None} for _ in range(3)]
+             + [{"title": "Jio Platforms unveils new data centre plan",
+                 "source": "NYT",
+                 "link": "https://example.com/nyt-jio",
+                 "published": None} for _ in range(2)])
+    mined = _mine_phrases(heads, known_terms=[])
+    jio = [m for m in mined if m["term"].startswith("Jio Platforms")]
+    assert jio and jio[0]["link"] == "https://example.com/nyt-jio"
 
 
 def test_singularize_rules_and_protections():
