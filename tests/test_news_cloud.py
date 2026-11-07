@@ -1,11 +1,13 @@
 """News word cloud: date parsing, topic extraction (lexicon +
 mining, boilerplate filter), and the embeddable frame HTML.
 All offline — synthetic headlines only."""
+from toolbox.DataZoo.market import news_cloud
 from toolbox.DataZoo.market.news_cloud import (
     LEXICON,
     _canon_of_term,
     _display,
     _family_of,
+    _feed_items,
     _fold_containment,
     _fold_windows,
     _join_windows,
@@ -21,6 +23,7 @@ from toolbox.DataZoo.market.news_cloud import (
     _tokens,
     cloud_html,
     extract_topics,
+    fetch_headlines,
     singularize,
 )
 
@@ -357,6 +360,75 @@ def test_mined_links_prefer_nyt_over_free_sources():
     mined = _mine_phrases(heads, known_terms=[])
     jio = [m for m in mined if m["term"].startswith("Jio Platforms")]
     assert jio and jio[0]["link"] == "https://example.com/nyt-jio"
+
+
+def test_topic_links_rank_google_items_by_publisher():
+    # A Google News item's source is the section; the ranking
+    # reads its publisher — an NYT story surfaced by a section
+    # beats a free direct-feed hit (2026-11-07).
+    heads = ([{"title": "Bitcoin rally lifts crypto sentiment",
+               "source": "BBC Business",
+               "link": "https://example.com/bbc-btc",
+               "published": None} for _ in range(2)]
+             + [{"title": "Bitcoin rally lifts crypto sentiment",
+                 "source": "Google News Business US",
+                 "publisher": "The New York Times",
+                 "link": "https://news.google.com/rss/articles/nyt-btc",
+                 "published": None} for _ in range(2)])
+    topics = {t["term"]: t for t in extract_topics(heads)}
+    assert topics["Bitcoin"]["link"] == \
+        "https://news.google.com/rss/articles/nyt-btc"
+
+
+def test_mined_links_rank_google_items_by_publisher():
+    heads = ([{"title": "Jio Platforms unveils new data centre plan",
+               "source": "BBC Business",
+               "link": "https://example.com/bbc-jio",
+               "published": None} for _ in range(3)]
+             + [{"title": "Jio Platforms unveils new data centre plan",
+                 "source": "Google News Business IN",
+                 "publisher": "The New York Times",
+                 "link": "https://news.google.com/rss/articles/nyt-jio",
+                 "published": None} for _ in range(2)])
+    mined = _mine_phrases(heads, known_terms=[])
+    jio = [m for m in mined if m["term"].startswith("Jio Platforms")]
+    assert jio and jio[0]["link"] == \
+        "https://news.google.com/rss/articles/nyt-jio"
+
+
+_CANNED_RSS = b"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+<item><title>Bitcoin rally lifts crypto sentiment - The New York Times</title>
+<link>https://news.google.com/rss/articles/nyt1</link>
+<source url="https://www.nytimes.com">The New York Times</source></item>
+<item><title>Markets steady into the close</title>
+<link>https://example.com/plain</link></item>
+</channel></rss>"""
+
+
+def test_feed_items_capture_the_publisher(monkeypatch):
+    from datetime import datetime, timezone
+    monkeypatch.setattr(news_cloud, "_fetch",
+                        lambda url: _CANNED_RSS)
+    items = _feed_items("https://example.com/feed",
+                        datetime(2020, 1, 1, tzinfo=timezone.utc))
+    assert items[0][3] == "The New York Times"
+    # The publisher suffix is stripped from the title as before.
+    assert items[0][0] == "Bitcoin rally lifts crypto sentiment"
+    assert items[1][3] is None
+
+
+def test_fetch_headlines_records_publisher(monkeypatch):
+    monkeypatch.setattr(news_cloud, "_fetch",
+                        lambda url: _CANNED_RSS)
+    heads, _counts = fetch_headlines(hours=24)
+    by_title = {h["title"]: h for h in heads}
+    nyt = by_title["Bitcoin rally lifts crypto sentiment"]
+    assert nyt["publisher"] == "The New York Times"
+    # No <source> element: the publisher falls back to the
+    # name of the feed that carried the item.
+    plain = by_title["Markets steady into the close"]
+    assert plain["publisher"] == plain["source"]
 
 
 def test_singularize_rules_and_protections():

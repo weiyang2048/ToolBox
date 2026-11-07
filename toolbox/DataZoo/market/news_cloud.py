@@ -492,8 +492,12 @@ def _item_field(item, name):
 
 
 def _feed_items(url, cutoff):
-    """One feed's in-window items as (title, link, published)
-    triples in feed order; None on any fetch/parse failure.
+    """One feed's in-window items as (title, link, published,
+    publisher) tuples in feed order; None on any fetch/parse
+    failure. The publisher is the item's <source> element —
+    Google News sets it to the outlet carrying the story,
+    which the link ranking reads (2026-11-07); None when the
+    item carries none.
 
     Pure worker for the thread pool in fetch_headlines — no
     shared state, so the feeds fetch in parallel while the
@@ -520,9 +524,12 @@ def _feed_items(url, cutoff):
                                     or _item_field(item, "date"))
             if published is not None and published < cutoff:
                 continue
+            publisher = (_item_field(item, "source")
+                         or "").strip() or None
             out.append((title,
                         (_item_field(item, "link") or "").strip(),
-                        published))
+                        published,
+                        publisher))
         return out
     except Exception:  # noqa: BLE001 - documented None-on-any-failure contract (one bad feed drops out)
         return None
@@ -532,8 +539,11 @@ def fetch_headlines(hours=24, now=None, progress=None):
     """All distinct headlines from the last `hours` hours.
 
     Returns (headlines, source_counts): headlines are dicts with
-    title / source / published; source_counts says how many usable
-    in-window items each feed contributed.
+    title / source / link / published / publisher — source is
+    the feed's name, publisher the outlet carrying the story
+    (the item's <source> element, falling back to the feed's
+    name); source_counts says how many usable in-window items
+    each feed contributed.
 
     The feeds fetch in parallel (8 workers); the merge runs in
     feed order, so the result is the sequential fetch's result.
@@ -562,14 +572,15 @@ def fetch_headlines(hours=24, now=None, progress=None):
                 progress(done, len(urls), urls[i][0])
     seen, headlines, source_counts = set(), [], Counter()
     for (name, _url), items in zip(urls, per_feed):
-        for title, link, published in items or []:
+        for title, link, published, publisher in items or []:
             key = re.sub(r"\W+", " ", title.lower()).strip()
             if key in seen:
                 continue
             seen.add(key)
             headlines.append({"title": title, "source": name,
                               "link": link,
-                              "published": published})
+                              "published": published,
+                              "publisher": publisher or name})
             source_counts[name] += 1
     return headlines, source_counts
 
@@ -868,7 +879,7 @@ def _mine_phrases(headlines, known_terms, top_n=10, min_weight=3):
                 # prefers it (the representative rule in
                 # _representative, applied here at collection
                 # time — NYT first, then free, then paywalled).
-                rank = _link_rank(h.get("source", ""))
+                rank = _hit_rank(h)
                 if rank < surf_best_rank.get(gram, 3):
                     surf_best_rank[gram] = rank
                     surf_best[gram] = h["title"]
@@ -1205,11 +1216,17 @@ def _link_rank(source):
     return 2 if _paywalled(source) else 1
 
 
+def _hit_rank(hit):
+    """A headline's link rank, keyed on its publisher — for
+    Google News items the outlet carrying the story, not the
+    section that surfaced it (2026-11-07)."""
+    return _link_rank(hit.get("publisher") or hit.get("source", ""))
+
+
 def _representative(hits):
     """The headline a topic links to: the best-ranked hit
     (NYT, then free, then paywalled); ties keep pool order."""
-    return min(hits,
-               key=lambda h: _link_rank(h.get("source", "")))
+    return min(hits, key=_hit_rank)
 
 
 def topic_member_sets(topics, headlines):
