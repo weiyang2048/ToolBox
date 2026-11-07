@@ -543,3 +543,32 @@ def test_download_without_progress_stays_one_batch_call(monkeypatch):
     out = yp.download_close_prices(tickers, period="5y")
     assert calls == [tickers]
     assert list(out.columns) == tickers
+
+
+def test_history_disables_yfinance_progress(monkeypatch):
+    """_history must pass progress=False (2026-11-06):
+    yfinance's stderr progress prints raise
+    BrokenPipeError where stderr is a closed pipe
+    (Streamlit Cloud), killing the whole fetch."""
+    import sys
+    import types
+
+    seen = {}
+
+    class FakeTickers:
+        def __init__(self, tickers):
+            seen["tickers"] = tickers
+
+        def history(self, **kwargs):
+            seen["kwargs"] = kwargs
+            import pandas as pd
+            return pd.DataFrame()
+
+    fake = types.ModuleType("yfinance")
+    fake.Tickers = FakeTickers
+    monkeypatch.setitem(sys.modules, "yfinance", fake)
+    yp._history(["AAA", "BBB"], "5y")
+    assert seen["tickers"] == ["AAA", "BBB"]
+    assert seen["kwargs"]["progress"] is False
+    assert seen["kwargs"]["auto_adjust"] is True
+    assert seen["kwargs"]["period"] == "5y"

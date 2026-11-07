@@ -337,7 +337,15 @@ def _patch_tail(prices: pd.DataFrame) -> pd.DataFrame:
 def _history(tickers: list[str], period: str) -> pd.DataFrame:
     import yfinance as yf
 
-    return yf.Tickers(tickers).history(period=period, auto_adjust=True)
+    # progress=False (2026-11-06): yfinance's default
+    # progress display prints to stderr, and where that
+    # is a closed pipe (Streamlit Cloud's log stream)
+    # the print raises BrokenPipeError and kills the
+    # whole fetch. The module's own progress callback
+    # (download_close_prices) is the only progress
+    # reporting consumers see.
+    return yf.Tickers(tickers).history(
+        period=period, auto_adjust=True, progress=False)
 
 
 def _close_frame(history: pd.DataFrame) -> pd.DataFrame:
