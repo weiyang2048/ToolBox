@@ -1,19 +1,28 @@
-"""Market sentiment and financial data sources."""
+"""Market sentiment and financial data sources.
 
-from toolbox.DataZoo.market.fear_greed import CNN_SERIES_LABELS, FearGreed
-from toolbox.DataZoo.market.futures_board import (
-    board_scales,
-    fetch_board,
-    shade_zero,
-)
-from toolbox.DataZoo.market.stock_indices import StockIndices
-from toolbox.DataZoo.market.yahoo_prices import (
-    download_close_prices,
-    fetch_json,
-    normalize_close_prices,
-    yahoo_daily,
-)
-from toolbox.DataZoo.market.zillow_data import ZillowZipData
+The re-exports load lazily (PEP 562, user direction
+2026-11-06): importing this package stays cheap and
+holds the package import lock only momentarily.
+Eager submodule imports held it long enough for
+concurrent cold-start sessions (Streamlit Cloud) to
+trip the import deadlock detector (_DeadlockError
+on toolbox.DataZoo.market).
+"""
+import importlib
+
+_EXPORTS = {
+    "CNN_SERIES_LABELS": "fear_greed",
+    "FearGreed": "fear_greed",
+    "board_scales": "futures_board",
+    "fetch_board": "futures_board",
+    "shade_zero": "futures_board",
+    "StockIndices": "stock_indices",
+    "download_close_prices": "yahoo_prices",
+    "fetch_json": "yahoo_prices",
+    "normalize_close_prices": "yahoo_prices",
+    "yahoo_daily": "yahoo_prices",
+    "ZillowZipData": "zillow_data",
+}
 
 __all__ = [
     "FearGreed",
@@ -28,3 +37,21 @@ __all__ = [
     "board_scales",
     "shade_zero",
 ]
+
+
+def __getattr__(name):
+    if name in _EXPORTS:
+        module = importlib.import_module(
+            ".%s" % _EXPORTS[name], __name__)
+        return getattr(module, name)
+    try:
+        return importlib.import_module(
+            ".%s" % name, __name__)
+    except ModuleNotFoundError:
+        raise AttributeError(
+            "module %r has no attribute %r"
+            % (__name__, name)) from None
+
+
+def __dir__():
+    return sorted(set(globals()) | set(__all__))
