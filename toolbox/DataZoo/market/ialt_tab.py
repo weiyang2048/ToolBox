@@ -17,6 +17,10 @@ drawdown, correlations) with the short window named.
 import time
 from concurrent.futures import ThreadPoolExecutor
 
+from toolbox.DataZoo.market.eastern import (
+    format_day,
+    format_month_day,
+)
 from toolbox.DataZoo.market.svg_charts import line_path, scale, svg_elems
 from toolbox.DataZoo.market.yahoo_prices import with_retry, yahoo_daily
 
@@ -83,9 +87,9 @@ def _compute(df):
             rets["SPY"])), 2),
         "corr_agg": round(float(rets["IALT"].corr(
             rets["AGG"])), 2),
-        "asof": df.index[-1].strftime("%a %b %-d, %Y"),
+        "asof": format_day(df.index[-1]),
         "last_date": df.index[-1].strftime("%Y-%m-%d"),
-        "inception": df.index[0].strftime("%b %-d, %Y")}
+        "inception": format_month_day(df.index[0])}
     if roll is not None:
         both = roll["spy"].dropna()
         out["roll_dates"] = [d.strftime("%Y-%m-%d")

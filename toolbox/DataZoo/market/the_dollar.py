@@ -19,6 +19,7 @@ import html
 import time
 from concurrent.futures import ThreadPoolExecutor
 
+from toolbox.DataZoo.market.eastern import format_day
 from toolbox.DataZoo.market.yahoo_prices import with_retry, yahoo_daily
 
 _MUTE = "#9AA0A6"
@@ -93,7 +94,7 @@ def _compute(dxy, usd):
         "vol_pct": round(float(
             (avg_vol < avg_vol.iloc[-1]).mean() * 100), 0),
         "vol_med": round(float(avg_vol.median()), 1),
-        "asof": usd.index[-1].strftime("%a %b %-d, %Y"),
+        "asof": format_day(usd.index[-1]),
         "last_date": usd.index[-1].strftime("%Y-%m-%d"),
         "dxy_last_date": dxy.index[-1].strftime("%Y-%m-%d"),
         "vol_last_date": avg_vol.index[-1].strftime("%Y-%m-%d")}

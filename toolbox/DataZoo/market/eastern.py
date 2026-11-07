@@ -27,13 +27,26 @@ import pandas as pd
 
 ET = ZoneInfo("America/New_York")
 
-#: The Markets page's one as-of format ("Sun Nov 1, 2:36 PM EST").
-ASOF_FORMAT = "%a %b %-d, %-I:%M %p %Z"
-
-
 def now_et():
     """The current instant in America/New_York."""
     return datetime.datetime.now(ET)
+
+
+def format_day(when):
+    """A date in the renderers' display format, "Mon Nov 2,
+    2026". Composed by hand, not strftime: the unpadded-day
+    flag is platform-specific (%-d on glibc, %#d on Windows)
+    and the other platform's strftime raises ValueError on
+    it — the crash the user's Windows desktop run hit on
+    2026-11-07. Every stamp in ToolBox and the app that
+    wants this format comes through here."""
+    return f"{when.strftime('%a %b')} {when.day}, {when.year}"
+
+
+def format_month_day(when):
+    """A date as "Nov 2, 2026" — format_day without the
+    weekday, hand-composed for the same portability."""
+    return f"{when.strftime('%b')} {when.day}, {when.year}"
 
 
 def asof_stamp(when=None):
@@ -49,7 +62,12 @@ def asof_stamp(when=None):
         when = when.replace(tzinfo=ET)
     else:
         when = when.astimezone(ET)
-    return when.strftime(ASOF_FORMAT)
+    # Hand-composed like format_day: "%-d, %-I" is
+    # glibc-only and raises on Windows.
+    hour = when.hour % 12 or 12
+    return (f"{when.strftime('%a')} {when.strftime('%b')} "
+            f"{when.day}, {hour}:{when.minute:02d} "
+            f"{when.strftime('%p')} {when.strftime('%Z')}")
 
 
 def utc_index_to_et_dates(idx):
