@@ -1,15 +1,16 @@
 """IALT — the Markets page Alternatives section's second tab
 (user-approved demo 2026-11-02).
 
-    fetch_ialt_tab()   IALT + SPY + AGG + the section's seven
-                       peer funds (Yahoo adjusted closes)
+    fetch_ialt_tab()   IALT + SPY + AGG + VOO + the section's
+                       seven peer funds (Yahoo adjusted closes)
     render_ialt_tab()  HTML for the page (house dark theme)
 
 IALT's own listed history begins 2025-12-11 — under a year —
 so the tab is since-inception by construction: total-return
 paths against stocks (SPY), bonds (AGG) and the section's
-peer basket, the drawdown ride, and rolling 63-day
-correlations. Nothing here wears a 1Y/3Y/5Y label it has not
+peer basket, the drawdown ride (with VOO's drawdown on the
+same panel as the equity comparison, user direction
+2026-11-07), and rolling 63-day correlations. Nothing here wears a 1Y/3Y/5Y label it has not
 lived; the footnote says so. The chips carry the fund's
 opening-chapter stats (return, vol, Sharpe rf=0, max
 drawdown, correlations) with the short window named.
@@ -27,7 +28,7 @@ from toolbox.DataZoo.market.yahoo_prices import with_retry, yahoo_daily
 _MUTE = "#9AA0A6"
 _ACCENT = "#FFB066"
 PEERS = ("QAI", "HDG", "MNA", "DBMF", "CTA", "KMLM", "BTAL")
-_SYMS = ("IALT", "SPY", "AGG") + PEERS
+_SYMS = ("IALT", "SPY", "AGG", "VOO") + PEERS
 
 
 def fetch_ialt_tab():
@@ -62,6 +63,7 @@ def _compute(df):
         "agg": df["AGG"] / df["AGG"].iloc[0] * 100,
         "peers": (1 + basket).cumprod() * 100}
     dd = df["IALT"] / df["IALT"].cummax() - 1
+    dd_voo = df["VOO"] / df["VOO"].cummax() - 1
     rets = df[["IALT", "SPY", "AGG"]].pct_change().dropna()
     roll = None
     if len(rets) > 70:
@@ -74,6 +76,9 @@ def _compute(df):
         "paths": {k: [round(float(v), 2) for v in s]
                   for k, s in paths.items()},
         "dd": [round(float(v) * 100, 2) for v in dd],
+        "dd_voo": [round(float(v) * 100, 2) for v in dd_voo],
+        "voo_max_dd": round(float(dd_voo.min() * 100), 1),
+        "voo_cur_dd": round(float(dd_voo.iloc[-1] * 100), 1),
         "ret": {k: round(float(s.iloc[-1] - 100), 1)
                 for k, s in paths.items()},
         "vol": round(float(rets["IALT"].std()
@@ -105,7 +110,8 @@ def _compute(df):
 _FULL = {"ialt": "IALT", "spy": "US stocks (SPY)",
          "agg": "US bonds (AGG)",
          "peers": "Alternatives peers (eq-wtd)",
-         "dd": "Drawdown", "cspy": "vs SPY", "cagg": "vs AGG"}
+         "dd": "IALT drawdown", "dd_voo": "VOO drawdown",
+         "cspy": "vs SPY", "cagg": "vs AGG"}
 
 
 def _panel(dates, series, colors, labels, title, ylabel,
@@ -200,6 +206,31 @@ def _panel(dates, series, colors, labels, title, ylabel,
     return svg_elems(w, h, "".join(body))
 
 
+def _dd_series(p):
+    """The drawdown panel's series: IALT always, VOO's
+    comparison when the payload carries it — a last-good
+    payload cached by the pre-VOO code has no dd_voo and
+    must still render."""
+    out = {"dd": p["dd"]}
+    if p.get("dd_voo"):
+        out["dd_voo"] = p["dd_voo"]
+    return out
+
+
+def _dd_colors(p):
+    out = {"dd": "#E23B3E"}
+    if p.get("dd_voo"):
+        out["dd_voo"] = "#7FB3D5"
+    return out
+
+
+def _dd_labels(p):
+    out = {"dd": "%.1f%%" % p["cur_dd"]}
+    if p.get("dd_voo"):
+        out["dd_voo"] = "%.1f%%" % p["voo_cur_dd"]
+    return out
+
+
 def render_ialt_tab(p, board_date=None):
     """Chips + the three panels + the honest footnote, in the
     centered 1120px block the page's tabs share. With
@@ -235,11 +266,11 @@ def render_ialt_tab(p, board_date=None):
         {k: "%+.1f%%" % r[k] for k in r},
         "Since inception (%s) — total return, rebased to 100"
         % p["inception"], "Rebased", bold=("ialt",), h=270),
-        _panel(p["dates"], {"dd": p["dd"]}, {"dd": "#E23B3E"},
-               {"dd": "%.1f%%" % p["cur_dd"]},
+        _panel(p["dates"], _dd_series(p), _dd_colors(p),
+               _dd_labels(p),
                "The diversifier's ride — IALT drawdown since "
                "inception", "Drawdown (%)", zero=0, fill="dd",
-               h=220)]
+               bold=("dd",), h=220)]
     if p.get("roll"):
         panels.append(_panel(
             p["roll_dates"],

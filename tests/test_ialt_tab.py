@@ -21,6 +21,8 @@ def _frame(n=400, seed=11):
     spy_r = rng.normal(0.0004, 0.010, n)
     cols = {
         "SPY": 100 * np.cumprod(1 + spy_r),
+        "VOO": 100 * np.cumprod(
+            1 + spy_r + rng.normal(0.0, 0.0005, n)),
         "IALT": 100 * np.cumprod(
             1 + 0.5 * spy_r + rng.normal(0.0006, 0.004, n)),
         "AGG": 100 * np.cumprod(1 + rng.normal(0.0, 0.002, n)),
@@ -44,6 +46,14 @@ def test_compute_since_inception_stats():
     assert p["paths"]["ialt"][0] == 100.0
     assert len(p["roll"]["spy"]) == len(p["roll_dates"]) > 300
     assert abs(p["roll_last"]["spy"] - round(p["roll"]["spy"][-1], 2)) < 1e-9
+    # The VOO comparison (user direction 2026-11-07): a
+    # full-length drawdown series, deeper than IALT's on
+    # this frame (VOO takes SPY's full move, IALT half).
+    assert len(p["dd_voo"]) == 400
+    assert max(p["dd_voo"]) <= 0
+    assert p["voo_max_dd"] == round(min(p["dd_voo"]), 1)
+    assert p["voo_cur_dd"] == round(p["dd_voo"][-1], 1)
+    assert p["voo_max_dd"] < p["max_dd"]
 
 
 def test_render_panels_chips_and_pill():
@@ -53,9 +63,20 @@ def test_render_panels_chips_and_pill():
         '<div style="max-width:1120px;margin:0 auto">')
     assert out.count("<svg") == 3
     assert "Since inception" in out and "opening chapter" in out
+    assert "IALT drawdown" in out and "VOO drawdown" in out
     assert "1 session behind" not in out  # no board date, no pill
     lag = render_ialt_tab(p, board_date="2026-12-31")
     assert "behind the board" in lag
+
+
+def test_render_tolerates_a_pre_voo_payload():
+    # A last-good payload cached before the VOO series
+    # existed renders the drawdown panel IALT-only.
+    p = _compute(_frame())
+    for k in ("dd_voo", "voo_max_dd", "voo_cur_dd"):
+        del p[k]
+    out = render_ialt_tab(p)
+    assert "IALT drawdown" in out and "VOO drawdown" not in out
 
 
 def test_fetch_retries_a_flaky_leg(monkeypatch):
