@@ -263,8 +263,39 @@ ALTERNATIVES = [
 # Groups a consumer may fetch by name (fetch_board's groups
 # argument) that are not part of the canonical unfiltered
 # board — see ALTERNATIVES above.
-NAMED_GROUPS = [("Alternatives",
-                 [(s, l, d, "cash") for s, l, d in ALTERNATIVES])]
+# The momentum-sleeve ETFs for the dashboard's equity board
+# (user direction 2026-11-07): SPMO and FMTM join the US
+# lines, IDMO and XUSM the Europe lines, EEMO the
+# Asia-Pacific lines. Like ALTERNATIVES they are named
+# groups only — the Markets page fetches them by name and
+# merges them into its regional groups — so the unfiltered
+# board the briefs' futures report fetches is unchanged.
+# All five verified against Yahoo on 2026-11-07 (a live
+# quote and a full history each): the Invesco S&P momentum
+# funds (SPMO, IDMO, EEMO) and the two MarketDesk momentum
+# funds (FMTM, focused US; XUSM, international).
+MOMENTUM_US = [
+    ("SPMO", "S&P 500 momentum (SPMO)", 2),
+    ("FMTM", "Focused US momentum (FMTM)", 2),
+]
+MOMENTUM_EUROPE = [
+    ("IDMO", "Developed momentum (IDMO)", 2),
+    ("XUSM", "International momentum (XUSM)", 2),
+]
+MOMENTUM_ASIA_PACIFIC = [
+    ("EEMO", "Emerging momentum (EEMO)", 2),
+]
+
+NAMED_GROUPS = [
+    ("Alternatives",
+     [(s, l, d, "cash") for s, l, d in ALTERNATIVES]),
+    ("Momentum US",
+     [(s, l, d, "cash") for s, l, d in MOMENTUM_US]),
+    ("Momentum Europe",
+     [(s, l, d, "cash") for s, l, d in MOMENTUM_EUROPE]),
+    ("Momentum Asia-Pacific",
+     [(s, l, d, "cash") for s, l, d in MOMENTUM_ASIA_PACIFIC]),
+]
 
 
 def fetch(sym):

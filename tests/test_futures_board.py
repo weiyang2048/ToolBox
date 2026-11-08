@@ -360,6 +360,43 @@ def test_alternatives_is_a_named_group_only(monkeypatch):
     assert list(full["data"]) == [g for g, _c in fb.all_groups()]
 
 
+def test_momentum_groups_are_named_only(monkeypatch):
+    # The momentum-sleeve rosters (2026-11-07) are selectable
+    # by name for the dashboard's equity board — SPMO/FMTM
+    # for the US lines, IDMO/XUSM for Europe, EEMO for
+    # Asia-Pacific — and never join the unfiltered board.
+    rosters = {"Momentum US": fb.MOMENTUM_US,
+               "Momentum Europe": fb.MOMENTUM_EUROPE,
+               "Momentum Asia-Pacific": fb.MOMENTUM_ASIA_PACIFIC}
+    closes = {sym: [50.0] * 300
+              for roster in rosters.values()
+              for sym, _l, _d in roster}
+
+    def fake_fetch(sym):
+        c = closes.get(sym)
+        return None if not c else (c[-1] * 1.01, c[-1], 1_700_000_000)
+
+    def fake_bars(sym):
+        return [(datetime.date(2026, 10, 28), c)
+                for c in closes.get(sym) or []]
+
+    monkeypatch.setattr(fb, "fetch", fake_fetch)
+    monkeypatch.setattr(fb, "_history_bars", fake_bars)
+    now = datetime.datetime(2026, 10, 29, 12, 0)
+    for name, roster in rosters.items():
+        rep = fb.fetch_board(now=now, groups=[name])
+        assert list(rep["data"]) == [name]
+        rows = rep["data"][name]
+        assert [r["sym"] for r in rows] == [
+            s for s, _l, _d in roster]
+        assert all(r["kind"] == "cash" for r in rows)
+        assert rep["available"] == len(roster)
+    full = fb.fetch_board(now=now)
+    for name in rosters:
+        assert name not in full["data"]
+    assert list(full["data"]) == [g for g, _c in fb.all_groups()]
+
+
 def test_grad_hex_endpoints_and_midpoint():
     # The briefs' stats-table ramp: red at 0, white at 0.5,
     # green at 1, on the shade_zero stops.
