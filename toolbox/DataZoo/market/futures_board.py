@@ -186,21 +186,23 @@ CASH_GROUPS = [
 # request 2026-10-30), kind "cash" (day change vs their own prior
 # close, like the international cash indices). All 11 verified
 # against Yahoo on 2026-10-30: a live quote and a full 12y daily
-# history (3,024 completed bars) each. Labels are the bare
-# tickers (user direction 2026-11-07: on this board ETFs use
-# only the ticker, as the momentum groups already do).
+# history (3,024 completed bars) each. Labels carry the sector
+# name abbreviated to the first four characters of each word
+# (user direction 2026-11-08, restoring the names the bare-
+# ticker pass of 2026-11-07 removed — "Consumer
+# discretionary" reads "Cons disc").
 GLOBAL_SECTORS = [
-    ("IXN", "IXN", 2),
-    ("IXG", "IXG", 2),
-    ("IXJ", "IXJ", 2),
-    ("IXC", "IXC", 2),
-    ("MXI", "MXI", 2),
-    ("EXI", "EXI", 2),
-    ("RXI", "RXI", 2),
-    ("KXI", "KXI", 2),
-    ("IXP", "IXP", 2),
-    ("JXI", "JXI", 2),
-    ("REET", "REET", 2),
+    ("IXN", "Tech (IXN)", 2),
+    ("IXG", "Fina (IXG)", 2),
+    ("IXJ", "Heal care (IXJ)", 2),
+    ("IXC", "Ener (IXC)", 2),
+    ("MXI", "Mate (MXI)", 2),
+    ("EXI", "Indu (EXI)", 2),
+    ("RXI", "Cons disc (RXI)", 2),
+    ("KXI", "Cons stap (KXI)", 2),
+    ("IXP", "Comm serv (IXP)", 2),
+    ("JXI", "Util (JXI)", 2),
+    ("REET", "Real esta (REET)", 2),
 ]
 
 # Trailing-horizon lookbacks, in sessions before the last completed one.

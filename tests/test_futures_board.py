@@ -295,13 +295,33 @@ def test_board_scales():
 
 def test_etf_labels_are_bare_tickers():
     # User direction 2026-11-07: on the board, ETFs use only the
-    # ticker — the sector suite and the alternatives family (the
-    # momentum groups already label this way).
-    for contracts in (fb.GLOBAL_SECTORS, fb.ALTERNATIVES,
+    # ticker — the alternatives family and the momentum groups.
+    # The global sector suite is the exception since 2026-11-08
+    # (next test): its names came back, abbreviated.
+    for contracts in (fb.ALTERNATIVES,
                       fb.MOMENTUM_US, fb.MOMENTUM_EUROPE,
                       fb.MOMENTUM_ASIA_PACIFIC):
         for sym, label, _dec in contracts:
             assert label == sym, (sym, label)
+
+
+def test_global_sector_labels_carry_abbreviated_names():
+    # User direction 2026-11-08: the global sector rows carry
+    # the sector name again, each word cut to its first four
+    # characters ("Consumer discretionary" -> "Cons disc"),
+    # in the board's plain naming (Financials, Health care,
+    # Materials, Consumer staples, Real estate).
+    plain = {"IXN": "Technology", "IXG": "Financials",
+             "IXJ": "Health care", "IXC": "Energy",
+             "MXI": "Materials", "EXI": "Industrials",
+             "RXI": "Consumer discretionary",
+             "KXI": "Consumer staples",
+             "IXP": "Communication services",
+             "JXI": "Utilities", "REET": "Real estate"}
+    assert {s for s, _l, _d in fb.GLOBAL_SECTORS} == set(plain)
+    for sym, label, _dec in fb.GLOBAL_SECTORS:
+        abbr = " ".join(w[:4] for w in plain[sym].split())
+        assert label == f"{abbr} ({sym})", (sym, label)
 
 
 def test_shade_centered_white_at_five():
