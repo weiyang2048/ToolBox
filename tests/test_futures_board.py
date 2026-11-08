@@ -125,7 +125,7 @@ def test_fetch_board_assembly(monkeypatch):
     eth = next(r for r in rep["data"]["Crypto"]
                if r["sym"] == "ETH=F")   # null rows sort last
     assert eth["last"] is None and eth["pct"] is None
-    assert eth["label"] == "Ether CME (ETH)"   # null row keeps its slot
+    assert eth["label"] == "Ether (ETH)"   # null row keeps its slot
 
 
 def test_fetch_board_quote_fallback(monkeypatch):

@@ -75,12 +75,15 @@ SPOT_FX = [
 ]
 
 # (group, [(yahoo symbol, display label, decimals for Last)])
+# Display names use the short forms the user settled on
+# 2026-11-08 (Crude Oil, Gasoline, Nat gas, Bean oil,
+# Feeders, Russell — abbreviated only where it helps).
 GROUPS = [
     ("US Equity", [
         ("ES=F", "S&P 500 (ES)", 2),
         ("NQ=F", "Nasdaq 100 (NQ)", 2),
         ("YM=F", "Dow (YM)", 2),
-        ("RTY=F", "Russell 2000 (RTY)", 2),
+        ("RTY=F", "Russell (RTY)", 2),
         # US Equity carries only the four broad indices (user
         # direction 2026-10-30): the CME sector futures and US
         # sector ETFs that sat here earlier the same day were
@@ -92,8 +95,8 @@ GROUPS = [
     # futures, then the five metals — the first two groups of the
     # app's Commodity board.
     ("Crypto", [
-        ("BTC=F", "Bitcoin CME (BTC)", 0),
-        ("ETH=F", "Ether CME (ETH)", 1),
+        ("BTC=F", "Bitcoin (BTC)", 0),
+        ("ETH=F", "Ether (ETH)", 1),
     ]),
     ("Metals", [
         ("GC=F", "Gold (GC)", 2),
@@ -106,22 +109,22 @@ GROUPS = [
     # Commodities group split by type — Energy, Grains & oilseeds,
     # Livestock, Softs — the rest of the app's Commodity board.
     ("Energy", [
-        ("CL=F", "WTI crude (CL)", 2),
+        ("CL=F", "Crude Oil (CL)", 2),
         ("BZ=F", "Brent (BZ)", 2),
-        ("NG=F", "Natural gas (NG)", 3),
-        ("RB=F", "RBOB gasoline (RB)", 4),
+        ("NG=F", "Nat gas (NG)", 3),
+        ("RB=F", "Gasoline (RB)", 4),
         ("HO=F", "Heating oil (HO)", 4),
     ]),
     ("Grains & oilseeds", [
         ("ZC=F", "Corn (ZC)", 2),
         ("ZS=F", "Soybeans (ZS)", 2),
-        ("ZL=F", "Soybean oil (ZL)", 2),
-        ("ZM=F", "Soybean meal (ZM)", 1),
+        ("ZL=F", "Bean oil (ZL)", 2),
+        ("ZM=F", "Bean meal (ZM)", 1),
         ("ZW=F", "Wheat (ZW)", 2),
     ]),
     ("Livestock", [
         ("LE=F", "Live cattle (LE)", 2),
-        ("GF=F", "Feeder cattle (GF)", 2),
+        ("GF=F", "Feeders (GF)", 2),
         ("HE=F", "Lean hogs (HE)", 2),
     ]),
     ("Softs", [
