@@ -16,6 +16,9 @@ _EXPORTS = {
     "board_scales": "futures_board",
     "fetch_board": "futures_board",
     "shade_zero": "futures_board",
+    "shade_centered": "futures_board",
+    "CAGR_KEYS": "futures_board",
+    "CAGR_WHITE_PCT": "futures_board",
     "StockIndices": "stock_indices",
     "download_close_prices": "yahoo_prices",
     "fetch_json": "yahoo_prices",
@@ -36,6 +39,9 @@ __all__ = [
     "fetch_board",
     "board_scales",
     "shade_zero",
+    "shade_centered",
+    "CAGR_KEYS",
+    "CAGR_WHITE_PCT",
 ]
 
 

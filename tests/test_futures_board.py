@@ -293,6 +293,34 @@ def test_board_scales():
                       "year": 6.0, "y3": 0, "y5": 0, "y10": 0}
 
 
+def test_shade_centered_white_at_five():
+    # The CAGR shading (user direction 2026-11-07): white AT +5%,
+    # red below it, green above — shade_zero of the shifted value.
+    assert fb.shade_centered(None, 10) == "FFFFFF"
+    assert fb.shade_centered(5.0, 10) == "FFFFFF"
+    assert fb.shade_centered(15.0, 10) == "63BE7B"    # full green
+    assert fb.shade_centered(-5.0, 10) == "F8696B"    # full red
+    assert fb.shade_centered(0.0, 10) == "FCB4B5"     # half red
+    assert fb.shade_centered(10.0, 10) == "B1DEBD"    # half green
+    assert fb.CAGR_WHITE_PCT == 5.0
+    assert fb.CAGR_KEYS == ("year", "y3", "y5", "y10")
+
+
+def test_board_scales_centered_only_cagr():
+    data = {"G": [{"pct": -4.0, "week": 8.0, "month": None,
+                   "quarter": -2.0, "year": 21.0, "y3": None,
+                   "y5": None, "y10": None},
+                  {"pct": 2.0, "week": -3.0, "month": 5.0,
+                   "quarter": 1.0, "year": -6.0, "y3": None,
+                   "y5": None, "y10": None}]}
+    day, scales = fb.board_scales(data, center=fb.CAGR_WHITE_PCT)
+    assert day == 4.0
+    # Non-CAGR columns keep the zero-centered scale...
+    assert scales["week"] == 8.0 and scales["quarter"] == 2.0
+    # ...the year column rescales around +5: max(|21-5|, |-6-5|).
+    assert scales["year"] == 16.0
+
+
 def test_multiyear_horizons_are_cagr(monkeypatch):
     """Year-and-longer horizons annualize (user request 2026-10-29):
     a series up exactly 1.1**10 over its full span reads y10 = +10%

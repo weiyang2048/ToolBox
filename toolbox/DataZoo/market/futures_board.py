@@ -618,6 +618,24 @@ def shade_zero(v, scale):
     return "{:02X}{:02X}{:02X}".format(*_lerp(_WHITE, _GREEN if v >= 0 else _RED, t))
 
 
+# The CAGR horizons (the board's Year-and-longer columns) shade on a
+# scale centered at +5% rather than zero (user direction 2026-11-07:
+# "For cagr, white at 5% below that red"): +5% CAGR is the neutral
+# point — white there, red below it, green above.
+CAGR_KEYS = ("year", "y3", "y5", "y10")
+CAGR_WHITE_PCT = 5.0
+
+
+def shade_centered(v, scale, center=CAGR_WHITE_PCT):
+    """Cell-color hex (RRGGBB, no #) for a % value on a scale centered
+    at ``center``: white at the center, full green at center + scale,
+    full red at center - scale, white for missing values. shade_zero
+    of the shifted value — the one gradient, recentered."""
+    if v is None:
+        return "FFFFFF"
+    return shade_zero(v - center, scale)
+
+
 def grad_hex(t):
     """Cell-color hex (#RRGGBB) at t in [0, 1] of the
     red-white-green gradient: full red at 0, white at 0.5,
@@ -666,15 +684,20 @@ def norm_good(vals, higher_good=True, center_zero=False):
     return out
 
 
-def board_scales(data):
+def board_scales(data, center=None):
     """(day_scale, {horizon: scale}) for shading a fetched board:
     the board-wide max |day %| and, per horizon column, the max
-    |value| in that column (0 when a column is entirely missing)."""
+    |value| in that column (0 when a column is entirely missing).
+    With ``center`` given, the CAGR columns' scales are instead
+    the max |value - center| in the column — the spread around
+    the centered shading's white point (see shade_centered)."""
     day = [abs(r["pct"]) for rows in data.values() for r in rows
            if r.get("pct") is not None]
     scales = {}
     for key in HORIZON_KEYS:
-        vals = [abs(r[key]) for rows in data.values() for r in rows
-                if r.get(key) is not None]
+        shift = center if (center is not None
+                           and key in CAGR_KEYS) else 0.0
+        vals = [abs(r[key] - shift) for rows in data.values()
+                for r in rows if r.get(key) is not None]
         scales[key] = max(vals) if vals else 0
     return (max(day) if day else 0), scales
