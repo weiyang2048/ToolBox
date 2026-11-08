@@ -164,9 +164,9 @@ CASH_GROUPS = [
     ("Asia-Pacific", [
         ("^N225", "Nikkei 225 (Japan)", None),
         ("^HSI", "Hang Seng (Hong Kong)", None),
-        ("000001.SS", "SSE Composite (China)", None),
+        ("000001.SS", "SSE (China)", None),
         ("^KS11", "KOSPI (South Korea)", None),
-        ("^TWII", "Taiwan Weighted (Taiwan)", None),
+        ("^TWII", "Taiwan (Taiwan)", None),
         ("^NSEI", "Nifty 50 (India)", None),
         ("^STI", "Straits Times (Singapore)", None),
         ("^AXJO", "S&P/ASX 200 (Australia)", None),
@@ -178,7 +178,7 @@ CASH_GROUPS = [
         ("^FCHI", "CAC 40 (France)", None),
     ]),
     ("Americas", [
-        ("^GSPTSE", "TSX Composite (Canada)", None),
+        ("^GSPTSE", "TSX (Canada)", None),
         ("^BVSP", "Bovespa (Brazil)", None),
         ("^MXX", "IPC (Mexico)", None),
     ]),
