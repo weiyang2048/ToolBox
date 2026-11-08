@@ -187,22 +187,23 @@ CASH_GROUPS = [
 # close, like the international cash indices). All 11 verified
 # against Yahoo on 2026-10-30: a live quote and a full 12y daily
 # history (3,024 completed bars) each. Labels carry the sector
-# name abbreviated to the first four characters of each word
-# (user direction 2026-11-08, restoring the names the bare-
-# ticker pass of 2026-11-07 removed — "Consumer
-# discretionary" reads "Cons disc").
+# name in its standard short form (user direction 2026-11-08,
+# restoring the names the bare-ticker pass of 2026-11-07
+# removed; a mechanical four-characters-per-word cut was
+# tried first that morning and replaced the same day —
+# "Consumer discretionary" reads "Cons Disc").
 GLOBAL_SECTORS = [
     ("IXN", "Tech (IXN)", 2),
-    ("IXG", "Fina (IXG)", 2),
-    ("IXJ", "Heal care (IXJ)", 2),
-    ("IXC", "Ener (IXC)", 2),
-    ("MXI", "Mate (MXI)", 2),
-    ("EXI", "Indu (EXI)", 2),
-    ("RXI", "Cons disc (RXI)", 2),
-    ("KXI", "Cons stap (KXI)", 2),
-    ("IXP", "Comm serv (IXP)", 2),
-    ("JXI", "Util (JXI)", 2),
-    ("REET", "Real esta (REET)", 2),
+    ("IXG", "Fin (IXG)", 2),
+    ("IXJ", "Health (IXJ)", 2),
+    ("IXC", "Energy (IXC)", 2),
+    ("MXI", "Matls (MXI)", 2),
+    ("EXI", "Inds (EXI)", 2),
+    ("RXI", "Cons Disc (RXI)", 2),
+    ("KXI", "Cons Stap (KXI)", 2),
+    ("IXP", "Comm Svcs (IXP)", 2),
+    ("JXI", "Utils (JXI)", 2),
+    ("REET", "Real Est (REET)", 2),
 ]
 
 # Trailing-horizon lookbacks, in sessions before the last completed one.

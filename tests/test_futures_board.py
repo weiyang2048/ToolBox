@@ -307,21 +307,18 @@ def test_etf_labels_are_bare_tickers():
 
 def test_global_sector_labels_carry_abbreviated_names():
     # User direction 2026-11-08: the global sector rows carry
-    # the sector name again, each word cut to its first four
-    # characters ("Consumer discretionary" -> "Cons disc"),
-    # in the board's plain naming (Financials, Health care,
-    # Materials, Consumer staples, Real estate).
-    plain = {"IXN": "Technology", "IXG": "Financials",
-             "IXJ": "Health care", "IXC": "Energy",
-             "MXI": "Materials", "EXI": "Industrials",
-             "RXI": "Consumer discretionary",
-             "KXI": "Consumer staples",
-             "IXP": "Communication services",
-             "JXI": "Utilities", "REET": "Real estate"}
-    assert {s for s, _l, _d in fb.GLOBAL_SECTORS} == set(plain)
+    # the sector name again, in its standard short form (a
+    # mechanical four-characters-per-word cut was tried first
+    # that morning and replaced the same day). The pairing is
+    # pinned exactly — a label change is a user decision.
+    short = {"IXN": "Tech", "IXG": "Fin", "IXJ": "Health",
+             "IXC": "Energy", "MXI": "Matls", "EXI": "Inds",
+             "RXI": "Cons Disc", "KXI": "Cons Stap",
+             "IXP": "Comm Svcs", "JXI": "Utils",
+             "REET": "Real Est"}
+    assert {s for s, _l, _d in fb.GLOBAL_SECTORS} == set(short)
     for sym, label, _dec in fb.GLOBAL_SECTORS:
-        abbr = " ".join(w[:4] for w in plain[sym].split())
-        assert label == f"{abbr} ({sym})", (sym, label)
+        assert label == f"{short[sym]} ({sym})", (sym, label)
 
 
 def test_shade_centered_white_at_five():
