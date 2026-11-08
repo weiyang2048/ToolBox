@@ -293,6 +293,17 @@ def test_board_scales():
                       "year": 6.0, "y3": 0, "y5": 0, "y10": 0}
 
 
+def test_etf_labels_are_bare_tickers():
+    # User direction 2026-11-07: on the board, ETFs use only the
+    # ticker — the sector suite and the alternatives family (the
+    # momentum groups already label this way).
+    for contracts in (fb.GLOBAL_SECTORS, fb.ALTERNATIVES,
+                      fb.MOMENTUM_US, fb.MOMENTUM_EUROPE,
+                      fb.MOMENTUM_ASIA_PACIFIC):
+        for sym, label, _dec in contracts:
+            assert label == sym, (sym, label)
+
+
 def test_shade_centered_white_at_five():
     # The CAGR shading (user direction 2026-11-07): white AT +5%,
     # red below it, green above — shade_zero of the shifted value.

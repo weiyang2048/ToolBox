@@ -186,19 +186,21 @@ CASH_GROUPS = [
 # request 2026-10-30), kind "cash" (day change vs their own prior
 # close, like the international cash indices). All 11 verified
 # against Yahoo on 2026-10-30: a live quote and a full 12y daily
-# history (3,024 completed bars) each.
+# history (3,024 completed bars) each. Labels are the bare
+# tickers (user direction 2026-11-07: on this board ETFs use
+# only the ticker, as the momentum groups already do).
 GLOBAL_SECTORS = [
-    ("IXN", "Technology (IXN)", 2),
-    ("IXG", "Financials (IXG)", 2),
-    ("IXJ", "Health care (IXJ)", 2),
-    ("IXC", "Energy (IXC)", 2),
-    ("MXI", "Materials (MXI)", 2),
-    ("EXI", "Industrials (EXI)", 2),
-    ("RXI", "Consumer discretionary (RXI)", 2),
-    ("KXI", "Consumer staples (KXI)", 2),
-    ("IXP", "Communication services (IXP)", 2),
-    ("JXI", "Utilities (JXI)", 2),
-    ("REET", "Real estate (REET)", 2),
+    ("IXN", "IXN", 2),
+    ("IXG", "IXG", 2),
+    ("IXJ", "IXJ", 2),
+    ("IXC", "IXC", 2),
+    ("MXI", "MXI", 2),
+    ("EXI", "EXI", 2),
+    ("RXI", "RXI", 2),
+    ("KXI", "KXI", 2),
+    ("IXP", "IXP", 2),
+    ("JXI", "JXI", 2),
+    ("REET", "REET", 2),
 ]
 
 # Trailing-horizon lookbacks, in sessions before the last completed one.
@@ -248,16 +250,18 @@ def all_groups():
 # deliberately NOT part of all_groups(): the briefs' futures
 # report fetches the board unfiltered, and their board must
 # not grow a section they never asked for. NAMED_GROUPS below
-# makes it selectable by name only.
+# makes it selectable by name only. Labels are the bare tickers
+# (user direction 2026-11-07: on this board ETFs use only the
+# ticker).
 ALTERNATIVES = [
-    ("IALT", "Systematic alternatives (IALT)", 2),
-    ("QAI", "Hedge multi-strategy tracker (QAI)", 2),
-    ("HDG", "Hedge replication (HDG)", 2),
-    ("MNA", "Merger arbitrage (MNA)", 2),
-    ("DBMF", "Managed futures, DBi (DBMF)", 2),
-    ("CTA", "Managed futures, Simplify (CTA)", 2),
-    ("KMLM", "Managed futures, Mount Lucas (KMLM)", 2),
-    ("BTAL", "Market neutral anti-beta (BTAL)", 2),
+    ("IALT", "IALT", 2),
+    ("QAI", "QAI", 2),
+    ("HDG", "HDG", 2),
+    ("MNA", "MNA", 2),
+    ("DBMF", "DBMF", 2),
+    ("CTA", "CTA", 2),
+    ("KMLM", "KMLM", 2),
+    ("BTAL", "BTAL", 2),
 ]
 
 # Groups a consumer may fetch by name (fetch_board's groups
