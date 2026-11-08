@@ -274,16 +274,18 @@ ALTERNATIVES = [
 # quote and a full history each): the Invesco S&P momentum
 # funds (SPMO, IDMO, EEMO) and the two MarketDesk momentum
 # funds (FMTM, focused US; XUSM, international).
+# Labels are the bare tickers (user direction 2026-11-07,
+# superseding the descriptive labels they launched with).
 MOMENTUM_US = [
-    ("SPMO", "S&P 500 momentum (SPMO)", 2),
-    ("FMTM", "Focused US momentum (FMTM)", 2),
+    ("SPMO", "SPMO", 2),
+    ("FMTM", "FMTM", 2),
 ]
 MOMENTUM_EUROPE = [
-    ("IDMO", "Developed momentum (IDMO)", 2),
-    ("XUSM", "International momentum (XUSM)", 2),
+    ("IDMO", "IDMO", 2),
+    ("XUSM", "XUSM", 2),
 ]
 MOMENTUM_ASIA_PACIFIC = [
-    ("EEMO", "Emerging momentum (EEMO)", 2),
+    ("EEMO", "EEMO", 2),
 ]
 
 NAMED_GROUPS = [
