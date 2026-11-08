@@ -64,10 +64,16 @@ def download_close_prices(
     tickers: list[str],
     period: str = "5y",
     *,
+    start: str | None = None,
     normalize: bool = False,
     progress=None,
 ) -> pd.DataFrame:
     """Adjusted close prices for ``tickers`` over ``period``.
+
+    ``start`` (a "YYYY-MM-DD" date) bounds the fetch from
+    below and overrides ``period`` — for consumers whose
+    world begins at a fixed date and who only need the
+    warm-up before it, not full history.
 
     Columns are ticker symbols, in first-seen order. A timezone-aware index is
     converted to naive. ``normalize`` scales each column by its first valid price.
@@ -91,11 +97,12 @@ def download_close_prices(
         return pd.DataFrame()
 
     if progress is None:
-        prices = _close_frame(_history(symbols, period))
+        prices = _close_frame(_history(symbols, period, start))
     else:
         progress(0, len(symbols), "downloading prices")
         if len(symbols) <= _PROGRESS_CHUNK:
-            prices = _close_frame(_history(symbols, period))
+            prices = _close_frame(_history(symbols, period,
+                                           start))
             progress(len(symbols), len(symbols), symbols[-1])
         else:
             chunks = [symbols[i:i + _PROGRESS_CHUNK]
@@ -111,7 +118,8 @@ def download_close_prices(
             # chunk that raises fails the download, exactly
             # as the sequential loop did.
             with ThreadPoolExecutor(max_workers=4) as pool:
-                futures = {pool.submit(_history, chunk, period): i
+                futures = {pool.submit(_history, chunk, period,
+                                       start): i
                            for i, chunk in enumerate(chunks)}
                 for fut in as_completed(futures):
                     i = futures[fut]
@@ -128,7 +136,7 @@ def download_close_prices(
             progress(len(symbols), len(symbols),
                      "repairing throttled tickers")
     prices = _strip_timezone(prices)
-    prices = _refill_stubs(prices, symbols, period)
+    prices = _refill_stubs(prices, symbols, period, start)
     prices = _patch_tail(prices)
     if normalize and not prices.empty:
         prices = normalize_close_prices(prices)
@@ -261,8 +269,8 @@ def _period_start(period: str) -> int:
     return now - int(days * 86400)
 
 
-def _refill_stubs(prices: pd.DataFrame, symbols, period: str
-                  ) -> pd.DataFrame:
+def _refill_stubs(prices: pd.DataFrame, symbols, period: str,
+                  start: str | None = None) -> pd.DataFrame:
     """Refill stub columns from yahoo_daily (the repaired chart
     path) — user direction 2026-11-02 ("refill stub tickers in
     the price path").
@@ -283,7 +291,8 @@ def _refill_stubs(prices: pd.DataFrame, symbols, period: str
              or int(prices[s].notna().sum()) < STUB_MIN_OBS]
     if not stubs:
         return prices
-    p1 = _period_start(period)
+    p1 = (int(pd.Timestamp(start).timestamp())
+          if start else _period_start(period))
     lo = prices.index.min() if len(prices) else None
     hi = prices.index.max() if len(prices) else None
     out = prices.copy()
@@ -334,7 +343,8 @@ def _patch_tail(prices: pd.DataFrame) -> pd.DataFrame:
     return prices
 
 
-def _history(tickers: list[str], period: str) -> pd.DataFrame:
+def _history(tickers: list[str], period: str,
+             start: str | None = None) -> pd.DataFrame:
     import yfinance as yf
 
     # progress=False (2026-11-06): yfinance's default
@@ -344,6 +354,9 @@ def _history(tickers: list[str], period: str) -> pd.DataFrame:
     # whole fetch. The module's own progress callback
     # (download_close_prices) is the only progress
     # reporting consumers see.
+    if start:
+        return yf.Tickers(tickers).history(
+            start=start, auto_adjust=True, progress=False)
     return yf.Tickers(tickers).history(
         period=period, auto_adjust=True, progress=False)
 

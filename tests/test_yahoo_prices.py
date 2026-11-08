@@ -367,7 +367,7 @@ def test_download_refills_a_stub_column(monkeypatch):
     full = [100.0 + i for i in range(100)]
     stub = [5.0, 5.1, 5.2] + [float("nan")] * 97
     monkeypatch.setattr(yp, "_history",
-                        lambda t, p: _batch_frame({"AAA": full,
+                        lambda t, p, start=None: _batch_frame({"AAA": full,
                                                    "BBB": stub}))
     monkeypatch.setattr(
         yp, "yahoo_daily",
@@ -383,7 +383,7 @@ def test_download_refills_a_missing_column(monkeypatch):
 
     full = [100.0 + i for i in range(100)]
     monkeypatch.setattr(yp, "_history",
-                        lambda t, p: _batch_frame({"AAA": full}))
+                        lambda t, p, start=None: _batch_frame({"AAA": full}))
     monkeypatch.setattr(
         yp, "yahoo_daily",
         lambda t, p1=0, p2=None, include_partial=False:
@@ -401,7 +401,7 @@ def test_download_keeps_a_genuinely_young_ticker(monkeypatch):
     full = [100.0 + i for i in range(100)]
     young = [7.0] * 40 + [float("nan")] * 60
     monkeypatch.setattr(yp, "_history",
-                        lambda t, p: _batch_frame({"AAA": full,
+                        lambda t, p, start=None: _batch_frame({"AAA": full,
                                                    "NEW": young}))
     idx = pd.bdate_range("2026-06-01", periods=100)
     monkeypatch.setattr(
@@ -419,7 +419,7 @@ def test_download_empty_batch_is_refilled(monkeypatch):
     # its history instead of an empty frame.
     import pandas as pd
 
-    monkeypatch.setattr(yp, "_history", lambda t, p: pd.DataFrame())
+    monkeypatch.setattr(yp, "_history", lambda t, p, start=None: pd.DataFrame())
     monkeypatch.setattr(
         yp, "yahoo_daily",
         lambda t, p1=0, p2=None, include_partial=False:
@@ -433,7 +433,7 @@ def test_download_survives_a_failed_refill(monkeypatch):
 
     full = [100.0 + i for i in range(100)]
     monkeypatch.setattr(yp, "_history",
-                        lambda t, p: _batch_frame({"AAA": full}))
+                        lambda t, p, start=None: _batch_frame({"AAA": full}))
 
     def boom(t, p1=0, p2=None, include_partial=False):
         raise RuntimeError("chart down")
@@ -471,7 +471,7 @@ def test_download_progress_chunks_and_reports_counts(monkeypatch):
     tickers = [f"T{i:02d}" for i in range(45)]
     calls = []
 
-    def fake_history(ts, period):
+    def fake_history(ts, period, start=None):
         calls.append(list(ts))
         return _batch_frame({t: [100.0 + j for j in range(100)]
                              for t in ts})
@@ -499,7 +499,7 @@ def test_download_parallel_chunks_assemble_in_request_order(monkeypatch):
 
     tickers = [f"T{i:02d}" for i in range(45)]
 
-    def fake_history(ts, period):
+    def fake_history(ts, period, start=None):
         # the first chunk sleeps longest: completion order
         # is the reverse of request order
         _time.sleep(0.05 * (3 - tickers.index(ts[0]) // 20))
@@ -518,7 +518,7 @@ def test_download_parallel_chunks_assemble_in_request_order(monkeypatch):
 def test_download_progress_small_batch_is_one_call(monkeypatch):
     calls = []
 
-    def fake_history(ts, period):
+    def fake_history(ts, period, start=None):
         calls.append(list(ts))
         return _batch_frame({t: [1.0] * 100 for t in ts})
 
@@ -534,7 +534,7 @@ def test_download_progress_small_batch_is_one_call(monkeypatch):
 def test_download_without_progress_stays_one_batch_call(monkeypatch):
     calls = []
 
-    def fake_history(ts, period):
+    def fake_history(ts, period, start=None):
         calls.append(list(ts))
         return _batch_frame({t: [1.0] * 100 for t in ts})
 
@@ -572,3 +572,22 @@ def test_history_disables_yfinance_progress(monkeypatch):
     assert seen["kwargs"]["progress"] is False
     assert seen["kwargs"]["auto_adjust"] is True
     assert seen["kwargs"]["period"] == "5y"
+
+
+def test_download_start_overrides_period(monkeypatch):
+    # A start-bounded fetch (user direction 2026-11-08,
+    # the sector rotation page's trimmed pull) routes the
+    # start through to the batch history unchanged.
+    seen = {}
+
+    def fake(ts, period, start=None):
+        seen["period"] = period
+        seen["start"] = start
+        return _batch_frame({"AAA": [100.0 + i
+                                     for i in range(100)]})
+
+    monkeypatch.setattr(yp, "_history", fake)
+    out = yp.download_close_prices(["AAA"], period="max",
+                                   start="2014-01-01")
+    assert seen == {"period": "max", "start": "2014-01-01"}
+    assert int(out["AAA"].notna().sum()) == 100
