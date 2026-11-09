@@ -109,8 +109,12 @@ target-version = "py310"
 # UP032 added 2026-11-05: every .format call in the tested modules is
 # an f-string (the SVG %-template modules keep UP031 ignored above;
 # they carry no .format calls).
+# BLE001/E722 added 2026-11-09 (user-approved nightly proposal):
+# the blind-except audit of 2026-11-06 left every remaining site
+# carrying a targeted noqa, and the repo has no bare excepts —
+# enforcement starts from zero violations.
 [tool.ruff.lint]
-select = ["F401", "F841", "I001", "UP006", "UP035", "UP045", "UP031", "UP032", "PLW1510"]
+select = ["F401", "F841", "I001", "UP006", "UP035", "UP045", "UP031", "UP032", "PLW1510", "BLE001", "E722"]
 
 [tool.ruff.lint.per-file-ignores]
 # Intentional public re-exports (the energy package's API surface).
