@@ -96,7 +96,7 @@ def test_download_no_tickers_returns_empty_without_fetch(monkeypatch):
 def test_download_dedupes_tickers_keeps_close_and_strips_tz(monkeypatch):
     seen = {}
 
-    def fake_history(tickers, period):
+    def fake_history(tickers, period, start=None):
         seen["tickers"] = tickers
         return _history_frame()
 
@@ -109,7 +109,8 @@ def test_download_dedupes_tickers_keeps_close_and_strips_tz(monkeypatch):
 
 
 def test_download_normalize_scales_to_first_print(monkeypatch):
-    monkeypatch.setattr(yp_module, "_history", lambda t, p: _history_frame())
+    monkeypatch.setattr(yp_module, "_history",
+                        lambda t, p, start=None: _history_frame())
     out = download_close_prices(["AAA", "BBB"], normalize=True)
     np.testing.assert_allclose(out.iloc[0], [1.0, 1.0])
     np.testing.assert_allclose(out["BBB"], [1.0, 1.1])
@@ -121,7 +122,8 @@ def test_download_empty_history_returns_empty(monkeypatch):
     # the extreme stub, refilled from the chart path; see
     # test_download_empty_batch_is_refilled in
     # test_yahoo_prices.py.)
-    monkeypatch.setattr(yp_module, "_history", lambda t, p: pd.DataFrame())
+    monkeypatch.setattr(yp_module, "_history",
+                        lambda t, p, start=None: pd.DataFrame())
     monkeypatch.setattr(yp_module, "yahoo_daily",
                         lambda t, p1=0, p2=None, include_partial=False:
                         pd.Series(dtype=float))
