@@ -207,7 +207,7 @@ def test_chart_fig_layout_gives_the_plot_room():
     assert fig.layout.legend.y < 0
     assert not fig.layout.yaxis.title.text
     assert not fig.layout.yaxis2.title.text
-    assert fig.layout.height == 560
+    assert fig.layout.height == 600
     # Inside labels (user direction 2026-11-10): both
     # axes hide their tick labels, and gold's scale is
     # concatenated into the index scale's annotations —
@@ -221,9 +221,9 @@ def test_chart_fig_layout_gives_the_plot_room():
     assert all(a.bgcolor for a in anns)
     import re as _re
     plain = [_re.sub(r"<[^>]+>", "", a.text) for a in anns]
-    assert plain == ["0 \u00b7 $3,000", "20 \u00b7 $3,122",
-                     "40 \u00b7 $3,243", "60 \u00b7 $3,365",
-                     "80 \u00b7 $3,487", "100 \u00b7 $3,609"]
+    assert plain == ["0 \u00b7 $3,000", "20 \u00b7 $3,133",
+                     "40 \u00b7 $3,267", "60 \u00b7 $3,400",
+                     "80 \u00b7 $3,533", "100 \u00b7 $3,667"]
 
 
 def test_chart_fig_scale_labels_without_gold():
@@ -239,7 +239,7 @@ def test_chart_fig_scale_labels_without_gold():
 
 def test_chart_fig_headroom_above_100():
     # Live fix 2026-11-02, carried from the PNG: the index
-    # axis runs to 115 (headroom over the 0-100 scale; bands
+    # axis runs to 105 (headroom over the 0-100 scale; bands
     # stay 0-100) and gold sits on its own 0-100 axis with
     # its peak normalized to GOLD_PEAK, below the band
     # ceiling \u2014 normalizing the peak to exactly 100 put it
@@ -249,7 +249,7 @@ def test_chart_fig_headroom_above_100():
               "crypto": _series([30 + i % 40 for i in range(120)]),
               "gold": _series([3000 + i * 5 for i in range(120)])}
     fig = sm.chart_fig(series)
-    assert tuple(fig.layout.yaxis.range) == (0, 115)
+    assert tuple(fig.layout.yaxis.range) == (0, 105)
     assert tuple(fig.layout.yaxis2.range) == (0, 100)
     gold = next(t for t in fig.data
                 if getattr(t, "yaxis", None) == "y2"
@@ -268,7 +268,7 @@ def test_chart_fig_gold_axis_top_headroom():
     # equivalence at index 100 for this 3000..5000 series.
     top = next(a.text for a in fig.layout.annotations
                if a.yref == "y" and a.y == 100)
-    assert "$5,046" in top
+    assert "$5,241" in top
     gmin, gmax = float(gold.min()), float(gold.max())
     axis_top_usd = gmin + (gmax - gmin) * (100.0 / sm.GOLD_PEAK)
     headroom = (axis_top_usd - gmax) / (gmax - gmin)

@@ -46,8 +46,8 @@ BANDS = [(0, 25, "Extreme Fear", "#e74c3c"), (25, 45, "Fear", "#e67e22"),
          (45, 55, "Neutral", "#f1c40f"), (55, 75, "Greed", "#82c46a"),
          (75, 100, "Extreme Greed", "#27ae60")]
 
-# Chart geometry (see chart_fig): the index axis runs 0-115 so
-# the 0-100 scale ceiling carries 15% headroom, and the gold
+# Chart geometry (see chart_fig): the index axis runs 0-105 so
+# the 0-100 scale ceiling carries 5% headroom, and the gold
 # series is normalized with its window peak at GOLD_PEAK on its
 # own 0-100 axis — the axis top then sits at the gold max plus
 # (100/GOLD_PEAK - 1) ≈ 17.6% of the gold range, and the peak
@@ -56,7 +56,7 @@ GOLD_PEAK = 85.0
 # Endpoint labels: minimum vertical separation (index units)
 # between two label centers, and the band they must stay in.
 LABEL_MIN_SEP = 8.0
-LABEL_LO, LABEL_HI = 4.0, 112.0
+LABEL_LO, LABEL_HI = 4.0, 103.0
 
 
 def _spread_labels(desired, lo=LABEL_LO, hi=LABEL_HI,
@@ -350,11 +350,14 @@ def chart_fig(series):
                 font=dict(size=11, color=color),
                 bgcolor=_BOX, bordercolor=color, borderwidth=1,
                 borderpad=3)
-    # Headroom (2026-11-02 live fix, carried from the PNG):
-    # the index axis runs to 115 so the 0-100 scale ceiling
-    # carries ~15% headroom and endpoint labels sit clear of
-    # the axes; gold carries its own 0-100 axis with the peak
-    # at GOLD_PEAK (see above). The zone bands stay 0-100.
+    # Headroom (2026-11-02 live fix, carried from the PNG;
+    # trimmed 2026-11-10 at the user's word — the plot
+    # claims the dead strip): the index axis runs to 105 —
+    # enough for the endpoint labels, whose spread clamp
+    # (LABEL_HI) lowered to 103 with it, so a 100 reading's
+    # label still sits inside; gold carries its own 0-100
+    # axis with the peak at GOLD_PEAK (see above). The
+    # zone bands stay 0-100.
     # Inside scale labels (user direction 2026-11-10, the
     # plot-space follow-up): the vertical scales print
     # inside the plot, so the axes span nearly the full
@@ -370,7 +373,7 @@ def chart_fig(series):
     # price at that tick's height, the $ in gold. The
     # labels interleave with the band names (centers
     # 10..90) at the ticks (0, 20, ..., 100).
-    yaxis = dict(range=[0, 115],
+    yaxis = dict(range=[0, 105],
                  tickvals=[0, 20, 40, 60, 80, 100],
                  showticklabels=False,
                  tickfont=dict(color=_INK), zeroline=False,
@@ -386,7 +389,7 @@ def chart_fig(series):
     # and the figure is taller, so the axes themselves get
     # the room on a phone.
     layout = dict(
-        height=560, margin=dict(l=10, r=10, t=10, b=10),
+        height=600, margin=dict(l=10, r=10, t=10, b=10),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         font=dict(color=_INK), hovermode="x unified",
@@ -394,7 +397,7 @@ def chart_fig(series):
                     xanchor="left", yanchor="top",
                     bgcolor="rgba(0,0,0,0)", borderwidth=0,
                     font=dict(color=_INK, size=10.5)),
-        xaxis=dict(tickformat="%b %Y", dtick="M1",
+        xaxis=dict(tickformat="%b %y", dtick="M1",
                    tickfont=dict(color=_INK, size=10),
                    showgrid=False),
         yaxis=yaxis)
@@ -414,11 +417,11 @@ def chart_fig(series):
         if gold_range is not None:
             gmin, gmax = gold_range
             # The gold price at this tick's height: the
-            # tick sits at v/115 of the plot (the index
-            # range), gold's axis reads (v/115)*100 there,
+            # tick sits at v/105 of the plot (the index
+            # range), gold's axis reads (v/105)*100 there,
             # and its $ mapping runs through GOLD_PEAK.
             usd = (gmin + (gmax - gmin)
-                   * (v / 115.0 * 100.0) / GOLD_PEAK)
+                   * (v / 105.0 * 100.0) / GOLD_PEAK)
             text = (f"{v} \u00b7 <span style=\"color:"
                     f"{_GOLD}\">${usd:,.0f}</span>")
         fig.add_annotation(
