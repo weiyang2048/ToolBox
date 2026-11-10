@@ -355,8 +355,21 @@ def chart_fig(series):
     # carries ~15% headroom and endpoint labels sit clear of
     # the axes; gold carries its own 0-100 axis with the peak
     # at GOLD_PEAK (see above). The zone bands stay 0-100.
+    # Inside scale labels (user direction 2026-11-10, the
+    # plot-space follow-up): both vertical scales print
+    # inside the plot, so the axes span nearly the full
+    # figure width. Gold's axis takes the native route
+    # (ticklabelposition="inside" — its right margin frees
+    # to ~12px, measured). The index axis cannot: measured
+    # 2026-11-10, the same attribute on the left axis makes
+    # the bundled plotly.js automargin reserve ~280px and
+    # the axes collapse — so this axis hides its labels
+    # and its scale prints as annotations (below), which
+    # interleave with the band names (centers 10..90)
+    # at the ticks (0, 20, ..., 100).
     yaxis = dict(range=[0, 115],
                  tickvals=[0, 20, 40, 60, 80, 100],
+                 showticklabels=False,
                  tickfont=dict(color=_INK), zeroline=False,
                  gridcolor="rgba(232,236,236,0.25)",
                  griddash="dash")
@@ -391,7 +404,14 @@ def chart_fig(series):
             tickvals=[GOLD_PEAK * f for f in fracs],
             ticktext=[f"${gmin + (gmax - gmin) * f:,.0f}"
                       for f in fracs],
+            ticklabelposition="inside",
             tickfont=dict(color=_GOLD), showgrid=False,
             zeroline=False)
+    for v in (0, 20, 40, 60, 80, 100):
+        fig.add_annotation(
+            x=x0, y=v, xref="x", yref="y",
+            text=str(v), showarrow=False, xanchor="left",
+            yanchor="middle", xshift=4,
+            font=dict(size=10, color=_INK))
     fig.update_layout(**layout)
     return fig

@@ -208,6 +208,16 @@ def test_chart_fig_layout_gives_the_plot_room():
     assert not fig.layout.yaxis.title.text
     assert not fig.layout.yaxis2.title.text
     assert fig.layout.height == 560
+    # Inside labels on both vertical axes (user direction
+    # 2026-11-10): gold natively (ticklabelposition), the
+    # index scale as annotations — the native attribute on
+    # the left axis collapses the axes under the bundled
+    # plotly.js automargin, so its labels are hidden.
+    assert fig.layout.yaxis.showticklabels is False
+    assert fig.layout.yaxis2.ticklabelposition == "inside"
+    index = [a.text for a in fig.layout.annotations
+             if a.yref == "y" and a.text.isdigit()]
+    assert index == ["0", "20", "40", "60", "80", "100"]
 
 
 def test_chart_fig_headroom_above_100():
