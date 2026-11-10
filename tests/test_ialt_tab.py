@@ -7,8 +7,10 @@ import pytest
 from toolbox.DataZoo.market import ialt_tab
 from toolbox.DataZoo.market.ialt_tab import (
     _compute,
+    chart_figs,
     fetch_ialt_tab,
-    render_ialt_tab,
+    ialt_foot_html,
+    ialt_head_html,
 )
 
 
@@ -56,27 +58,56 @@ def test_compute_since_inception_stats():
     assert p["voo_max_dd"] < p["max_dd"]
 
 
-def test_render_panels_chips_and_pill():
+def test_head_chips_and_pill_and_foot():
     p = _compute(_frame())
-    out = render_ialt_tab(p)
+    out = ialt_head_html(p)
     assert out.startswith(
         '<div style="max-width:1120px;margin:0 auto">')
-    assert out.count("<svg") == 3
-    assert "Since inception" in out and "opening chapter" in out
-    assert "IALT drawdown" in out and "VOO drawdown" in out
+    assert "Since inception" in out
     assert "1 session behind" not in out  # no board date, no pill
-    lag = render_ialt_tab(p, board_date="2026-12-31")
+    lag = ialt_head_html(p, board_date="2026-12-31")
     assert "behind the board" in lag
+    assert "opening chapter" in ialt_foot_html()
 
 
-def test_render_tolerates_a_pre_voo_payload():
+def test_chart_figs_layout_and_warp():
+    # The Plotly panels (user direction 2026-11-10): the main
+    # panel stands tallest, legends are the short names, the
+    # warped seam sits at 1 - TAIL_SHARE, and the last 30
+    # days stretch — the final month of x positions spans
+    # ~TAIL_SHARE of the axis while covering ~30/400 of the
+    # window's days.
+    p = _compute(_frame())
+    figs = chart_figs(p)
+    assert [t.split(" — ")[0] for t, _f in figs] == [
+        "Since inception (Jan 2, 2025)",
+        "The diversifier's ride",
+        "Rolling 63-day correlation"]
+    heights = [f.layout.height for _t, f in figs]
+    assert heights == [560, 280, 280]
+    main = figs[0][1]
+    names = [tr.name for tr in main.data if tr.name]
+    assert names == ["IALT", "SPY", "AGG", "Peers"]
+    seams = [s for s in main.layout.shapes
+             if s.x0 == 1 - ialt_tab.TAIL_SHARE]
+    assert len(seams) == 1
+    xs = main.data[0].x
+    assert xs[0] == 0.0 and xs[-1] == 1.0
+    # ~30 of ~280 business days in the tail, at 25% width.
+    assert xs[-22] < 0.78 < xs[-18]
+    dd_names = [tr.name for tr in figs[1][1].data if tr.name]
+    assert dd_names == ["IALT", "VOO"]
+
+
+def test_chart_figs_tolerates_a_pre_voo_payload():
     # A last-good payload cached before the VOO series
-    # existed renders the drawdown panel IALT-only.
+    # existed draws the drawdown panel IALT-only.
     p = _compute(_frame())
     for k in ("dd_voo", "voo_max_dd", "voo_cur_dd"):
         del p[k]
-    out = render_ialt_tab(p)
-    assert "IALT drawdown" in out and "VOO drawdown" not in out
+    figs = chart_figs(p)
+    dd_names = [tr.name for tr in figs[1][1].data if tr.name]
+    assert dd_names == ["IALT"]
 
 
 def test_fetch_retries_a_flaky_leg(monkeypatch):
