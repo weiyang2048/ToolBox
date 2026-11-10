@@ -208,6 +208,13 @@ def test_chart_fig_layout_gives_the_plot_room():
     assert not fig.layout.yaxis.title.text
     assert not fig.layout.yaxis2.title.text
     assert fig.layout.height == 600
+    # The x axis is pinned to the data extent, so the
+    # gridlines end where the curves do (user direction
+    # 2026-11-10).
+    import pandas as _pd
+    rng = fig.layout.xaxis.range
+    assert _pd.Timestamp(rng[0]) == series["crypto"].index[0]
+    assert _pd.Timestamp(rng[1]) == series["crypto"].index[-1]
     # Inside labels (user direction 2026-11-10): both
     # axes hide their tick labels, and gold's scale is
     # concatenated into the index scale's annotations —

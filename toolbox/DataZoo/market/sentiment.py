@@ -397,7 +397,13 @@ def chart_fig(series):
                     xanchor="left", yanchor="top",
                     bgcolor="rgba(0,0,0,0)", borderwidth=0,
                     font=dict(color=_INK, size=10.5)),
-        xaxis=dict(tickformat="%b %y", dtick="M1",
+        # The axis is pinned to the data extent (user
+        # direction 2026-11-10): left auto-ranged, a date
+        # axis rounds out to the next month boundary, so
+        # the dashed gridlines ran past the last point into
+        # empty space the bands and curves never reach.
+        xaxis=dict(range=[x0, x1],
+                   tickformat="%b %y", dtick="M1",
                    tickfont=dict(color=_INK, size=10),
                    showgrid=False),
         yaxis=yaxis)
