@@ -208,16 +208,33 @@ def test_chart_fig_layout_gives_the_plot_room():
     assert not fig.layout.yaxis.title.text
     assert not fig.layout.yaxis2.title.text
     assert fig.layout.height == 560
-    # Inside labels on both vertical axes (user direction
-    # 2026-11-10): gold natively (ticklabelposition), the
-    # index scale as annotations — the native attribute on
-    # the left axis collapses the axes under the bundled
-    # plotly.js automargin, so its labels are hidden.
+    # Inside labels (user direction 2026-11-10): both
+    # axes hide their tick labels, and gold's scale is
+    # concatenated into the index scale's annotations —
+    # one dark chip per tick, "40 · $3,243", the $ part
+    # the gold price at that tick's height.
     assert fig.layout.yaxis.showticklabels is False
-    assert fig.layout.yaxis2.ticklabelposition == "inside"
-    index = [a.text for a in fig.layout.annotations
-             if a.yref == "y" and a.text.isdigit()]
-    assert index == ["0", "20", "40", "60", "80", "100"]
+    assert fig.layout.yaxis2.showticklabels is False
+    anns = [a for a in fig.layout.annotations
+            if a.yref == "y" and a.xanchor == "left"]
+    assert len(anns) == 6
+    assert all(a.bgcolor for a in anns)
+    import re as _re
+    plain = [_re.sub(r"<[^>]+>", "", a.text) for a in anns]
+    assert plain == ["0 \u00b7 $3,000", "20 \u00b7 $3,122",
+                     "40 \u00b7 $3,243", "60 \u00b7 $3,365",
+                     "80 \u00b7 $3,487", "100 \u00b7 $3,609"]
+
+
+def test_chart_fig_scale_labels_without_gold():
+    """No gold series: the concatenated scale falls back
+    to the bare index digits (still on their chips)."""
+    series = {"cnn": _series([20 + i % 50 for i in range(120)]),
+              "crypto": _series([30 + i % 40 for i in range(120)])}
+    fig = sm.chart_fig(series)
+    anns = [a.text for a in fig.layout.annotations
+            if a.yref == "y" and a.xanchor == "left"]
+    assert anns == ["0", "20", "40", "60", "80", "100"]
 
 
 def test_chart_fig_headroom_above_100():
@@ -246,9 +263,12 @@ def test_chart_fig_gold_axis_top_headroom():
     gold = _series([3000.0 + i * 20 for i in range(101)])  # ..5000
     fig = sm.chart_fig({"gold": gold})
     tickvals = list(fig.layout.yaxis2.tickvals)
-    ticktext = list(fig.layout.yaxis2.ticktext)
     assert tickvals[-1] == sm.GOLD_PEAK
-    assert ticktext[-1] == "$5,000"
+    # The concatenated scale's top label carries the $
+    # equivalence at index 100 for this 3000..5000 series.
+    top = next(a.text for a in fig.layout.annotations
+               if a.yref == "y" and a.y == 100)
+    assert "$5,046" in top
     gmin, gmax = float(gold.min()), float(gold.max())
     axis_top_usd = gmin + (gmax - gmin) * (100.0 / sm.GOLD_PEAK)
     headroom = (axis_top_usd - gmax) / (gmax - gmin)

@@ -356,17 +356,20 @@ def chart_fig(series):
     # the axes; gold carries its own 0-100 axis with the peak
     # at GOLD_PEAK (see above). The zone bands stay 0-100.
     # Inside scale labels (user direction 2026-11-10, the
-    # plot-space follow-up): both vertical scales print
+    # plot-space follow-up): the vertical scales print
     # inside the plot, so the axes span nearly the full
-    # figure width. Gold's axis takes the native route
-    # (ticklabelposition="inside" — its right margin frees
-    # to ~12px, measured). The index axis cannot: measured
-    # 2026-11-10, the same attribute on the left axis makes
-    # the bundled plotly.js automargin reserve ~280px and
-    # the axes collapse — so this axis hides its labels
-    # and its scale prints as annotations (below), which
-    # interleave with the band names (centers 10..90)
-    # at the ticks (0, 20, ..., 100).
+    # figure width — neither axis can take the native
+    # route (measured 2026-11-10: ticklabelposition=
+    # "inside" on the left axis makes the bundled
+    # plotly.js automargin reserve ~280px and the axes
+    # collapse), so both axes hide their tick labels.
+    # Gold's scale moved left and concatenated with the
+    # index scale (user direction 2026-11-10, demoed then
+    # approved): one annotation per index tick on a dark
+    # chip, "40 · $4,480" — the index value and the gold
+    # price at that tick's height, the $ in gold. The
+    # labels interleave with the band names (centers
+    # 10..90) at the ticks (0, 20, ..., 100).
     yaxis = dict(range=[0, 115],
                  tickvals=[0, 20, 40, 60, 80, 100],
                  showticklabels=False,
@@ -395,23 +398,34 @@ def chart_fig(series):
                    tickfont=dict(color=_INK, size=10),
                    showgrid=False),
         yaxis=yaxis)
+    gold_range = None
     if "gold" in series:
         g = series["gold"]
         gmin, gmax = float(g.min()), float(g.max())
+        gold_range = (gmin, gmax)
         fracs = (0, 0.25, 0.5, 0.75, 1.0)
         layout["yaxis2"] = dict(
             range=[0, 100], overlaying="y", side="right",
             tickvals=[GOLD_PEAK * f for f in fracs],
-            ticktext=[f"${gmin + (gmax - gmin) * f:,.0f}"
-                      for f in fracs],
-            ticklabelposition="inside",
-            tickfont=dict(color=_GOLD), showgrid=False,
+            showticklabels=False, showgrid=False,
             zeroline=False)
     for v in (0, 20, 40, 60, 80, 100):
+        text = str(v)
+        if gold_range is not None:
+            gmin, gmax = gold_range
+            # The gold price at this tick's height: the
+            # tick sits at v/115 of the plot (the index
+            # range), gold's axis reads (v/115)*100 there,
+            # and its $ mapping runs through GOLD_PEAK.
+            usd = (gmin + (gmax - gmin)
+                   * (v / 115.0 * 100.0) / GOLD_PEAK)
+            text = (f"{v} \u00b7 <span style=\"color:"
+                    f"{_GOLD}\">${usd:,.0f}</span>")
         fig.add_annotation(
             x=x0, y=v, xref="x", yref="y",
-            text=str(v), showarrow=False, xanchor="left",
+            text=text, showarrow=False, xanchor="left",
             yanchor="middle", xshift=4,
-            font=dict(size=10, color=_INK))
+            font=dict(size=10, color=_INK),
+            bgcolor="rgba(11,17,24,0.72)", borderpad=2)
     fig.update_layout(**layout)
     return fig
