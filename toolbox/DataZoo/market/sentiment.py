@@ -19,13 +19,14 @@ the gold fetch and the chart rendering live here.
 :func:`fetch_sentiment` returns the three one-year series plus
 the latest readings; any source that fails is omitted (the
 caller degrades), and the result is None only when nothing at
-all could be fetched. :func:`chart_png` renders the one-year
+all could be fetched. :func:`chart_fig` renders the one-year
 banded chart (zone bands, both Fear & Greed lines, gold
 min-max normalized with its peak at GOLD_PEAK on a right axis
-labeled in $/oz) to PNG bytes.
+labeled in $/oz) as a Plotly figure (user direction
+2026-11-10: the chart in Plotly, replacing the matplotlib
+PNG this module rendered before).
 """
 import datetime
-import io
 import json
 import urllib.request
 
@@ -45,7 +46,7 @@ BANDS = [(0, 25, "Extreme Fear", "#e74c3c"), (25, 45, "Fear", "#e67e22"),
          (45, 55, "Neutral", "#f1c40f"), (55, 75, "Greed", "#82c46a"),
          (75, 100, "Extreme Greed", "#27ae60")]
 
-# Chart geometry (see chart_png): the index axis runs 0-115 so
+# Chart geometry (see chart_fig): the index axis runs 0-115 so
 # the 0-100 scale ceiling carries 15% headroom, and the gold
 # series is normalized with its window peak at GOLD_PEAK on its
 # own 0-100 axis — the axis top then sits at the gold max plus
@@ -241,22 +242,21 @@ def fetch_sentiment(progress=None):
     return {"series": series, "latest": latest}
 
 
-def chart_png(series):
-    """The one-year banded sentiment chart as PNG bytes.
-
-    Endpoint labels carry value · zone only — no dates in the
-    plot (user direction 2026-11-02): each series' date lives
-    in the tab's freshness stamp line above the chart, in the
-    other tabs' format (data date + lag pill), never as a
-    label inside the figure."""
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.dates as mdates
-    import matplotlib.pyplot as plt
+def chart_fig(series):
+    """The one-year banded sentiment chart as a Plotly figure
+    (user direction 2026-11-10, replacing the matplotlib PNG
+    this module rendered before). Same construction as the
+    PNG drew: zone bands with their labels, both Fear & Greed
+    lines, gold min-max normalized with its peak at GOLD_PEAK
+    on a right axis labeled in $/oz, and endpoint labels with
+    value \u00b7 zone only \u2014 no dates in the plot (user
+    direction 2026-11-02): each series' date lives in the
+    caller's freshness stamp line above the chart."""
+    import plotly.graph_objects as go
 
     # Dark-skin palette (user direction 2026-11-04): the
     # chart renders transparent and blends into the app's
-    # themed page, so its ink is the page's ink — snow text,
+    # themed page, so its ink is the page's ink \u2014 snow text,
     # brightened series hues (the module constants stay the
     # HTML tab's darker ink), dark glass label boxes.
     _INK = "#E8ECEC"
@@ -266,110 +266,127 @@ def chart_png(series):
     _CRYPTO = "#B678D8"
     _GOLD = "#E3B341"
 
-    fig, ax = plt.subplots(figsize=(12, 5.6))
+    fig = go.Figure()
     x0 = min(s.index[0] for s in series.values())
+    x1 = max(s.index[-1] for s in series.values())
     for lo, hi, label, color in BANDS:
-        ax.axhspan(lo, hi, color=color, alpha=0.14, linewidth=0)
-        ax.text(x0, (lo + hi) / 2, label, fontsize=8, color=_MUTE,
-                va="center", ha="left", alpha=0.9)
+        fig.add_shape(
+            type="rect", xref="x", yref="y", x0=x0, x1=x1,
+            y0=lo, y1=hi, fillcolor=color, opacity=0.14,
+            line=dict(width=0), layer="below")
+        fig.add_annotation(
+            x=x0, y=(lo + hi) / 2, text=label, showarrow=False,
+            xanchor="left", yanchor="middle", xshift=4,
+            font=dict(size=9, color=_MUTE))
     if "cnn" in series:
         s = series["cnn"]
-        ax.plot(s.index, s.values, color=_CNN, linewidth=1.6,
-                label="CNN (US stocks)")
+        fig.add_trace(go.Scatter(
+            x=s.index, y=s.values, mode="lines",
+            name="CNN (US stocks)",
+            line=dict(color=_CNN, width=1.6)))
     if "crypto" in series:
         s = series["crypto"]
-        ax.plot(s.index, s.values, color=_CRYPTO, linewidth=1.6,
-                label="Crypto (alternative.me)", alpha=0.9)
-    ax2 = None
+        fig.add_trace(go.Scatter(
+            x=s.index, y=s.values, mode="lines",
+            name="Crypto (alternative.me)", opacity=0.9,
+            line=dict(color=_CRYPTO, width=1.6)))
     if "gold" in series:
         g = series["gold"]
         gmin, gmax = float(g.min()), float(g.max())
-        # Headroom repair (2026-11-02, second round): normalizing
-        # the peak to exactly 100 put it on the band ceiling, the
-        # top gridline and the top gold tick at once, so the
-        # Jan–Feb spikes read as truncated even with the axis
-        # extended to 115 — the extension only added unlabelled
-        # space above the bands. The peak now maps to GOLD_PEAK
-        # on a 0-100 gold axis: the axis top is the max plus
-        # ~17.6% of the range, and the peak renders below the
-        # band ceiling, visibly inside the plot.
-        gn = ((g - gmin) / (gmax - gmin) * GOLD_PEAK if gmax > gmin
-              else g * 0 + GOLD_PEAK / 2)
-        ax2 = ax.twinx()
-        ax2.plot(g.index, gn.values, color=_GOLD, linewidth=1.6,
-                 label="Gold futures (GC=F, $/oz)", alpha=0.95)
-        ax2.set_ylim(0, 100)
-        ax2.set_ylabel("Gold price ($/oz)", fontsize=11,
-                       color=_GOLD)
-        fracs = (0, 0.25, 0.5, 0.75, 1.0)
-        ax2.set_yticks([GOLD_PEAK * f for f in fracs])
-        ax2.set_yticklabels(
-            [f"${gmin + (gmax - gmin) * f:,.0f}" for f in fracs])
-        ax2.tick_params(colors=_GOLD)
-        ax2.spines["top"].set_visible(False)
-        ax2.scatter([g.index[-1]], [gn.iloc[-1]], color=_GOLD,
-                    s=40, zorder=5, edgecolors="white", linewidths=1)
-        ax2.annotate(f"${g.iloc[-1]:,.0f}/oz",
-                     xy=(g.index[-1], gn.iloc[-1]),
-                     xytext=(-8, 10), textcoords="offset points",
-                     ha="right",
-                     fontsize=10, fontweight="bold", color=_GOLD,
-                     bbox=dict(boxstyle="round,pad=0.3", fc=_BOX,
-                               ec=_GOLD, alpha=0.88))
-    endpoints = [(name, color, series[name])
+        # Headroom repair (2026-11-02, second round, carried
+        # from the PNG): normalizing the peak to exactly 100
+        # put it on the band ceiling, the top gridline and the
+        # top gold tick at once, so the Jan\u2013Feb spikes read as
+        # truncated even with the axis extended to 115. The
+        # peak maps to GOLD_PEAK on a 0-100 gold axis: the
+        # axis top is the max plus ~17.6% of the range, and
+        # the peak renders below the band ceiling.
+        gn = ((g - gmin) / (gmax - gmin) * GOLD_PEAK
+              if gmax > gmin else g * 0 + GOLD_PEAK / 2)
+        fig.add_trace(go.Scatter(
+            x=g.index, y=gn.values, mode="lines", yaxis="y2",
+            name="Gold futures (GC=F, $/oz)", opacity=0.95,
+            line=dict(color=_GOLD, width=1.6),
+            customdata=g.values,
+            hovertemplate="%{customdata:$,.0f}/oz<extra>"
+                          "Gold</extra>"))
+        fig.add_trace(go.Scatter(
+            x=[g.index[-1]], y=[gn.iloc[-1]], mode="markers",
+            yaxis="y2", showlegend=False, hoverinfo="skip",
+            marker=dict(color=_GOLD, size=9,
+                        line=dict(color="white", width=1))))
+        fig.add_annotation(
+            x=g.index[-1], y=float(gn.iloc[-1]), yref="y2",
+            text=f"${g.iloc[-1]:,.0f}/oz", showarrow=False,
+            xanchor="right", yanchor="middle", ax=-8, ay=-14,
+            font=dict(size=11, color=_GOLD),
+            bgcolor=_BOX, bordercolor=_GOLD, borderwidth=1,
+            borderpad=3)
+    endpoints = [(color, series[name])
                  for name, color in (("cnn", _CNN),
                                      ("crypto", _CRYPTO))
                  if name in series]
     if endpoints:
-        # Label collision handling (2026-11-02, second round):
-        # identical offsets put converged endpoints' labels on
-        # top of each other (crypto 26 vs CNN 23 live) and past
-        # the right spine onto the gold tick labels. Labels now
-        # anchor inside the plot (right-aligned, ending just
-        # before each series' last date) at _spread_labels
-        # positions — order preserved, LABEL_MIN_SEP apart.
+        # Label collision handling (2026-11-02, second round,
+        # carried from the PNG): identical offsets put
+        # converged endpoints' labels on top of each other
+        # (crypto 26 vs CNN 23 live). Labels anchor inside the
+        # plot (right-aligned, ending just before each series'
+        # last date) at _spread_labels positions \u2014 order
+        # preserved, LABEL_MIN_SEP apart.
         placed = _spread_labels(
-            [float(s.iloc[-1]) + 3.0 for _n, _c, s in endpoints])
-        for (_name, color, s), label_y in zip(endpoints, placed):
-            v = s.iloc[-1]
-            ax.scatter([s.index[-1]], [v], color=color, s=40, zorder=5,
-                       edgecolors="white", linewidths=1)
-            ax.annotate(f"{v:.0f} · {zone(v)}",
-                        xy=(s.index[-1], v),
-                        xytext=(s.index[-1] - pd.Timedelta(days=3),
-                                label_y),
-                        textcoords="data", ha="right", va="center",
-                        fontsize=10, fontweight="bold", color=color,
-                        bbox=dict(boxstyle="round,pad=0.3", fc=_BOX,
-                                  ec=color, alpha=0.88))
-    # Headroom (2026-11-02 live fix): the index axis runs to
-    # 115 so the 0-100 scale ceiling carries ~15% headroom and
-    # endpoint labels sit clear of the axes; gold carries its
-    # own 0-100 axis with the peak at GOLD_PEAK (see above).
-    # The zone bands themselves stay 0-100 (axhspan above).
-    ax.set_ylim(0, 115)
-    ax.set_ylabel("Index (0–100)", fontsize=11, color=_INK)
-    ax.tick_params(colors=_INK)
-    ax.grid(axis="y", alpha=0.25, linestyle="--")
-    for spine in ("top", "right"):
-        ax.spines[spine].set_visible(False)
-    for spine in ("left", "bottom"):
-        ax.spines[spine].set_color(_MUTE)
-    if ax2 is not None:
-        ax2.spines["right"].set_color(_GOLD)
-    h1, l1 = ax.get_legend_handles_labels()
-    if ax2 is not None:
-        h2, l2 = ax2.get_legend_handles_labels()
-        h1, l1 = h1 + h2, l1 + l2
-    ax.legend(h1, l1, frameon=True, loc="upper left", fontsize=10,
-              facecolor=_BOX, framealpha=0.85, edgecolor="#3A4646",
-              labelcolor=_INK)
-    ax.xaxis.set_major_locator(mdates.MonthLocator())
-    ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %Y"))
-    fig.autofmt_xdate(rotation=0, ha="center")
-    fig.tight_layout()
-    buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=150, bbox_inches="tight",
-                transparent=True)
-    plt.close(fig)
-    return buf.getvalue()
+            [float(s.iloc[-1]) + 3.0 for _c, s in endpoints])
+        for (color, s), label_y in zip(endpoints, placed):
+            v = float(s.iloc[-1])
+            fig.add_trace(go.Scatter(
+                x=[s.index[-1]], y=[v], mode="markers",
+                showlegend=False, hoverinfo="skip",
+                marker=dict(color=color, size=9,
+                            line=dict(color="white", width=1))))
+            fig.add_annotation(
+                x=s.index[-1] - pd.Timedelta(days=3), y=label_y,
+                text=f"{v:.0f} \u00b7 {zone(v)}", showarrow=False,
+                xanchor="right", yanchor="middle",
+                font=dict(size=11, color=color),
+                bgcolor=_BOX, bordercolor=color, borderwidth=1,
+                borderpad=3)
+    # Headroom (2026-11-02 live fix, carried from the PNG):
+    # the index axis runs to 115 so the 0-100 scale ceiling
+    # carries ~15% headroom and endpoint labels sit clear of
+    # the axes; gold carries its own 0-100 axis with the peak
+    # at GOLD_PEAK (see above). The zone bands stay 0-100.
+    yaxis = dict(range=[0, 115], title=dict(
+                     text="Index (0\u2013100)", font=dict(color=_INK)),
+                 tickvals=[0, 20, 40, 60, 80, 100],
+                 tickfont=dict(color=_INK), zeroline=False,
+                 gridcolor="rgba(232,236,236,0.25)",
+                 griddash="dash")
+    layout = dict(
+        height=460, margin=dict(l=46, r=54, t=8, b=26),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color=_INK), hovermode="x unified",
+        legend=dict(x=0.005, y=0.995, xanchor="left",
+                    yanchor="top",
+                    bgcolor="rgba(11,17,24,0.85)",
+                    bordercolor="#3A4646", borderwidth=1,
+                    font=dict(color=_INK, size=10)),
+        xaxis=dict(tickformat="%b %Y", dtick="M1",
+                   tickfont=dict(color=_INK, size=10),
+                   showgrid=False),
+        yaxis=yaxis)
+    if "gold" in series:
+        g = series["gold"]
+        gmin, gmax = float(g.min()), float(g.max())
+        fracs = (0, 0.25, 0.5, 0.75, 1.0)
+        layout["yaxis2"] = dict(
+            range=[0, 100], overlaying="y", side="right",
+            tickvals=[GOLD_PEAK * f for f in fracs],
+            ticktext=[f"${gmin + (gmax - gmin) * f:,.0f}"
+                      for f in fracs],
+            title=dict(text="Gold price ($/oz)",
+                       font=dict(color=_GOLD)),
+            tickfont=dict(color=_GOLD), showgrid=False,
+            zeroline=False)
+    fig.update_layout(**layout)
+    return fig
