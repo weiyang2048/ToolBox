@@ -355,22 +355,29 @@ def chart_fig(series):
     # carries ~15% headroom and endpoint labels sit clear of
     # the axes; gold carries its own 0-100 axis with the peak
     # at GOLD_PEAK (see above). The zone bands stay 0-100.
-    yaxis = dict(range=[0, 115], title=dict(
-                     text="Index (0\u2013100)", font=dict(color=_INK)),
+    yaxis = dict(range=[0, 115],
                  tickvals=[0, 20, 40, 60, 80, 100],
                  tickfont=dict(color=_INK), zeroline=False,
                  gridcolor="rgba(232,236,236,0.25)",
                  griddash="dash")
+    # Plot space (user direction 2026-11-10, from the live
+    # phone render): the legend runs horizontally UNDER the
+    # plot — the Strategies charts' treatment (2026-11-04) —
+    # instead of a box inside it over the Extreme Greed
+    # band, both axis titles are dropped (the bands name the
+    # left axis, the legend names gold's), the base margins
+    # are tight with automargin fitting the tick labels,
+    # and the figure is taller, so the axes themselves get
+    # the room on a phone.
     layout = dict(
-        height=460, margin=dict(l=46, r=54, t=8, b=26),
+        height=520, margin=dict(l=10, r=10, t=10, b=10),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         font=dict(color=_INK), hovermode="x unified",
-        legend=dict(x=0.005, y=0.995, xanchor="left",
-                    yanchor="top",
-                    bgcolor="rgba(11,17,24,0.85)",
-                    bordercolor="#3A4646", borderwidth=1,
-                    font=dict(color=_INK, size=10)),
+        legend=dict(orientation="h", x=0, y=-0.12,
+                    xanchor="left", yanchor="top",
+                    bgcolor="rgba(0,0,0,0)", borderwidth=0,
+                    font=dict(color=_INK, size=10.5)),
         xaxis=dict(tickformat="%b %Y", dtick="M1",
                    tickfont=dict(color=_INK, size=10),
                    showgrid=False),
@@ -384,8 +391,6 @@ def chart_fig(series):
             tickvals=[GOLD_PEAK * f for f in fracs],
             ticktext=[f"${gmin + (gmax - gmin) * f:,.0f}"
                       for f in fracs],
-            title=dict(text="Gold price ($/oz)",
-                       font=dict(color=_GOLD)),
             tickfont=dict(color=_GOLD), showgrid=False,
             zeroline=False)
     fig.update_layout(**layout)

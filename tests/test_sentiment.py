@@ -194,6 +194,22 @@ def test_chart_fig_renders():
     assert len(fig.layout.shapes) == 5
 
 
+def test_chart_fig_layout_gives_the_plot_room():
+    """Plot space (user direction 2026-11-10): the legend
+    runs horizontally under the plot, neither axis carries
+    a title, and the figure stands taller than the original
+    460 — the axes get the room on a phone."""
+    series = {"cnn": _series([20 + i % 50 for i in range(120)]),
+              "crypto": _series([30 + i % 40 for i in range(120)]),
+              "gold": _series([3000 + i * 5 for i in range(120)])}
+    fig = sm.chart_fig(series)
+    assert fig.layout.legend.orientation == "h"
+    assert fig.layout.legend.y < 0
+    assert not fig.layout.yaxis.title.text
+    assert not fig.layout.yaxis2.title.text
+    assert fig.layout.height == 520
+
+
 def test_chart_fig_headroom_above_100():
     # Live fix 2026-11-02, carried from the PNG: the index
     # axis runs to 115 (headroom over the 0-100 scale; bands
