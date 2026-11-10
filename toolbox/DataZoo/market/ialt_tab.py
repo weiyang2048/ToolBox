@@ -20,12 +20,22 @@ lived; the footnote says so. The chips carry the fund's
 opening-chapter stats (return, vol, Sharpe rf=0, max
 drawdown, correlations) with the short window named.
 """
+# The panels' warped time axis (user direction 2026-11-10,
+# demoed and approved) is the shared builder's: plotly_panels
+# owns the warp constants and the panel construction for
+# every Markets tab. TAIL_SHARE is re-exported — the tab's
+# tests name it from this module.
 import time
 from concurrent.futures import ThreadPoolExecutor
 
 from toolbox.DataZoo.market.eastern import (
     format_day,
     format_month_day,
+)
+from toolbox.DataZoo.market.plotly_panels import (  # noqa: F401
+    TAIL_SHARE,
+    nice_ticks,
+    warped_panel,
 )
 from toolbox.DataZoo.market.yahoo_prices import with_retry, yahoo_daily
 
@@ -34,14 +44,6 @@ _ACCENT = "#FFB066"
 PEERS = ("QAI", "HDG", "MNA", "DBMF", "CTA", "KMLM", "BTAL")
 _SYMS = ("IALT", "SPY", "AGG", "VOO") + PEERS
 
-# Warped time axis for the Plotly panels (user direction
-# 2026-11-10, demoed and approved — the sentiment chart's
-# treatment, same constants): the last TAIL_DAYS of each
-# panel's window take TAIL_SHARE of the axis width and
-# everything earlier compresses into the rest, with a
-# dotted seam where the stretch begins.
-TAIL_DAYS = 30
-TAIL_SHARE = 0.25
 
 
 def fetch_ialt_tab():
@@ -139,200 +141,14 @@ _PLOT_COLORS = {"ialt": _ACCENT, "spy": "#7FB3D5",
                 "agg": "#9AA0A6", "peers": "#35B26F",
                 "dd": "#E23B3E", "dd_voo": "#7FB3D5",
                 "cspy": "#7FB3D5", "cagg": "#9AA0A6"}
-_INK = "#E8ECEC"
-_PLOT_MUTE = "#A7B3B3"
-_BOX = "#0B1118"
-
-
-def _warp_setup(dates):
-    """The panel's warped time coordinate: day offsets from
-    the first date mapped piecewise — [start, cut] onto
-    [0, 1 - TAIL_SHARE], [cut, end] onto [1 - TAIL_SHARE, 1],
-    cut = end - TAIL_DAYS (the sentiment chart's warp, same
-    constants). Windows no longer than the tail skip the
-    warp. Returns (index, cut, warp_fn, warped)."""
-    import pandas as pd
-
-    idx = pd.DatetimeIndex(pd.to_datetime(dates))
-    x0, x1 = idx[0], idx[-1]
-    span = (x1 - x0).total_seconds() / 86400.0
-    cut = x1 - pd.Timedelta(days=TAIL_DAYS)
-    cut_day = (cut - x0).total_seconds() / 86400.0
-    warped = span > TAIL_DAYS
-
-    def _warp(ix):
-        days = (pd.DatetimeIndex(ix)
-                - x0).total_seconds() / 86400.0
-        if span <= 0:
-            return [0.0] * len(days)
-        if not warped:
-            return [float(d) / span for d in days]
-        return [float(d) / cut_day * (1.0 - TAIL_SHARE)
-                if d <= cut_day else
-                (1.0 - TAIL_SHARE) + (float(d) - cut_day)
-                / (span - cut_day) * TAIL_SHARE
-                for d in days]
-
-    return idx, cut, _warp, warped
-
-
-def _x_axis(dates):
-    """The warped axis dict + warp function: month starts in
-    the compressed head ("%b %y"), skipping any within 15
-    days of the seam so its label cannot collide, then the
-    seam date and the last date as "%b %d". The axis spans
-    exactly the data (range [0, 1] IS first-to-last
-    observation under the warp)."""
-    import pandas as pd
-
-    idx, cut, _warp, warped = _warp_setup(dates)
-    x0, x1 = idx[0], idx[-1]
-
-    def one(ts):
-        return _warp(pd.DatetimeIndex([ts]))[0]
-
-    if warped:
-        vals, text = [], []
-        m = pd.Timestamp(x0.year, x0.month, 1)
-        while m <= x1:
-            if x0 <= m < cut - pd.Timedelta(days=15):
-                vals.append(one(m))
-                text.append(m.strftime("%b %y"))
-            m += pd.DateOffset(months=1)
-        vals += [1 - TAIL_SHARE, 1.0]
-        text += [cut.strftime("%b %d"), x1.strftime("%b %d")]
-    else:
-        vals = [0.0, 0.5, 1.0]
-        text = [d.strftime("%b %d")
-                for d in (x0, x0 + (x1 - x0) / 2, x1)]
-    axis = dict(range=[0.0, 1.0], tickmode="array",
-                tickvals=vals, ticktext=text,
-                tickfont=dict(color=_INK, size=10),
-                ticklabeloverflow="allow", showgrid=False,
-                automargin=False)
-    return axis, _warp, warped
-
-
-def _fig_panel(dates, series, height, y_ticks, y_range, fmt_y,
-               end_labels, zero=False, fill_key=None, bold=(),
-               min_sep=None, note_at_top=True):
-    """One Plotly panel on the warped axis, in the sentiment
-    chart's space-claiming layout (user direction
-    2026-11-10): margins 10/26/10/10 with automargin off (the
-    right 26 fits the last date label's right half, which
-    otherwise clips), no axis titles, the y scale printed
-    inside on dark chips, the legend horizontal under the
-    plot, endpoint labels as dark chips spread so converged
-    endpoints never stack (the canonical spreader in
-    sentiment), and the dotted warp seam with its note.
-    ``series`` maps key -> values; ``end_labels`` maps key ->
-    endpoint chip text."""
-    import pandas as pd
-    import plotly.graph_objects as go
-
-    from toolbox.DataZoo.market.sentiment import _spread_labels
-
-    xaxis, _warp, warped = _x_axis(dates)
-    idx = pd.DatetimeIndex(pd.to_datetime(dates))
-    fig = go.Figure()
-    for key, vals in series.items():
-        pts = [(d, v) for d, v in zip(idx, vals)
-               if v is not None]
-        kw = {}
-        if fill_key == key:
-            kw = dict(fill="tozeroy",
-                      fillcolor="rgba(226,59,62,0.30)")
-        fig.add_trace(go.Scatter(
-            x=_warp([q[0] for q in pts]),
-            y=[q[1] for q in pts],
-            mode="lines", name=_SHORT[key], **kw,
-            line=dict(color=_PLOT_COLORS[key],
-                      width=2.2 if key in bold else 1.5),
-            customdata=[q[0].strftime("%b %d, %Y")
-                        for q in pts],
-            hovertemplate="%{customdata}<br>" + _FULL[key]
-                          + ": %{y:.2f}<extra></extra>"))
-    if zero:
-        fig.add_shape(type="line", xref="x", yref="y",
-                      x0=0.0, x1=1.0, y0=0, y1=0,
-                      line=dict(color="rgba(232,236,236,0.5)",
-                                width=1, dash="dash"))
-    if warped:
-        fig.add_shape(type="line", xref="x", yref="paper",
-                      x0=1 - TAIL_SHARE, x1=1 - TAIL_SHARE,
-                      y0=0, y1=1,
-                      line=dict(
-                          color="rgba(232,236,236,0.45)",
-                          width=1, dash="dot"))
-        fig.add_annotation(
-            x=1 - TAIL_SHARE,
-            y=y_range[1] if note_at_top else y_range[0],
-            xref="x", yref="y",
-            text="last 30 days \u2192", showarrow=False,
-            xanchor="left",
-            yanchor="top" if note_at_top else "bottom",
-            xshift=4, yshift=-2 if note_at_top else 2,
-            font=dict(size=9.5, color=_PLOT_MUTE))
-    ends = [(k, series[k][-1]) for k in end_labels
-            if series[k][-1] is not None]
-    if ends:
-        sep = min_sep or (y_range[1] - y_range[0]) * 0.07
-        placed = _spread_labels(
-            [float(v) for _k, v in ends],
-            lo=y_range[0] + sep * 0.4,
-            hi=y_range[1] - sep * 0.4, min_sep=sep)
-        xw = _warp([idx[-1]])[0]
-        xw_lbl = _warp([idx[-1] - pd.Timedelta(days=3)])[0]
-        for (key, v), ly in zip(ends, placed):
-            fig.add_trace(go.Scatter(
-                x=[xw], y=[v], mode="markers",
-                showlegend=False, hoverinfo="skip",
-                marker=dict(color=_PLOT_COLORS[key], size=8,
-                            line=dict(color="white",
-                                      width=1))))
-            fig.add_annotation(
-                x=xw_lbl, y=ly, text=end_labels[key],
-                showarrow=False, xanchor="right",
-                yanchor="middle",
-                font=dict(size=11, color=_PLOT_COLORS[key]),
-                bgcolor=_BOX, bordercolor=_PLOT_COLORS[key],
-                borderwidth=1, borderpad=3)
-    for v in y_ticks:
-        fig.add_annotation(
-            x=0.0, y=v, xref="x", yref="y", text=fmt_y(v),
-            showarrow=False, xanchor="left",
-            yanchor="middle", xshift=4,
-            font=dict(size=10, color=_INK),
-            bgcolor="rgba(11,17,24,0.72)", borderpad=2)
-    fig.update_layout(
-        height=height, margin=dict(l=10, r=26, t=10, b=10),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(color=_INK), hovermode="x unified",
-        legend=dict(orientation="h", x=0, y=-0.09,
-                    xanchor="left", yanchor="top",
-                    bgcolor="rgba(0,0,0,0)", borderwidth=0,
-                    font=dict(color=_INK, size=10.5)),
-        xaxis=xaxis,
-        yaxis=dict(range=list(y_range),
-                   tickvals=list(y_ticks),
-                   showticklabels=False, zeroline=False,
-                   showline=False, automargin=False,
-                   tickfont=dict(color=_INK),
-                   gridcolor="rgba(232,236,236,0.25)",
-                   griddash="dash"))
-    return fig
-
-
-def _nice_ticks(lo, hi, step):
-    import math
-
-    t = math.ceil(lo / step) * step
-    out = []
-    while t <= hi:
-        out.append(round(t, 6))
-        t += step
-    return out
+def _panel(dates, series, **kw):
+    """The tab's binding of the shared warped-panel builder
+    (plotly_panels) to this tab's colors and names; the
+    drawdown fill is the IALT red the SVG panel carried."""
+    if kw.get("fill_key"):
+        kw.setdefault("fillcolor", "rgba(226,59,62,0.30)")
+    return warped_panel(dates, series, _PLOT_COLORS, _FULL,
+                        _SHORT, **kw)
 
 
 def chart_figs(p):
@@ -354,9 +170,8 @@ def chart_figs(p):
     figs = [(
         "Since inception (%s) — total return, rebased to 100"
         % p["inception"],
-        _fig_panel(
-            p["dates"], paths, height=560,
-            y_ticks=_nice_ticks(lo, hi, 5), y_range=(lo, hi),
+        _panel(p["dates"], paths, height=560,
+            y_ticks=nice_ticks(lo, hi, 5), y_range=(lo, hi),
             fmt_y=lambda v: "%g" % v,
             end_labels={k: "%+.1f%%" % p["ret"][k]
                         for k in paths},
@@ -370,9 +185,8 @@ def chart_figs(p):
     figs.append((
         "The diversifier's ride — IALT drawdown since "
         "inception",
-        _fig_panel(
-            p["dates"], dd_series, height=280,
-            y_ticks=_nice_ticks(dlo, 0, 2.5),
+        _panel(p["dates"], dd_series, height=280,
+            y_ticks=nice_ticks(dlo, 0, 2.5),
             y_range=(dlo, 0.6),
             fmt_y=lambda v: "%g%%" % v,
             end_labels=dd_labels, zero=True, fill_key="dd",
@@ -381,8 +195,7 @@ def chart_figs(p):
         figs.append((
             "Rolling 63-day correlation — IALT vs stocks "
             "and bonds",
-            _fig_panel(
-                p["roll_dates"],
+            _panel(p["roll_dates"],
                 {"cspy": p["roll"]["spy"],
                  "cagg": p["roll"]["agg"]},
                 height=280, y_ticks=[0, 0.25, 0.5, 0.75],

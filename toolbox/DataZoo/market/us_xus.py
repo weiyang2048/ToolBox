@@ -5,7 +5,11 @@ Equities tab 2).
                      ACWX + DXY (Yahoo), a decade of ratios,
                      the rolling 12-month spread, the dollar
                      panel and the snapshot stats
-    render_us_xus()  HTML for the page (house dark theme)
+    us_xus_head_html()  the as-of note + chips
+    chart_figs()        the three panels as Plotly figures
+                        on the shared warped axis
+                        (plotly_panels)
+    us_xus_foot_html()  the footnote
 
 The demo this was approved from (demos/equities-tabs/us-xus)
 computed, as of Fri Oct 30, 2026: 10y ratios Dev -40.5 /
@@ -22,7 +26,15 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 from toolbox.DataZoo.market.eastern import format_day
-from toolbox.DataZoo.market.svg_charts import line_path, scale, svg_elems
+from toolbox.DataZoo.market.plotly_panels import (
+    add_seam,
+    add_y_chips,
+    nice_ticks,
+    panel_layout,
+    warped_panel,
+    x_axis,
+    y_axis_dict,
+)
 from toolbox.DataZoo.market.yahoo_prices import with_retry, yahoo_daily
 
 _MUTE = "#9AA0A6"
@@ -112,205 +124,138 @@ def _compute(df):
         "last_date": df.index[-1].strftime("%Y-%m-%d")}
 
 
-def _panel(dates, series, colors, labels, title, ylabel,
-           zero=None, bold=(), h=250):
-    """One line panel as SVG. series: {key: [values or None]}."""
-    import datetime as _dt
-
-    import numpy as np
-
-    w = 1120
-    L, R, T, B = 52, 64, 46, 24
-    xs_d = [_dt.date.fromisoformat(d) for d in dates]
-    allv = [v for s in series.values() for v in s if v is not None]
-    lo, hi = min(allv), max(allv)
-    if zero is not None:
-        lo, hi = min(lo, zero), max(hi, zero)
-    pad = (hi - lo) * 0.08 or 1.0
-    lo, hi = lo - pad, hi + pad
-    step = 10 ** np.floor(np.log10((hi - lo) / 4))
-    for m in (1, 2, 2.5, 5, 10):
-        if (hi - lo) / (step * m) <= 5:
-            step *= m
-            break
-    ticks = []
-    t = np.ceil(lo / step) * step
-    while t <= hi:
-        ticks.append(float(t))
-        t += step
-    x0, x1 = xs_d[0].toordinal(), xs_d[-1].toordinal()
-    body = ['<text x="%d" y="15" font-size="13.5" font-weight="700" '
-            'fill="#FAFAFA">%s</text>' % (L, html.escape(title))]
-    body.append('<text x="%d" y="%d" font-size="10.5" '
-                'fill="%s" transform="rotate(-90 %d %d)">%s</text>'
-                % (14, (T + h - B) // 2 + 30, _MUTE, 14,
-                   (T + h - B) // 2 + 30, html.escape(ylabel)))
-    for tv in ticks:
-        y = scale(tv, lo, hi, h - B, T)
-        body.append('<line x1="%d" x2="%d" y1="%.1f" y2="%.1f" '
-                    'stroke="#26221C" stroke-width="1"/>'
-                    % (L, w - R, y, y))
-        body.append('<text x="%d" y="%.1f" font-size="10.5" '
-                    'fill="%s" text-anchor="end">%g</text>'
-                    % (L - 6, y + 3.5, _MUTE, tv))
-    if zero is not None:
-        yz = scale(zero, lo, hi, h - B, T)
-        body.append('<line x1="%d" x2="%d" y1="%.1f" y2="%.1f" '
-                    'stroke="#8A8378" stroke-width="1.1" '
-                    'stroke-dasharray="5 4"/>' % (L, w - R, yz, yz))
-    years = sorted({d.year for d in xs_d})
-    for yr in years[::2]:
-        xd = _dt.date(yr, 1, 1).toordinal()
-        if x0 <= xd <= x1:
-            body.append('<text x="%.1f" y="%d" font-size="10.5" '
-                        'fill="%s" text-anchor="middle">%d</text>'
-                        % (scale(xd, x0, x1, L, w - R), h - 6,
-                           _MUTE, yr))
-    ends = []
-    for key, vals in series.items():
-        pts = [(scale(d.toordinal(), x0, x1, L, w - R),
-                scale(v, lo, hi, h - B, T))
-               for d, v in zip(xs_d, vals) if v is not None]
-        body.append('<path d="%s" fill="none" stroke="%s" '
-                    'stroke-width="%s" stroke-linejoin="round"/>'
-                    % (line_path([p[0] for p in pts],
-                                 [p[1] for p in pts]),
-                       colors[key],
-                       "2.2" if key in bold else "1.4"))
-        if labels.get(key):
-            ends.append([pts[-1][0], pts[-1][1], colors[key],
-                         labels[key]])
-    # Endpoint labels: enforce a 13px minimum vertical gap so
-    # near-tied endpoints never print over each other.
-    ends.sort(key=lambda e: e[1])
-    for i in range(1, len(ends)):
-        ends[i][1] = max(ends[i][1], ends[i - 1][1] + 13)
-    for ex, ey, c, txt in ends:
-        body.append('<text x="%.1f" y="%.1f" font-size="11" '
-                    'font-weight="700" fill="%s">%s</text>'
-                    % (ex + 6, ey + 4, c, html.escape(txt)))
-    # Legend in the strip between the title and the plot (the
-    # bottom strip belongs to the year labels).
-    lx = L
-    for key in series:
-        body.append('<circle cx="%d" cy="%d" r="4" fill="%s"/>'
-                    % (lx + 4, 33, colors[key]))
-        body.append('<text x="%d" y="%d" font-size="10.5" '
-                    'fill="#D8D8D8">%s</text>'
-                    % (lx + 13, 36.5,
-                       html.escape(_FULL.get(key, key))))
-        lx += 13 + 7.8 * len(_FULL.get(key, key)) + 22
-    return svg_elems(w, h, "".join(body))
-
-
 _FULL = {"dev": "Developed ex-US (EFA/SPY)",
          "em": "Emerging (EEM/SPY)",
          "xus": "All ex-US (ACWX/SPY)",
          "spread": "Spread (pts)",
          "ratio": "ACWX / SPY ratio",
          "dxy": "Dollar index (DXY)"}
+_SHORT = {"dev": "Developed ex-US", "em": "Emerging",
+          "xus": "All ex-US", "ratio": "ex-US ratio",
+          "dxy": "DXY"}
+# The blocs' SVG hues, with dev brightened for the dark
+# Plotly skin (the IALT peers precedent).
+_COLORS = {"dev": "#35B26F", "em": "#E67300",
+           "xus": "#90EE90", "ratio": "#7FB3D5",
+           "dxy": "#9AA0A6"}
 
 
-def _spread_panel(frame):
-    import datetime as _dt
+def _spread_fig(p):
+    """The shift tape as a Plotly area panel on the shared
+    warped axis: the rolling 12-month spread (ex-US minus
+    US, points), filled green above zero and red below —
+    the sign split the SVG panel drew — with the spread
+    line over it and a dashed zero rule."""
+    import plotly.graph_objects as go
 
-    import numpy as np
+    f = p["frame"]
+    dates, vals = f["dates"], f["spread"]
+    axis, warp, warped = x_axis(dates)
+    import pandas as pd
 
-    w, h = 1120, 240
-    L, R, T, B = 52, 30, 26, 24
-    dates = frame["dates"]
-    vals = frame["spread"]
-    xs_d = [_dt.date.fromisoformat(d) for d in dates]
-    clean = [(d, v) for d, v in zip(xs_d, vals) if v is not None]
-    lo = min(min(v for _d, v in clean), 0.0)
-    hi = max(max(v for _d, v in clean), 0.0)
+    idx = pd.DatetimeIndex(pd.to_datetime(dates))
+    pts = [(d, v) for d, v in zip(idx, vals) if v is not None]
+    runs = []
+    run = [pts[0]]
+    for (d0, v0), (d1, v1) in zip(pts, pts[1:]):
+        if (v0 > 0) != (v1 > 0) and v0 != v1:
+            frac = (0.0 - v0) / (v1 - v0)
+            dc = d0 + (d1 - d0) * frac
+            run.append((dc, 0.0))
+            runs.append(run)
+            run = [(dc, 0.0)]
+        run.append((d1, v1))
+    runs.append(run)
+    fig = go.Figure()
+    for r in runs:
+        if len(r) < 2:
+            continue
+        pos = r[1][1] > 0 or (len(r) > 2 and r[2][1] > 0)
+        fig.add_trace(go.Scatter(
+            x=warp([q[0] for q in r]),
+            y=[q[1] for q in r], mode="lines",
+            fill="tozeroy", showlegend=False,
+            hoverinfo="skip",
+            fillcolor="rgba(27,158,87,0.40)" if pos
+            else "rgba(192,57,43,0.30)",
+            line=dict(color="rgba(0,0,0,0)", width=0)))
+    fig.add_trace(go.Scatter(
+        x=warp([q[0] for q in pts]),
+        y=[q[1] for q in pts], mode="lines",
+        name="Spread (pts)",
+        line=dict(color="#7FB3D5", width=1.5),
+        customdata=[q[0].strftime("%b %d, %Y") for q in pts],
+        hovertemplate="%{customdata}<br>Spread (pts): "
+                      "%{y:+.2f}<extra></extra>"))
+    fig.add_shape(type="line", xref="x", yref="y",
+                  x0=0.0, x1=1.0, y0=0, y1=0,
+                  line=dict(color="rgba(232,236,236,0.5)",
+                            width=1, dash="dash"))
+    lo = min(0.0, min(v for _d, v in pts))
+    hi = max(0.0, max(v for _d, v in pts))
     pad = (hi - lo) * 0.1 or 1.0
     lo, hi = lo - pad, hi + pad
-    x0, x1 = xs_d[0].toordinal(), xs_d[-1].toordinal()
-    yz = scale(0.0, lo, hi, h - B, T)
-    body = ['<text x="%d" y="15" font-size="13.5" font-weight="700" '
-            'fill="#FAFAFA">The shift tape — rolling 12-month '
-            'return, all ex-US minus US</text>' % L]
-    for tv in range(int(np.ceil(lo / 10)) * 10,
-                    int(hi) + 1, 10):
-        y = scale(tv, lo, hi, h - B, T)
-        body.append('<line x1="%d" x2="%d" y1="%.1f" y2="%.1f" '
-                    'stroke="#26221C"/>' % (L, w - R, y, y))
-        body.append('<text x="%d" y="%.1f" font-size="10.5" '
-                    'fill="%s" text-anchor="end">%+d</text>'
-                    % (L - 6, y + 3.5, _MUTE, tv))
-
-    def areas():
-        """Both sign fills in one pass, split at interpolated
-        zero crossings."""
-        out = {1: [], -1: []}
-        runs = {1: [], -1: []}
-
-        def flush(sign):
-            run = runs[sign]
-            if len(run) >= 2:
-                d = ["M %.1f %.1f" % (run[0][0], yz)]
-                d += ["L %.1f %.1f" % p for p in run]
-                d.append("L %.1f %.1f Z" % (run[-1][0], yz))
-                out[sign].append("".join(d))
-            runs[sign] = []
-
-        prev = None
-        for d, v in clean:
-            x = scale(d.toordinal(), x0, x1, L, w - R)
-            y = scale(v, lo, hi, h - B, T)
-            sign = 1 if v > 0 else -1
-            if prev is not None and prev[2] != sign:
-                pv, px, _py = prev[1], prev[0], prev[3]
-                xc = px + (x - px) * (0.0 - pv) / (v - pv)
-                closing = -sign
-                runs[closing].append((xc, yz))
-                flush(closing)
-                runs[sign] = [(xc, yz)]
-            runs[sign].append((x, y))
-            prev = (x, v, sign, y)
-        flush(1)
-        flush(-1)
-        return "".join(out[1]), "".join(out[-1])
-
-    pos, neg = areas()
-    body.append('<path d="%s" fill="#1B9E57" fill-opacity="0.4"/>'
-                % pos)
-    body.append('<path d="%s" fill="#C0392B" fill-opacity="0.3"/>'
-                % neg)
-    xs = [scale(d.toordinal(), x0, x1, L, w - R) for d, _v in clean]
-    ys = [scale(v, lo, hi, h - B, T) for _d, v in clean]
-    body.append('<path d="%s" fill="none" stroke="#7FB3D5" '
-                'stroke-width="1.4" stroke-linejoin="round"/>'
-                % line_path(xs, ys))
-    body.append('<line x1="%d" x2="%d" y1="%.1f" y2="%.1f" '
-                'stroke="#8A8378" stroke-width="1.1"/>'
-                % (L, w - R, yz, yz))
-    years = sorted({d.year for d in xs_d})
-    for yr in years[::2]:
-        xd = _dt.date(yr, 1, 1).toordinal()
-        if x0 <= xd <= x1:
-            body.append('<text x="%.1f" y="%d" font-size="10.5" '
-                        'fill="%s" text-anchor="middle">%d</text>'
-                        % (scale(xd, x0, x1, L, w - R), h - 6,
-                           _MUTE, yr))
-    return svg_elems(w, h, "".join(body))
+    ticks = nice_ticks(lo, hi, 10)
+    y_range = (lo, hi)
+    if warped:
+        add_seam(fig, y_range)
+    add_y_chips(fig, ticks, lambda v: "%+g" % v)
+    layout = panel_layout(280, axis)
+    layout["yaxis"] = y_axis_dict(ticks, y_range)
+    fig.update_layout(**layout)
+    return fig
 
 
-def render_us_xus(p, board_date=None):
-    """Chips + the three panels + the honest footnote, wrapped
-    in one centered block (max-width 1120px, the panels' own
-    width, margin auto — user direction 2026-11-02: the tab
-    sat left on the wide page while the page's other blocks
-    center). With `board_date`, the as-of note carries the
-    freshness pill (canonical
-    toolbox.DataZoo.market.freshness) marking any lag behind
-    the board date."""
+def chart_figs(p):
+    """The tab's three panels as (title, figure) pairs
+    (user direction 2026-11-10 — the IALT treatment
+    extended on the user's "do the same for other plots"):
+    the decade panel stands 560 tall so the main plot
+    claims the space, the tape and dollar panels 280 each;
+    all three ride the shared warped axis (last 30 days
+    at 25%)."""
+    f, s = p["frame"], p["snap"]
+    ratios = {"xus": f["xus"], "dev": f["dev"], "em": f["em"]}
+    allv = [v for vals in ratios.values() for v in vals]
+    lo, hi = min(allv) - 2.0, max(allv) + 3.0
+    main = warped_panel(
+        f["dates"], ratios, _COLORS, _FULL, _SHORT,
+        height=560, y_ticks=nice_ticks(lo, hi, 10),
+        y_range=(lo, hi), fmt_y=lambda v: "%g" % v,
+        end_labels={k: "%+.1f%%" % s[k]["chg10y"]
+                    for k in ratios},
+        bold=("xus",), hline=100, min_sep=5.0)
+    both = {"ratio": f["ratio"], "dxy": f["dxy"]}
+    allv = [v for vals in both.values() for v in vals
+            if v is not None]
+    lo3, hi3 = min(allv) - 2.0, max(allv) + 3.0
+    third = warped_panel(
+        f["dates"], both, _COLORS, _FULL, _SHORT,
+        height=280, y_ticks=nice_ticks(lo3, hi3, 10),
+        y_range=(lo3, hi3), fmt_y=lambda v: "%g" % v,
+        end_labels={}, min_sep=5.0)
+    return [("A decade of US dominance — relative strength "
+             "of ex-US vs the US, 10 years", main),
+            ("The shift tape — rolling 12-month return, "
+             "all ex-US minus US", _spread_fig(p)),
+            ("The shift rides the dollar — ex-US relative "
+             "strength vs the dollar (corr %+.2f)"
+             % p["corr_dxy"], third)]
+
+
+def us_xus_head_html(p, board_date=None):
+    """The as-of note + chips, in the centered 1120px block
+    the page's tabs share. With `board_date`, the as-of
+    note carries the freshness pill (canonical
+    toolbox.DataZoo.market.freshness). The Plotly panels
+    render separately (chart_figs), centered on the same
+    measure by the caller, and us_xus_foot_html closes
+    the tab."""
     from toolbox.DataZoo.market.freshness import lag_pill_html
 
     pill = lag_pill_html(board_date, p.get("last_date"))
-    f, s = p["frame"], p["snap"]
     r1, r1m = p["ret1y"], p["ret1m"]
+    s = p["snap"]
     chips = [
         "1Y &nbsp;US <b>%+.1f%%</b> · Dev <b>%+.1f%%</b> · EM "
         "<b>%+.1f%%</b> · ex-US <b>%+.1f%%</b>"
@@ -327,42 +272,31 @@ def render_us_xus(p, board_date=None):
         '#2E2A24;border-radius:999px;padding:5px 12px;'
         'font-size:13px;color:#D8D8D8">%s</span>' % c
         for c in chips)
-    ratio_labels = {k: "%+.1f%%" % s[k]["chg10y"]
-                    for k, _c, _l, _col in _BLOCS}
-    colors = {k: col for k, _c, _l, col in _BLOCS}
-    p1 = _panel(f["dates"],
-                {"xus": f["xus"], "dev": f["dev"], "em": f["em"]},
-                colors, ratio_labels,
-                "A decade of US dominance — relative strength of "
-                "ex-US vs the US, 10 years",
-                "Ratio (start = 100)", zero=100, bold=("xus",),
-                h=270)
-    p2 = _spread_panel(f)
-    p3 = _panel(f["dates"],
-                {"ratio": f["ratio"], "dxy": f["dxy"]},
-                {"ratio": "#7FB3D5", "dxy": "#9AA0A6"},
-                {"ratio": "", "dxy": ""},
-                "The shift rides the dollar — ex-US relative "
-                "strength vs the dollar (corr %+.2f)"
-                % p["corr_dxy"],
-                "Start = 100", h=250)
     note = (
         '<div style="font-size:12px;color:%s;margin:2px 0 10px">'
         'As of <span style="color:%s;font-weight:700">%s close'
         '</span>%s &middot; total-return ETF proxies</div>'
         % (_MUTE, _ACCENT, html.escape(p["asof"]), pill))
-    foot = (
-        '<div style="font-size:11.5px;color:#8A8378;margin-top:8px">'
-        'Proxies: SPY (US), EFA (developed ex-US), EEM '
-        '(emerging), ACWX (all ex-US), on adjusted closes '
-        '(dividends reinvested). Read: the decade panel shows '
-        'what the shift is shifting FROM; the tape turns '
-        'positive when ex-US outruns the US over a rolling '
-        'year; the claim "a shift is under way" needs the tape '
-        'positive AND the ratio above its 200-day average — '
-        'the chips report both, live.</div>')
     return ('<div style="max-width:1120px;margin:0 auto">'
             + note
             + '<div style="display:flex;gap:8px;flex-wrap:wrap;'
-              'margin-bottom:12px">' + chip_html + "</div>"
-            + p1 + p2 + p3 + foot + "</div>")
+              'margin-bottom:12px">' + chip_html
+            + "</div></div>")
+
+
+def us_xus_foot_html():
+    """The honest-method footnote, in the tab's centered
+    block."""
+    return (
+        '<div style="max-width:1120px;margin:0 auto">'
+        '<div style="font-size:11.5px;color:#8A8378;'
+        'margin-top:8px">'
+        'Proxies: SPY (US), EFA (developed ex-US), EEM '
+        '(emerging), ACWX (all ex-US), on adjusted closes '
+        '(dividends reinvested). Read: the decade panel '
+        'shows what the shift is shifting FROM; the tape '
+        'turns positive when ex-US outruns the US over a '
+        'rolling year; the claim "a shift is under way" '
+        'needs the tape positive AND the ratio above its '
+        '200-day average — the chips report both, live.'
+        '</div></div>')

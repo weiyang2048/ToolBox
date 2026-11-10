@@ -12,7 +12,12 @@ import numpy as np
 import pandas as pd
 
 from toolbox.DataZoo.market import us_xus
-from toolbox.DataZoo.market.us_xus import _compute, render_us_xus
+from toolbox.DataZoo.market.us_xus import (
+    _compute,
+    chart_figs,
+    us_xus_foot_html,
+    us_xus_head_html,
+)
 
 N = 2900
 IDX = pd.bdate_range("2015-01-01", periods=N)
@@ -39,22 +44,25 @@ def test_shift_math_on_synthetic():
     # series (constant daily changes) — boundedness only here;
     # the sign is covered by the live smoke (-0.41 real data).
     assert -1.0 <= p["corr_dxy"] <= 1.0
-    out = render_us_xus(p)
-    assert "US vs ex-US" not in out  # title lives in the tab
-    assert "Shift tape" in out and "-4.0 pts" in out
-    assert out.count("<svg") == 3
-    # Centered block (2026-11-02): the whole tab output sits
-    # in the 1120px auto-margin wrapper, as demoed.
-    assert out.startswith(
+    # The tab's render split (2026-11-10): head chips, three
+    # Plotly panels on the shared warped axis (decade panel
+    # 560 tall, tape and dollar panels 280), footnote — each
+    # block centered on the 1120px measure (2026-11-02).
+    head = us_xus_head_html(p)
+    assert "Shift tape" in head and "-4.0 pts" in head
+    assert head.startswith(
         '<div style="max-width:1120px;margin:0 auto">')
-    assert out.endswith("</div>")
+    assert head.endswith("</div>")
+    figs = chart_figs(p)
+    assert [f.layout.height for _t, f in figs] == [560, 280, 280]
+    assert "200-day average" in us_xus_foot_html()
     # Freshness (2026-11-02): the payload carries its own last
     # date; a board date one session later adds the lag pill.
     assert p["last_date"] == IDX[-1].strftime("%Y-%m-%d")
     nxt = IDX[-1] + pd.tseries.offsets.BDay(1)
-    out = render_us_xus(p, board_date=nxt.date())
+    out = us_xus_head_html(p, board_date=nxt.date())
     assert "1 session behind the board" in out
-    out = render_us_xus(p, board_date=IDX[-1].date())
+    out = us_xus_head_html(p, board_date=IDX[-1].date())
     assert "current" in out
 
 
