@@ -190,8 +190,13 @@ def test_chart_fig_renders():
     names = [t.name for t in fig.data if t.name]
     assert names == ["CNN (US stocks)", "Crypto (alternative.me)",
                      "Gold futures (GC=F, $/oz)"]
-    # One band rectangle per Fear & Greed zone.
-    assert len(fig.layout.shapes) == 5
+    # One band rectangle per Fear & Greed zone, plus the
+    # warped axis' seam line at 1 - TAIL_SHARE.
+    rects = [s for s in fig.layout.shapes if s.type == "rect"]
+    assert len(rects) == 5
+    seams = [s for s in fig.layout.shapes if s.type == "line"]
+    assert len(seams) == 1
+    assert seams[0].x0 == seams[0].x1 == 0.75
 
 
 def test_chart_fig_layout_gives_the_plot_room():
@@ -208,13 +213,23 @@ def test_chart_fig_layout_gives_the_plot_room():
     assert not fig.layout.yaxis.title.text
     assert not fig.layout.yaxis2.title.text
     assert fig.layout.height == 600
-    # The x axis is pinned to the data extent, so the
-    # gridlines end where the curves do (user direction
-    # 2026-11-10).
-    import pandas as _pd
-    rng = fig.layout.xaxis.range
-    assert _pd.Timestamp(rng[0]) == series["crypto"].index[0]
-    assert _pd.Timestamp(rng[1]) == series["crypto"].index[-1]
+    # Warped time axis (user direction 2026-11-10,
+    # demoed and approved): the axis is the unit interval
+    # — first-to-last observation under the warp, so the
+    # gridlines still end where the curves do — with the
+    # last 30 days taking the right quarter: month ticks
+    # in the compressed head, the seam date (Mar 31) and
+    # the last date (Apr 30) in the stretched tail.
+    assert tuple(fig.layout.xaxis.range) == (0.0, 1.0)
+    assert list(fig.layout.xaxis.ticktext) == [
+        "Jan 26", "Feb 26", "Mar 26", "Mar 31", "Apr 30"]
+    # The last label sits at the axis edge; without the
+    # overflow allowance plotly.js hides it.
+    assert fig.layout.xaxis.ticklabeloverflow == "allow"
+    cnn = next(t for t in fig.data
+               if t.name == "CNN (US stocks)")
+    assert max(cnn.x) == 1.0
+    assert all(0.0 <= float(v) <= 1.0 for v in cnn.x)
     # Inside labels (user direction 2026-11-10): both
     # axes hide their tick labels, and gold's scale is
     # concatenated into the index scale's annotations —
@@ -223,7 +238,8 @@ def test_chart_fig_layout_gives_the_plot_room():
     assert fig.layout.yaxis.showticklabels is False
     assert fig.layout.yaxis2.showticklabels is False
     anns = [a for a in fig.layout.annotations
-            if a.yref == "y" and a.xanchor == "left"]
+            if a.yref == "y" and a.xanchor == "left"
+            and a.bgcolor]
     assert len(anns) == 6
     assert all(a.bgcolor for a in anns)
     import re as _re
@@ -240,7 +256,8 @@ def test_chart_fig_scale_labels_without_gold():
               "crypto": _series([30 + i % 40 for i in range(120)])}
     fig = sm.chart_fig(series)
     anns = [a.text for a in fig.layout.annotations
-            if a.yref == "y" and a.xanchor == "left"]
+            if a.yref == "y" and a.xanchor == "left"
+            and a.bgcolor]
     assert anns == ["0", "20", "40", "60", "80", "100"]
 
 

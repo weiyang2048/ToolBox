@@ -53,6 +53,12 @@ BANDS = [(0, 25, "Extreme Fear", "#e74c3c"), (25, 45, "Fear", "#e67e22"),
 # (100/GOLD_PEAK - 1) ≈ 17.6% of the gold range, and the peak
 # itself renders below the band ceiling instead of on it.
 GOLD_PEAK = 85.0
+# Warped time axis (user direction 2026-11-10, demoed and
+# approved): the last TAIL_DAYS of the window take
+# TAIL_SHARE of the axis width; everything earlier
+# compresses into the rest. See chart_fig.
+TAIL_DAYS = 30
+TAIL_SHARE = 0.25
 # Endpoint labels: minimum vertical separation (index units)
 # between two label centers, and the band they must stay in.
 LABEL_MIN_SEP = 8.0
@@ -251,7 +257,14 @@ def chart_fig(series):
     on a right axis labeled in $/oz, and endpoint labels with
     value \u00b7 zone only \u2014 no dates in the plot (user
     direction 2026-11-02): each series' date lives in the
-    caller's freshness stamp line above the chart."""
+    caller's freshness stamp line above the chart.
+
+    Time runs warped (user direction 2026-11-10, demoed
+    and approved): the last TAIL_DAYS take TAIL_SHARE of
+    the axis width, everything earlier compresses into
+    the rest, and a dotted seam marks the stretch. Trace
+    x positions are therefore warped day-fractions, not
+    dates; hover carries each point's real date."""
     import plotly.graph_objects as go
 
     # Dark-skin palette (user direction 2026-11-04): the
@@ -269,27 +282,62 @@ def chart_fig(series):
     fig = go.Figure()
     x0 = min(s.index[0] for s in series.values())
     x1 = max(s.index[-1] for s in series.values())
+    # The warp: day offsets from x0 mapped piecewise —
+    # [x0, cut] onto [0, 1 - TAIL_SHARE], [cut, x1] onto
+    # [1 - TAIL_SHARE, 1], cut = x1 - TAIL_DAYS. Windows
+    # no longer than the tail skip the warp (plain linear
+    # day-fractions); production windows run ~a year.
+    span_days = (x1 - x0).total_seconds() / 86400.0
+    cut = x1 - pd.Timedelta(days=TAIL_DAYS)
+    cut_day = (cut - x0).total_seconds() / 86400.0
+    warped = span_days > TAIL_DAYS
+
+    def _warp(idx):
+        days = (idx - x0).total_seconds() / 86400.0
+        if span_days <= 0:
+            return [0.0] * len(days)
+        if not warped:
+            return [float(d) / span_days for d in days]
+        return [
+            float(d) / cut_day * (1.0 - TAIL_SHARE)
+            if d <= cut_day else
+            (1.0 - TAIL_SHARE) + (float(d) - cut_day)
+            / (span_days - cut_day) * TAIL_SHARE
+            for d in days]
+
+    def _warp_one(ts):
+        return _warp(pd.DatetimeIndex([ts]))[0]
+
+    def _dates(idx):
+        return [d.strftime("%b %d, %Y") for d in idx]
+
     for lo, hi, label, color in BANDS:
         fig.add_shape(
-            type="rect", xref="x", yref="y", x0=x0, x1=x1,
+            type="rect", xref="x", yref="y", x0=0.0, x1=1.0,
             y0=lo, y1=hi, fillcolor=color, opacity=0.14,
             line=dict(width=0), layer="below")
         fig.add_annotation(
-            x=x0, y=(lo + hi) / 2, text=label, showarrow=False,
+            x=0.0, y=(lo + hi) / 2, text=label, showarrow=False,
             xanchor="left", yanchor="middle", xshift=4,
             font=dict(size=9, color=_MUTE))
     if "cnn" in series:
         s = series["cnn"]
         fig.add_trace(go.Scatter(
-            x=s.index, y=s.values, mode="lines",
+            x=_warp(s.index), y=s.values, mode="lines",
             name="CNN (US stocks)",
-            line=dict(color=_CNN, width=1.6)))
+            line=dict(color=_CNN, width=1.6),
+            customdata=_dates(s.index),
+            hovertemplate="%{customdata}<br>CNN (US stocks): "
+                          "%{y}<extra></extra>"))
     if "crypto" in series:
         s = series["crypto"]
         fig.add_trace(go.Scatter(
-            x=s.index, y=s.values, mode="lines",
+            x=_warp(s.index), y=s.values, mode="lines",
             name="Crypto (alternative.me)", opacity=0.9,
-            line=dict(color=_CRYPTO, width=1.6)))
+            line=dict(color=_CRYPTO, width=1.6),
+            customdata=_dates(s.index),
+            hovertemplate="%{customdata}<br>Crypto "
+                          "(alternative.me): %{y}<extra></extra>"))
     if "gold" in series:
         g = series["gold"]
         gmin, gmax = float(g.min()), float(g.max())
@@ -304,19 +352,24 @@ def chart_fig(series):
         gn = ((g - gmin) / (gmax - gmin) * GOLD_PEAK
               if gmax > gmin else g * 0 + GOLD_PEAK / 2)
         fig.add_trace(go.Scatter(
-            x=g.index, y=gn.values, mode="lines", yaxis="y2",
+            x=_warp(g.index), y=gn.values, mode="lines",
+            yaxis="y2",
             name="Gold futures (GC=F, $/oz)", opacity=0.95,
             line=dict(color=_GOLD, width=1.6),
-            customdata=g.values,
-            hovertemplate="%{customdata:$,.0f}/oz<extra>"
+            customdata=[[d, v] for d, v in
+                        zip(_dates(g.index), g.values)],
+            hovertemplate="%{customdata[0]}<br>"
+                          "%{customdata[1]:$,.0f}/oz<extra>"
                           "Gold</extra>"))
         fig.add_trace(go.Scatter(
-            x=[g.index[-1]], y=[gn.iloc[-1]], mode="markers",
+            x=[_warp_one(g.index[-1])], y=[gn.iloc[-1]],
+            mode="markers",
             yaxis="y2", showlegend=False, hoverinfo="skip",
             marker=dict(color=_GOLD, size=9,
                         line=dict(color="white", width=1))))
         fig.add_annotation(
-            x=g.index[-1], y=float(gn.iloc[-1]), yref="y2",
+            x=_warp_one(g.index[-1]), y=float(gn.iloc[-1]),
+            yref="y2",
             text=f"${g.iloc[-1]:,.0f}/oz", showarrow=False,
             xanchor="right", yanchor="middle", ax=-8, ay=-14,
             font=dict(size=11, color=_GOLD),
@@ -339,17 +392,33 @@ def chart_fig(series):
         for (color, s), label_y in zip(endpoints, placed):
             v = float(s.iloc[-1])
             fig.add_trace(go.Scatter(
-                x=[s.index[-1]], y=[v], mode="markers",
+                x=[_warp_one(s.index[-1])], y=[v],
+                mode="markers",
                 showlegend=False, hoverinfo="skip",
                 marker=dict(color=color, size=9,
                             line=dict(color="white", width=1))))
             fig.add_annotation(
-                x=s.index[-1] - pd.Timedelta(days=3), y=label_y,
+                x=_warp_one(s.index[-1]
+                            - pd.Timedelta(days=3)), y=label_y,
                 text=f"{v:.0f} \u00b7 {zone(v)}", showarrow=False,
                 xanchor="right", yanchor="middle",
                 font=dict(size=11, color=color),
                 bgcolor=_BOX, bordercolor=color, borderwidth=1,
                 borderpad=3)
+    if warped:
+        # The seam: a dotted line where the stretch
+        # begins, with its note in the headroom strip.
+        fig.add_shape(
+            type="line", xref="x", yref="paper",
+            x0=1.0 - TAIL_SHARE, x1=1.0 - TAIL_SHARE,
+            y0=0, y1=1,
+            line=dict(color="rgba(232,236,236,0.45)",
+                      width=1, dash="dot"))
+        fig.add_annotation(
+            x=1.0 - TAIL_SHARE, y=103, xref="x", yref="y",
+            text="last 30 days \u2192", showarrow=False,
+            xanchor="left", yanchor="middle", xshift=4,
+            font=dict(size=9.5, color=_MUTE))
     # Headroom (2026-11-02 live fix, carried from the PNG;
     # trimmed 2026-11-10 at the user's word — the plot
     # claims the dead strip): the index axis runs to 105 —
@@ -388,6 +457,35 @@ def chart_fig(series):
     # are tight with automargin fitting the tick labels,
     # and the figure is taller, so the axes themselves get
     # the room on a phone.
+    # Axis ticks on the warped scale: month starts in
+    # the compressed head ("%b %y"), skipping any within
+    # 15 days of the seam so its label cannot collide,
+    # then the seam date and the last date as "%b %d".
+    # (The axis spans exactly the data — the pinning of
+    # 2026-11-10, kept: range [0, 1] IS first-to-last
+    # observation under the warp.) A short unwarped
+    # window falls back to first/middle/last dates.
+    if warped:
+        tick_vals, tick_text = [], []
+        m = pd.Timestamp(x0.year, x0.month, 1)
+        while m <= x1:
+            if x0 <= m < cut - pd.Timedelta(days=15):
+                tick_vals.append(_warp_one(m))
+                tick_text.append(m.strftime("%b %y"))
+            m += pd.DateOffset(months=1)
+        tick_vals += [1.0 - TAIL_SHARE, 1.0]
+        tick_text += [cut.strftime("%b %d"),
+                      x1.strftime("%b %d")]
+    else:
+        mid = x0 + (x1 - x0) / 2
+        tick_vals = [0.0, 0.5, 1.0]
+        tick_text = [d.strftime("%b %d")
+                     for d in (x0, mid, x1)]
+    xaxis = dict(range=[0.0, 1.0], tickmode="array",
+                 tickvals=tick_vals, ticktext=tick_text,
+                 tickfont=dict(color=_INK, size=10),
+                 ticklabeloverflow="allow",
+                 showgrid=False)
     layout = dict(
         height=600, margin=dict(l=10, r=10, t=10, b=10),
         paper_bgcolor="rgba(0,0,0,0)",
@@ -397,15 +495,7 @@ def chart_fig(series):
                     xanchor="left", yanchor="top",
                     bgcolor="rgba(0,0,0,0)", borderwidth=0,
                     font=dict(color=_INK, size=10.5)),
-        # The axis is pinned to the data extent (user
-        # direction 2026-11-10): left auto-ranged, a date
-        # axis rounds out to the next month boundary, so
-        # the dashed gridlines ran past the last point into
-        # empty space the bands and curves never reach.
-        xaxis=dict(range=[x0, x1],
-                   tickformat="%b %y", dtick="M1",
-                   tickfont=dict(color=_INK, size=10),
-                   showgrid=False),
+        xaxis=xaxis,
         yaxis=yaxis)
     gold_range = None
     if "gold" in series:
@@ -431,7 +521,7 @@ def chart_fig(series):
             text = (f"{v} \u00b7 <span style=\"color:"
                     f"{_GOLD}\">${usd:,.0f}</span>")
         fig.add_annotation(
-            x=x0, y=v, xref="x", yref="y",
+            x=0.0, y=v, xref="x", yref="y",
             text=text, showarrow=False, xanchor="left",
             yanchor="middle", xshift=4,
             font=dict(size=10, color=_INK),
