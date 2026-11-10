@@ -207,7 +207,7 @@ def test_chart_fig_layout_gives_the_plot_room():
     assert fig.layout.legend.y < 0
     assert not fig.layout.yaxis.title.text
     assert not fig.layout.yaxis2.title.text
-    assert fig.layout.height == 520
+    assert fig.layout.height == 560
 
 
 def test_chart_fig_headroom_above_100():

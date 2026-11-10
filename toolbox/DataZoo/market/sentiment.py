@@ -370,7 +370,7 @@ def chart_fig(series):
     # and the figure is taller, so the axes themselves get
     # the room on a phone.
     layout = dict(
-        height=520, margin=dict(l=10, r=10, t=10, b=10),
+        height=560, margin=dict(l=10, r=10, t=10, b=10),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         font=dict(color=_INK), hovermode="x unified",
