@@ -2,7 +2,7 @@
 Equities tab 2).
 
     fetch_us_xus()   total-return closes for SPY / EFA / EEM /
-                     ACWX + DXY (Yahoo), a decade of ratios,
+                     ACWX + DXY (Yahoo), five years of ratios,
                      the rolling 12-month spread, the dollar
                      panel and the snapshot stats
     us_xus_head_html()  the as-of note + chips
@@ -52,7 +52,7 @@ def fetch_us_xus():
     the leg."""
     import pandas as pd
 
-    p1 = int(time.time()) - (10 * 365 + 320) * 86400
+    p1 = int(time.time()) - (6 * 365 + 320) * 86400
 
     def get(sym):
         return sym, with_retry(
@@ -70,9 +70,12 @@ def _compute(df):
         "dev": df["EFA"] / df["SPY"] * 100,
         "em": df["EEM"] / df["SPY"] * 100,
         "xus": df["ACWX"] / df["SPY"] * 100})
+    target = df.index[-1] - pd.DateOffset(years=5)
+    start = int(df.index.get_indexer([target],
+                                      method="bfill")[0])
     for c in ratios:
-        ratios[c] = ratios[c] / ratios[c].iloc[260] * 100
-    disp = ratios.iloc[260:]
+        ratios[c] = ratios[c] / ratios[c].iloc[start] * 100
+    disp = ratios.iloc[start:]
     spread = (df["ACWX"].pct_change(252)
               - df["SPY"].pct_change(252)).dropna() * 100
     spread = spread[spread.index >= disp.index[0]]
@@ -80,6 +83,12 @@ def _compute(df):
     ratio = df["ACWX"] / df["SPY"]
     ratio_r = ratio / ratio.loc[disp.index[0]] * 100
     both = pd.DataFrame({"dxy": dxy, "ratio": ratio_r}).dropna()
+    # Dollar correlation pinned to the 5-year display window
+    # (user direction 2026-11-10): exactly the rows from the
+    # rebase date (disp.index[0]) to the end — not the longer
+    # fetched history, whose extra rows are warmup only (the
+    # 252-day spread and 200-day average need them).
+    both = both.loc[disp.index[0]:]
     corr = float(both["dxy"].pct_change()
                  .corr(both["ratio"].pct_change()))
 
@@ -100,7 +109,7 @@ def _compute(df):
         snap[key] = {
             "vs200": round(float(r.iloc[-1] / ma.iloc[-1] - 1)
                            * 100, 1),
-            "chg10y": round(float(disp[key].iloc[-1] - 100), 1),
+            "chgwin": round(float(disp[key].iloc[-1] - 100), 1),
             "chg1y": round(float(disp[key].iloc[-1]
                                  / disp[key].iloc[-252] - 1)
                            * 100, 1)}
@@ -210,7 +219,7 @@ def chart_figs(p):
     """The tab's three panels as (title, figure) pairs
     (user direction 2026-11-10 — the IALT treatment
     extended on the user's "do the same for other plots"):
-    the decade panel stands 560 tall so the main plot
+    the main panel stands 560 tall so the main plot
     claims the space, the tape and dollar panels 280 each;
     all three ride the shared warped axis (last 30 days
     at 25%)."""
@@ -222,9 +231,14 @@ def chart_figs(p):
         f["dates"], ratios, _COLORS, _FULL, _SHORT,
         height=560, y_ticks=nice_ticks(lo, hi, 10),
         y_range=(lo, hi), fmt_y=lambda v: "%g" % v,
-        end_labels={k: "%+.1f%%" % s[k]["chg10y"]
+        end_labels={k: "%+.1f%% vs US" % s[k]["chgwin"]
                     for k in ratios},
         bold=("xus",), hline=100, min_sep=5.0)
+    main.add_annotation(
+        x=0.42, y=100, xref="x", yref="y",
+        text="level with the US", showarrow=False,
+        xanchor="center", yanchor="bottom", yshift=3,
+        font=dict(size=9.5, color=_MUTE))
     both = {"ratio": f["ratio"], "dxy": f["dxy"]}
     allv = [v for vals in both.values() for v in vals
             if v is not None]
@@ -234,8 +248,8 @@ def chart_figs(p):
         height=280, y_ticks=nice_ticks(lo3, hi3, 10),
         y_range=(lo3, hi3), fmt_y=lambda v: "%g" % v,
         end_labels={}, min_sep=5.0)
-    return [("A decade of US dominance — relative strength "
-             "of ex-US vs the US, 10 years", main),
+    return [("Five years of US dominance — ex-US ÷ US, "
+             "relative strength ratios", main),
             ("The shift tape — rolling 12-month return, "
              "all ex-US minus US", _spread_fig(p)),
             ("The shift rides the dollar — ex-US relative "
@@ -293,7 +307,7 @@ def us_xus_foot_html():
         'margin-top:8px">'
         'Proxies: SPY (US), EFA (developed ex-US), EEM '
         '(emerging), ACWX (all ex-US), on adjusted closes '
-        '(dividends reinvested). Read: the decade panel '
+        '(dividends reinvested). Read: the five-year panel '
         'shows what the shift is shifting FROM; the tape '
         'turns positive when ex-US outruns the US over a '
         'rolling year; the claim "a shift is under way" '

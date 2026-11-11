@@ -1,6 +1,6 @@
 """US vs ex-US: the shift math on synthetic total-return
 series. US grows 10%/yr, developed ex-US 5%/yr, EM flat,
-ACWX 6%/yr, dollar +2%/yr — so over 10y the ratios must fall,
+ACWX 6%/yr, dollar +2%/yr — so over the 5y window the ratios must fall,
 the Dev 1y ratio change is (1.05/1.10 - 1), the spread equals
 the ACWX minus SPY 12-month spread exactly (6% - 10% on the
 final window, in points), and every ex-US ratio must sit
@@ -37,7 +37,28 @@ def test_shift_math_on_synthetic():
     assert p["snap"]["dev"]["chg1y"] == -4.5  # 1.05/1.10 - 1
     assert p["snap"]["em"]["chg1y"] == -9.1   # 1.00/1.10 - 1
     assert p["snap"]["xus"]["vs200"] < 0
-    assert p["snap"]["dev"]["chg10y"] < -30
+    assert p["snap"]["dev"]["chgwin"] == -21.4
+    # 5-year display window (2026-11-10): the frame starts
+    # exactly 5 years before the last date, rebased to 100.
+    first = (IDX[-1] - pd.DateOffset(years=5)).strftime(
+        "%Y-%m-%d")
+    assert p["frame"]["dates"][0] == first
+    assert [p["frame"][k][0] for k in ("dev", "em", "xus")] == [
+        100.0, 100.0, 100.0]
+    # Dollar correlation pinned to that same 5y window:
+    # recompute it over exactly the display rows and compare.
+    _start = df.index.get_indexer(
+        [df.index[-1] - pd.DateOffset(years=5)],
+        method="bfill")[0]
+    _d0 = df.index[_start]
+    _both = pd.DataFrame({
+        "dxy": df["DX-Y.NYB"] / df["DX-Y.NYB"].loc[_d0] * 100,
+        "ratio": (df["ACWX"] / df["SPY"])
+        / (df["ACWX"] / df["SPY"]).loc[_d0] * 100}).dropna()
+    _both = _both.loc[_d0:]
+    assert p["corr_dxy"] == round(float(
+        _both["dxy"].pct_change().corr(
+            _both["ratio"].pct_change())), 2)
     assert p["spread_now"] == -4.0           # 6% - 10% window
     assert p["ret1y"]["SPY"] == 10.0
     # corr itself is degenerate on two perfectly geometric
@@ -45,7 +66,7 @@ def test_shift_math_on_synthetic():
     # the sign is covered by the live smoke (-0.41 real data).
     assert -1.0 <= p["corr_dxy"] <= 1.0
     # The tab's render split (2026-11-10): head chips, three
-    # Plotly panels on the shared warped axis (decade panel
+    # Plotly panels on the shared warped axis (main panel
     # 560 tall, tape and dollar panels 280), footnote — each
     # block centered on the 1120px measure (2026-11-02).
     head = us_xus_head_html(p)
@@ -55,7 +76,13 @@ def test_shift_math_on_synthetic():
     assert head.endswith("</div>")
     figs = chart_figs(p)
     assert [f.layout.height for _t, f in figs] == [560, 280, 280]
+    assert figs[0][0] == ("Five years of US dominance — "
+                          "ex-US ÷ US, relative strength ratios")
+    _ann = [a.text for a in figs[0][1].layout.annotations]
+    assert "level with the US" in _ann
+    assert "-21.4% vs US" in _ann
     assert "200-day average" in us_xus_foot_html()
+    assert "five-year panel" in us_xus_foot_html()
     # Freshness (2026-11-02): the payload carries its own last
     # date; a board date one session later adds the lag pill.
     assert p["last_date"] == IDX[-1].strftime("%Y-%m-%d")
