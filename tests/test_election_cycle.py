@@ -4,13 +4,12 @@ current-cycle fetch is not exercised here (no network in
 tests)."""
 
 import math
-import re
 
 import pytest
 
 from toolbox.DataZoo.market.election_cycle import (
+    chart_figs,
     election_series,
-    render_election_cycle,
 )
 
 KEYS = ["mid_us", "mid_xus", "pres_us", "pres_xus"]
@@ -43,27 +42,48 @@ def test_endpoints_match_the_study():
             want, abs=0.2)
 
 
-def test_render_without_current_has_no_overlay():
-    out = render_election_cycle(election_series(), {})
+def _html(blocks):
+    return "".join(v for k, v in blocks if k == "html")
+
+
+def _figs(blocks):
+    return [v for k, v in blocks if k == "fig"]
+
+
+def _ann_texts(fig):
+    return [a.text or "" for a in fig.layout.annotations]
+
+
+def test_figs_without_current_have_no_overlay():
+    blocks = chart_figs(election_series(), {})
+    out = _html(blocks)
     assert ">Midterm elections<" in out
     assert ">Presidential elections<" in out
-    assert "S&amp;P 500, 19 midterms" in out
-    assert "S&amp;P 500, 20 elections" in out
-    assert LABEL not in out
+    figs = _figs(blocks)
+    assert len(figs) == 4
+    titles = [t for f in figs for t in _ann_texts(f)]
+    assert any("S&P 500, 19 midterms" in t for t in titles)
+    assert any("S&P 500, 20 elections" in t for t in titles)
+    for f in figs:
+        assert all(t.name != "2026" for t in f.data)
+        assert not any(LABEL in t for t in _ann_texts(f))
     assert "+14.6%" in out and "19 of 19" in out
     assert "-6.1%" in out  # midterm ex-US 6m-before
     assert "+13.4%" in out and "13 of 15" in out
 
 
-def test_render_with_current_overlays_midterms_only():
+def test_figs_with_current_overlay_midterms_only():
     cur = {"us": [98.0, 99.0, 100.0], "us_start": -2,
            "xus": [97.0, 99.0, 100.0], "xus_start": -2}
-    out = render_election_cycle(election_series(), cur)
-    head, tail = out.split(">Presidential elections<", 1)
+    figs = _figs(chart_figs(election_series(), cur))
     # Both midterm panels draw the labelled overlay; the
-    # presidential section draws none.
-    assert head.count(LABEL) == 2
-    assert LABEL not in tail
+    # presidential panels draw none.
+    for f in figs[:2]:
+        assert any(t.name == "2026" for t in f.data)
+        assert any(LABEL in t for t in _ann_texts(f))
+    for f in figs[2:]:
+        assert all(t.name != "2026" for t in f.data)
+        assert not any(LABEL in t for t in _ann_texts(f))
 
 
 # Per panel, in tab order: (title fragment, the four chip
@@ -85,11 +105,11 @@ CHIP_LABELS = ("12m before", "6m before",
 
 
 def test_chips_four_per_panel_chronological():
-    out = render_election_cycle(election_series(), {})
-    starts = [out.index(title) for title, _, _ in PANELS]
-    for i, (_, values, positive) in enumerate(PANELS):
-        end = starts[i + 1] if i + 1 < len(PANELS) else None
-        seg = out[starts[i]:end]
+    blocks = chart_figs(election_series(), {})
+    chips = [v for k, v in blocks
+             if k == "html" and "12m before" in v]
+    assert len(chips) == 4
+    for seg, (_, values, positive) in zip(chips, PANELS):
         order = [seg.index(s) for s in CHIP_LABELS]
         assert order == sorted(order)
         for v in values:
@@ -112,46 +132,30 @@ def _live_like_overlay(hot):
     return vals
 
 
-def _plate(svg):
-    m = re.search(r'<rect x="(-?[\d.]+)" y="(-?[\d.]+)" '
-                  r'width="(-?[\d.]+)" height="20" rx="4" '
-                  r'fill="#171512"', svg)
-    assert m, "overlay label plate missing"
-    x, y, w = (float(m.group(i)) for i in (1, 2, 3))
-    return x, y, x + w, y + 20.0
-
-
-def _path_points(svg, marker):
-    m = re.search(r'<path d="([^"]+)"[^>]*' + marker, svg)
-    assert m, f"path with {marker} missing"
-    return [(float(a), float(b)) for a, b in
-            re.findall(r"[ML] (-?[\d.]+) (-?[\d.]+)",
-                       m.group(1))]
-
-
 def test_label_plate_clears_overlay_and_band():
     cur = {"us": _live_like_overlay(103.7), "us_start": -252,
            "xus": _live_like_overlay(106.0), "xus_start": -252}
-    out = render_election_cycle(election_series(), cur)
-    blocks = re.findall(r"<svg.*?</svg>", out, re.S)
-    assert len(blocks) == 4
-    for svg in blocks[:2]:  # the two midterm panels
-        px0, py0, px1, py1 = _plate(svg)
-        # Right-aligned at day 0 (x=527): the plate's
-        # right edge is the text's end (521) + 8px pad.
-        assert abs(px1 - 529.0) < 1.5
-        line = _path_points(svg, 'stroke="#7FB3D5"')
-        # The overlay runs the full window into day 0.
-        assert len(line) == 253
-        assert line[-1][0] >= 526.0
-        band = _path_points(svg, 'fill-opacity="0.16"')
-        for pts in (line, band):
-            for x, y in pts:
-                if px0 - 0.5 <= x <= px1 + 0.5:
-                    # Nothing the plate spans passes under
-                    # it: every such point sits at least
-                    # 3px below the plate's bottom edge.
-                    assert y >= py1 + 3.0
+    df = election_series()
+    figs = _figs(chart_figs(df, cur))
+    days = df["day"].tolist()
+    for f, key in zip(figs[:2], ("mid_us", "mid_xus")):
+        ann = next(a for a in f.layout.annotations
+                   if a.text == LABEL)
+        # The plate is right-anchored at the overlay's
+        # end (day 0 here) and its base sits at the
+        # ceiling over its span: nothing it spans — the
+        # overlay or the band's top over the last 60
+        # days — passes above it.
+        assert ann.x == 0 and ann.xanchor == "right"
+        q75 = df[key + "_q75"].tolist()
+        span_top = max(
+            cur["us" if key == "mid_us" else "xus"][-61:]
+            + [q75[days.index(d)] for d in range(-60, 1)])
+        assert ann.y >= span_top - 1e-9
+        # And the axis extends past the ceiling (the
+        # 90% rule), so the plate stays inside the plot.
+        lo, hi = f.layout.yaxis.range
+        assert ann.y - lo <= 0.90 * (hi - lo) + 1e-9
 
 
 # --- The anchored live overlay (2026-11-04): the current
@@ -222,13 +226,16 @@ def test_composite_ends_at_the_second_latest_leg():
     assert comp[-1] == pytest.approx(3.5)
 
 
-def test_render_live_label_once_past_the_vote():
+def test_live_label_once_past_the_vote():
     cur = {"us": [98.0, 99.0, 100.0, 101.0, 102.0, 103.0],
            "us_start": -2,
            "xus": [97.0, 99.0, 100.0, 100.5, 101.0, 101.5],
            "xus_start": -2}
-    out = render_election_cycle(election_series(), cur)
-    head, tail = out.split(">Presidential elections<", 1)
-    assert head.count("2026 (live)") == 2
-    assert LABEL not in head
-    assert "2026 (live)" not in tail
+    figs = _figs(chart_figs(election_series(), cur))
+    for f in figs[:2]:
+        texts = _ann_texts(f)
+        assert any("2026 (live)" in t for t in texts)
+        assert not any(LABEL in t for t in texts)
+    for f in figs[2:]:
+        assert not any("2026 (live)" in t
+                       for t in _ann_texts(f))

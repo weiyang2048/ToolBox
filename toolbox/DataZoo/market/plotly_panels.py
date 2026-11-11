@@ -163,13 +163,16 @@ def add_seam(fig, y_range, note_at_top=True):
         font=dict(size=9.5, color=_PLOT_MUTE))
 
 
-def add_y_chips(fig, y_ticks, fmt_y):
+def add_y_chips(fig, y_ticks, fmt_y, x_at=0.0):
     """The y scale printed inside the plot on dark chips
     (the native tick labels are off — they would cost the
-    plot its left strip)."""
+    plot its left strip). x_at is the data x the chips
+    anchor at — 0.0 on the warped unit axis; a panel on
+    another axis (the election cycle's -252..252) passes
+    its left edge."""
     for v in y_ticks:
         fig.add_annotation(
-            x=0.0, y=v, xref="x", yref="y", text=fmt_y(v),
+            x=x_at, y=v, xref="x", yref="y", text=fmt_y(v),
             showarrow=False, xanchor="left",
             yanchor="middle", xshift=4,
             font=dict(size=10, color=_INK),
