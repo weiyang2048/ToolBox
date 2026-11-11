@@ -65,7 +65,8 @@ toolbox/
   DataZoo/      # sample and synthetic datasets for demos and tests
     market/             # FearGreed, StockIndices, Yahoo prices, Zillow data,
                         # futures board, news cloud (+ headline links),
-                        # sentiment (Fear & Greed + gold), strategies
+                        # sentiment (Fear & Greed + gold), election cycle,
+                        # prediction markets (Polymarket), strategies
                         # (covariance/mean cleaning, walk-forward backtest),
                         # QuantStats indicators (quantstats extra)
     image/              # synthetic image data
