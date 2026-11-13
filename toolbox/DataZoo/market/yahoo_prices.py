@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import math
 import threading
 import time
 import urllib.request
@@ -186,12 +187,12 @@ def download_shares_outstanding(
                 full = tk.get_shares_full()
                 if full is not None and len(full):
                     val = float(full.iloc[-1])
-                    if val > 0 and val == val:
+                    if val > 0 and not math.isnan(val):
                         return val
             except Exception:  # noqa: BLE001 - any get_shares_full failure falls back to fast_info, by design
                 pass
             val = float(tk.fast_info["shares"])
-            return val if val > 0 and val == val else float("nan")
+            return val if val > 0 and not math.isnan(val) else float("nan")
         except Exception:  # noqa: BLE001 - documented NaN-on-any-failure contract (unknown count surfaces as missing)
             return float("nan")
 

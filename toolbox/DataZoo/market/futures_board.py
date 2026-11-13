@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import math
 import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -668,7 +669,7 @@ def norm_good(vals, higher_good=True, center_zero=False):
     green side, negative -> red side, scaled by the largest
     magnitude). Missing values (None/NaN) come back None."""
     def _miss(v):
-        return v is None or (isinstance(v, float) and v != v)
+        return v is None or (isinstance(v, float) and math.isnan(v))
 
     raw = list(vals)
     clean = [float(v) for v in raw if not _miss(v)]

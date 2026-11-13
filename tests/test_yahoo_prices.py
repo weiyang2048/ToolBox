@@ -591,3 +591,47 @@ def test_download_start_overrides_period(monkeypatch):
                                    start="2014-01-01")
     assert seen == {"period": "max", "start": "2014-01-01"}
     assert int(out["AAA"].notna().sum()) == 100
+
+
+def test_download_shares_outstanding_nan_guards(monkeypatch):
+    # The NaN guards in download_shares_outstanding._one
+    # (both legs converted from `val == val` self-comparison
+    # to math.isnan, 2026-11-13): a NaN from get_shares_full
+    # falls back to fast_info, and a NaN / non-positive
+    # fast_info count surfaces as NaN, never a fabricated cap.
+    import math
+    import sys
+    import types
+
+    import pandas as pd
+
+    table = {
+        # symbol: (get_shares_full last value or None, fast_info)
+        "POS": (1.2e9, 9.9e8),
+        "NANFULL": (float("nan"), 3.4e8),
+        "NANBOTH": (float("nan"), float("nan")),
+        "NOFULL": (None, -5.0),
+    }
+
+    class FakeTicker:
+        def __init__(self, symbol):
+            self._full, self._fast = table[symbol]
+
+        def get_shares_full(self):
+            if self._full is None:
+                return None
+            return pd.Series([self._full])
+
+        @property
+        def fast_info(self):
+            return {"shares": self._fast}
+
+    fake = types.ModuleType("yfinance")
+    fake.Ticker = FakeTicker
+    monkeypatch.setitem(sys.modules, "yfinance", fake)
+
+    out = yp.download_shares_outstanding(list(table))
+    assert out["POS"] == 1.2e9
+    assert out["NANFULL"] == 3.4e8
+    assert math.isnan(out["NANBOTH"])
+    assert math.isnan(out["NOFULL"])
