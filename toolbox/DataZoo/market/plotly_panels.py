@@ -180,7 +180,7 @@ def add_y_chips(fig, y_ticks, fmt_y, x_at=0.0):
 
 
 def warped_panel(dates, series, colors, full_names,
-                 short_names, height, y_ticks, y_range, fmt_y,
+                 short_names, *, height, y_ticks, y_range, fmt_y,
                  end_labels, zero=False, hline=None,
                  fill_key=None, fillcolor=None, bold=(),
                  dash=(), min_sep=None, note_at_top=True):
@@ -189,7 +189,10 @@ def warped_panel(dates, series, colors, full_names,
     key -> values aligned to ``dates``; ``colors`` /
     ``full_names`` / ``short_names`` map the same keys;
     ``end_labels`` maps key -> endpoint chip text (keys
-    absent or with a None endpoint get no chip)."""
+    absent or with a None endpoint get no chip). Only the
+    five data arguments are positional — every panel knob
+    after ``short_names`` is keyword-only, so a knob can
+    never land in the wrong slot positionally."""
     import plotly.graph_objects as go
 
     from toolbox.DataZoo.market.sentiment import _spread_labels
