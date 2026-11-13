@@ -75,6 +75,8 @@ toolbox/
 
   notebooks/    # Jupyter notebook utilities
     nb2pdf.py   # parameterized, import-safe notebook-to-LaTeX converter
+  audio/        # transcription spot-check (requires the `audio` extra)
+    transcribe_check.py # ffmpeg-decode + faster-whisper PASS/FAIL checker
 ```
 
 With the vision pipeline:
@@ -93,6 +95,12 @@ With the QuantStats-backed market indicators:
 
 ```bash
 pip install -e ".[quantstats]"
+```
+
+With the audio transcription checker:
+
+```bash
+pip install -e ".[audio]"
 ```
 
 ## Energy market optimization (salvaged from the Optimization repo)
@@ -127,7 +135,8 @@ uv run pytest
 `pyproject.toml`'s `testpaths` covers two suites: `tests/` (core `toolbox`
 packages — `fourier`, pure numpy/scipy; `DataZoo`, whose network sources
 are all mocked so the suite runs offline; its QuantStats indicator tests;
-and the pure-stdlib helpers of `vision`/`automation`) and
+`audio`, whose CLI tests reuse a supplied transcript so no whisper
+model is needed; and the pure-stdlib helpers of `vision`/`automation`) and
 `energy_optimization_challenge/tests/` (needs the `energy` extra and the
 GLPK solver for the risk-management tests). CI
 (`.github/workflows/tests.yml`) runs both on Python 3.10–3.12. The

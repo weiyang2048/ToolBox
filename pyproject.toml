@@ -70,6 +70,9 @@ energy = [
 quantstats = [
     "quantstats>=0.0.81",
 ]
+audio = [
+    "faster-whisper>=1.0",
+]
 nlp = [
     "onnxruntime>=1.20",
     "tokenizers>=0.20",
