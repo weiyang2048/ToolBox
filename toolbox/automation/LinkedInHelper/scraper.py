@@ -93,18 +93,17 @@ def get_all_saved_jobs(driver):
             if current_jobs and current_jobs[0] in jobs:
                 logger.info("Duplicate job found, reached end of pagination")
                 next_page = False
+            elif current_jobs:
+                jobs += current_jobs
+                start += 10
+                logger.info(
+                    f"Found {len(current_jobs)} jobs, total now: {len(jobs)}"
+                )
             else:
-                if current_jobs:
-                    jobs += current_jobs
-                    start += 10
-                    logger.info(
-                        f"Found {len(current_jobs)} jobs, total now: {len(jobs)}"
-                    )
-                else:
-                    logger.info(
-                        "No jobs found on current page, reached end of pagination"
-                    )
-                    next_page = False
+                logger.info(
+                    "No jobs found on current page, reached end of pagination"
+                )
+                next_page = False
         except Exception as e:  # noqa: BLE001 - a failed page ends pagination with the jobs collected so far
             logger.error(f"Error fetching jobs: {e}")
             next_page = False
