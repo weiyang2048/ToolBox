@@ -64,12 +64,13 @@ toolbox/
     random_folder_opener.py # random folder opener + Click CLI (cli.py)
   DataZoo/      # sample and synthetic datasets for demos and tests
     market/             # FearGreed, StockIndices, Yahoo prices, Zillow data,
-                        # futures board, news cloud (+ headline links),
-                        # sentiment (Fear & Greed + gold), election cycle,
-                        # prediction markets (Polymarket), strategies
-                        # (covariance/mean cleaning, walk-forward backtest),
-                        # QuantStats indicators (quantstats extra)
+                        # futures board, news cloud (+ headline links; spaCy
+                        # extractor via the `nlp` extra), sentiment (Fear &
+                        # Greed + gold), election cycle, prediction markets
+                        # (Polymarket), QuantStats indicators (quantstats extra)
     image/              # synthetic image data
+  strategies.py # portfolio strategy engine: covariance/mean cleaning,
+                # strategy solvers, walk-forward backtest, merged stats
   net/          # networking helpers (stdlib only)
     ssh_proxy_connect.py  # HTTP CONNECT ProxyCommand tunnel for ssh/git
 
@@ -101,6 +102,12 @@ With the audio transcription checker:
 
 ```bash
 pip install -e ".[audio]"
+```
+
+With the NLP news-cloud extractor (spaCy):
+
+```bash
+pip install -e ".[nlp]"
 ```
 
 ## Energy market optimization (salvaged from the Optimization repo)
