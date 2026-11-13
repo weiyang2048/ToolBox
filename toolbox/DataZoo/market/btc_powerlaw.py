@@ -29,10 +29,10 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.dates as mdates
-import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib import gridspec
 
 from toolbox.DataZoo.market.eastern import (
     ET,
