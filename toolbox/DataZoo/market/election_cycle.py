@@ -206,9 +206,10 @@ def current_cycle_paths():
         legs = [got[s] for s in _XUS if got.get(s) is not None]
         if len(legs) >= 2:
             put("xus", _composite(legs))
-        return out
     except Exception:  # noqa: BLE001 - documented empty-on-failure contract
         return {}
+    else:
+        return out
 
 
 def _panel_fig(days, mean, q25, q75, title, overlay,

@@ -530,9 +530,10 @@ def _feed_items(url, cutoff):
                         (_item_field(item, "link") or "").strip(),
                         published,
                         publisher))
-        return out
     except Exception:  # noqa: BLE001 - documented None-on-any-failure contract (one bad feed drops out)
         return None
+    else:
+        return out
 
 
 def fetch_headlines(hours=24, now=None, progress=None):

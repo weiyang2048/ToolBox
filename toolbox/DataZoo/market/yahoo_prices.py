@@ -236,9 +236,10 @@ def download_ticker_sectors(
     def _one(t):
         try:
             sector = yf.Ticker(t).info.get("sector")
-            return sector if sector else None
         except Exception:  # noqa: BLE001 - documented None-on-any-failure contract (unknown sector surfaces as missing)
             return None
+        else:
+            return sector if sector else None
 
     out = {}
     if progress is not None:
