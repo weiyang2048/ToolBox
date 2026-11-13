@@ -26,21 +26,6 @@ def open_linkedin(username, password):
     return initialize_selenium_driver(username, password)
 
 
-def go_to_saved_jobs(driver):
-    """
-    Navigate to saved jobs page.
-
-    Args:
-        driver (webdriver): Selenium webdriver instance
-
-    Returns:
-        webdriver: Updated Selenium webdriver instance
-    """
-    logger.info("Navigating to saved jobs page")
-    driver.get("https://www.linkedin.com/my-items/saved-jobs/")
-    time.sleep(5)  # Allow the page to load
-
-
 def get_jobs_current_page(driver):
     """
     Extract job information from the current saved jobs page.
