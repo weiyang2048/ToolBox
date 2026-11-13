@@ -27,8 +27,6 @@ labeled in $/oz) as a Plotly figure (user direction
 PNG this module rendered before).
 """
 import datetime
-import json
-import urllib.request
 
 import pandas as pd
 
@@ -36,8 +34,6 @@ from toolbox.DataZoo.market.fear_greed import (
     fetch_cnn_graph,
     fetch_crypto_entries,
 )
-
-UA = {"User-Agent": "toolbox-sentiment"}
 
 CNN_COLOR = "#1a3c6e"
 CRYPTO_COLOR = "#8e44ad"
@@ -95,12 +91,6 @@ def zone(v):
     straight from BANDS so the two can never drift apart."""
     return next((label for _lo, hi, label, _c in BANDS if v <= hi),
                 BANDS[-1][2])
-
-
-def _get_json(url, headers=None, timeout=30):
-    req = urllib.request.Request(url, headers=headers or UA)
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return json.load(resp)
 
 
 def _daily_series(vals, epochs, unit, tz=None):
