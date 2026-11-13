@@ -97,6 +97,26 @@ class TestOptimalBiddingStrategy(unittest.TestCase):
         self.assertAlmostEqual(result['mu_da_p'], np.mean(self.da_prices[:, hour]))
         self.assertAlmostEqual(result['mu_rt_p'], np.mean(self.rt_prices[:, hour]))
     
+    @patch('energy_optimization_challenge.optimizer.pe.SolverFactory')
+    def test_optimize_hour_failure_reports_solver_status(self, mock_solver_factory):
+        """A failed solve raises a ValueError naming the solver's
+        status and termination condition, not a bare message."""
+        mock_solver = MagicMock()
+        mock_solver_factory.return_value = mock_solver
+
+        mock_results = MagicMock()
+        mock_results.solver.status = pe.SolverStatus.error
+        mock_results.solver.termination_condition = (
+            pe.TerminationCondition.infeasible
+        )
+        mock_solver.solve.return_value = mock_results
+
+        with self.assertRaises(ValueError) as ctx:
+            self.optimizer.optimize_hour(0)
+        message = str(ctx.exception)
+        self.assertIn(str(pe.SolverStatus.error), message)
+        self.assertIn(str(pe.TerminationCondition.infeasible), message)
+
     @patch('energy_optimization_challenge.optimizer.OptimalBiddingStrategy.optimize_hour')
     def test_optimize_all_hours(self, mock_optimize_hour):
         """Test optimization for all hours."""
