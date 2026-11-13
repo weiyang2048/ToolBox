@@ -415,6 +415,61 @@ def ls_states(closes):
     return (px, cross, e50 > _ema_last(closes, 200))
 
 
+def _ema_last_alpha(values, alpha):
+    """Final value of the adjust=False EMA recursion with an
+    explicit alpha — pandas ewm(alpha=alpha, adjust=False)
+    semantics (seeded at the first value), without the pandas
+    dependency."""
+    e = values[0]
+    for v in values[1:]:
+        e = alpha * v + (1.0 - alpha) * e
+    return e
+
+
+def rsi14(closes):
+    """Wilder RSI(14) at the last close: gains and losses
+    smoothed with the adjust=False alpha=1/14 recursion over
+    the close-to-close differences — the exact construction
+    of the briefs' movement-tracker.rsi14 and of the
+    2026-11-13 days-level entry research, so every surface
+    agrees tick for tick. None when the history holds fewer
+    than 15 closes or the smoothed loss is zero (the value
+    is undefined, e.g. a flat or only-rising series)."""
+    if len(closes) < 15:
+        return None
+    gains, losses = [], []
+    for prev, cur in zip(closes, closes[1:]):
+        d = cur - prev
+        gains.append(max(d, 0.0))
+        losses.append(max(-d, 0.0))
+    up = _ema_last_alpha(gains, 1.0 / 14.0)
+    dn = _ema_last_alpha(losses, 1.0 / 14.0)
+    if dn == 0:
+        return None
+    v = 100.0 - 100.0 / (1.0 + up / dn)
+    return None if v != v else v
+
+
+def oversold_up(closes):
+    """Oversold-in-uptrend at the last close — the check the
+    merged "L/S O/S↑" column appends after the L/S letters
+    (user request 2026-11-13, first shipped in the briefs
+    and the Markets app): True when RSI(14) is under 35
+    while the last close sits above its EMA200 — the
+    winning entry condition of the 2026-11-13 days-level
+    entry research. False when the condition does not hold;
+    None when the history holds fewer than 200 sessions
+    (the EMA200 leg is undefined). Mirrors the briefs'
+    movement-tracker.oversold_up, with ls_states' EMA
+    conventions."""
+    if len(closes) < 200:
+        return None
+    r = rsi14(closes)
+    if r is None:
+        return None
+    return bool(r < 35.0 and closes[-1] > _ema_last(closes, 200))
+
+
 def _fetch_row(sym):
     """(fetch(sym), history closes, last completed bar date).
 
@@ -459,7 +514,7 @@ def fetch_board(now=None, groups=None, progress=None):
 
     Returns {asof, source, available, data, notes}: data maps each
     group name to its rows ({sym, label, dec, kind, last, chg, pct,
-    mtime, date, week..y10, ls}); rows within each group are sorted by the
+    mtime, date, week..y10, ls, oversold}); rows within each group are sorted by the
     Year % column (CAGR) descending, rows without a year value last
     (user request 2026-10-30), and the groups themselves are
     ordered by their average Year % CAGR descending, year-less
@@ -468,7 +523,8 @@ def fetch_board(now=None, groups=None, progress=None):
     below); notes carries one human-readable line per
     degraded contract, for callers that log. Each row's "ls" is the
     (0x20, 20x50, 50x200) trend-state triple from ls_states() on the
-    same completed closes the horizons use. Each row's "date" is
+    same completed closes the horizons use, and its "oversold" is
+    oversold_up() on those closes. Each row's "date" is
     its data date (Eastern, ISO): for a quoted row, the calendar
     date of its market time (the instant "mtime" renders); for a
     completed-close fallback row, the date of its last completed
@@ -519,7 +575,8 @@ def fetch_board(now=None, groups=None, progress=None):
             rows = data.setdefault(gname, [])
             row = {"sym": sym, "label": label, "dec": dec, "kind": kind,
                    "last": None, "chg": None, "pct": None, "mtime": None,
-                   "date": None, "ls": (None, None, None)}
+                   "date": None, "ls": (None, None, None),
+                   "oversold": None}
             for key, _n in HORIZONS:
                 row[key] = None
             got, closes, last_bar_date = results[sym]
@@ -572,6 +629,7 @@ def fetch_board(now=None, groups=None, progress=None):
                 notes.append(f"futures: {sym} quote unavailable; last/day "
                              "from completed closes")
             row["ls"] = ls_states(closes)
+            row["oversold"] = oversold_up(closes)
             for key, n in HORIZONS:
                 if len(closes) > n:
                     total = closes[-1] / closes[-1 - n] - 1.0

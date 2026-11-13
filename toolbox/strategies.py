@@ -52,6 +52,8 @@ from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.optimize import linprog, minimize
 from scipy.spatial.distance import squareform
 
+from toolbox.DataZoo.market.futures_board import oversold_up
+
 TRADING_DAYS = 252
 
 COV_METHODS = ("sample", "bbp", "clip", "ledoit_wolf", "nlshrink")
@@ -1286,6 +1288,10 @@ def merged_stats(prices: pd.DataFrame,
       convention): ``px_ema20`` (close > EMA20), ``ema_long``
       (EMA20 > EMA50), ``ema_regime`` (EMA50 > EMA200); True = L,
       False = S, None when the history is too short.
+    - ``oversold``: the merged "L/S O/S↑" column's check —
+      futures_board.oversold_up on the full passed history
+      (RSI(14) < 35 with the close above EMA200); True / False,
+      None under 200 sessions.
     - ``win_rate``: mean over VT / VEA / VWO of the weekly win
       rate against that benchmark over the trailing window (the
       briefs' definition), from the ``win_benchmarks`` closes;
@@ -1332,6 +1338,7 @@ def merged_stats(prices: pd.DataFrame,
         row["px_ema20"] = _ema_state(px, 20, None)
         row["ema_long"] = _ema_state(px, 20, 50)
         row["ema_regime"] = _ema_state(px, 50, 200)
+        row["oversold"] = oversold_up([float(x) for x in px])
         lr = np.log(w / w.shift(1)).dropna()
         row["vol"] = (float(lr.std() * np.sqrt(TRADING_DAYS))
                       if len(lr) >= 2 else 0.0)
@@ -1369,7 +1376,7 @@ def merged_stats(prices: pd.DataFrame,
             progress(i, len(base.index), t)
     cols = ["rebased", "day_chg", "wk_chg", "mo_chg", "q_chg",
             "ytd_chg", "yr_chg", "px_ema20", "ema_long", "ema_regime",
-            "mu_ann",
+            "oversold", "mu_ann",
             "vol_ann", "vol", "sharpe0", "sharpe",
             "ulcer", "win_rate", "dd", "dd_q", "max_dd", "beta"]
     out = pd.DataFrame(rows).T

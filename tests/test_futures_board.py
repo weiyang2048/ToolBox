@@ -2,6 +2,8 @@
 
 import datetime
 
+import pytest
+
 from toolbox.DataZoo.market import futures_board as fb
 
 
@@ -385,6 +387,61 @@ def test_ls_states_length_gates():
     assert ls_states(rising[:30]) == (True, None, None)
     assert ls_states(rising[:120]) == (True, True, None)
     assert ls_states([]) == (None, None, None)
+
+
+def _pandas_rsi14(closes):
+    """The briefs' movement-tracker.rsi14 construction, in
+    pandas — the reference the pure-Python port must match
+    tick for tick."""
+    import pandas as pd
+    s = pd.Series(closes)
+    d = s.diff()
+    up = d.clip(lower=0).ewm(alpha=1 / 14, adjust=False).mean()
+    dn = (-d.clip(upper=0)).ewm(alpha=1 / 14, adjust=False).mean()
+    return 100.0 - 100.0 / (1.0 + float(up.iloc[-1] / dn.iloc[-1]))
+
+
+def test_rsi14_matches_the_pandas_wilder_construction():
+    import numpy as np
+    rng = np.random.default_rng(7)
+    closes = list(100 * np.exp(np.cumsum(
+        rng.normal(0.0004, 0.011, 400))))
+    assert fb.rsi14(closes) == pytest.approx(
+        _pandas_rsi14(closes), rel=1e-9)
+
+
+def test_rsi14_gates():
+    rising = [100.0 * 1.001 ** i for i in range(300)]
+    assert fb.rsi14(rising[:14]) is None        # too short
+    assert fb.rsi14(rising) is None             # no losses: undefined
+    assert fb.rsi14([100.0] * 300) is None      # flat: undefined
+
+
+def test_oversold_up_gates_and_states():
+    import math
+    # A steady compounded uptrend with a small wiggle (so the
+    # RSI is defined): the close rides far above its EMA200.
+    up = [100.0 * 1.0025 ** i * (1 + 0.003 * math.sin(i))
+          for i in range(300)]
+    assert fb.oversold_up(up[:199]) is None     # EMA200 leg undefined
+    assert fb.oversold_up(up) is False          # healthy uptrend
+    dipped = up[:280] + list(
+        up[279] * 0.99 ** k for k in range(1, 13))  # sharp late dip
+    assert fb.rsi14(dipped) < 35
+    assert fb.oversold_up(dipped) is True       # still above EMA200
+    falling = [100.0 * 0.9985 ** i * (1 + 0.003 * math.sin(i))
+               for i in range(300)]
+    assert fb.oversold_up(falling) is False     # oversold, no uptrend
+
+
+def test_fetch_board_rows_carry_oversold(monkeypatch):
+    closes = {sym: [100.0] * 300
+              for _g, contracts in fb.all_groups()
+              for sym, _l, _d, _k in contracts}
+    rep = _fake_fetch_board(monkeypatch, closes)
+    es = rep["data"]["US Equity"][0]
+    assert "oversold" in es
+    assert es["oversold"] is None   # flat history: RSI undefined
 
 
 def test_alternatives_is_a_named_group_only(monkeypatch):
