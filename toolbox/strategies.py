@@ -1288,7 +1288,7 @@ def merged_stats(prices: pd.DataFrame,
       convention): ``px_ema20`` (close > EMA20), ``ema_long``
       (EMA20 > EMA50), ``ema_regime`` (EMA50 > EMA200); True = L,
       False = S, None when the history is too short.
-    - ``oversold``: the merged "L/S O/S↑" column's check —
+    - ``oversold``: the merged "LS↑" column's check —
       futures_board.oversold_up on the full passed history
       (RSI(14) < 35 with the close above EMA200); True / False,
       None under 200 sessions.

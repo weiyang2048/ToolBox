@@ -452,7 +452,7 @@ def rsi14(closes):
 
 def oversold_up(closes):
     """Oversold-in-uptrend at the last close — the check the
-    merged "L/S O/S↑" column appends after the L/S letters
+    merged "LS↑" column appends after the L/S letters
     (user request 2026-11-13, first shipped in the briefs
     and the Markets app): True when RSI(14) is under 35
     while the last close sits above its EMA200 — the
