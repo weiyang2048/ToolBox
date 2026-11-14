@@ -572,7 +572,7 @@ def fetch_headlines(hours=24, now=None, progress=None):
             if progress is not None:
                 progress(done, len(urls), urls[i][0])
     seen, headlines, source_counts = set(), [], Counter()
-    for (name, _url), items in zip(urls, per_feed):
+    for (name, _url), items in zip(urls, per_feed, strict=True):
         for title, link, published, publisher in items or []:
             key = re.sub(r"\W+", " ", title.lower()).strip()
             if key in seen:
@@ -650,7 +650,7 @@ def headline_tone(title):
 
 
 def _tone_mix(c1, c2, f):
-    return tuple(round(a + (b - a) * f) for a, b in zip(c1, c2))
+    return tuple(round(a + (b - a) * f) for a, b in zip(c1, c2, strict=True))
 
 
 def _tone_hex(rgb):

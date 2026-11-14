@@ -162,7 +162,7 @@ def _pool_candidates(titles, docs, by_title, headlines):
     cand_surfaces = defaultdict(Counter)
     cand_proper = defaultdict(lambda: [0, 0])
     cand_full = defaultdict(set)        # key -> story titles
-    for title, doc in zip(titles, docs):
+    for title, doc in zip(titles, docs, strict=True):
         per_story = {}
         for key, surface, proper, full in _candidate_spans(doc):
             per_story[key] = surface

@@ -128,7 +128,7 @@ def model_headline_tones(titles, progress=None):
             p = np.exp(logits - logits.max(axis=1, keepdims=True))
             p /= p.sum(axis=1, keepdims=True)
             for i2, v in zip(batch_idx,
-                             (p[:, 0] - p[:, 1]).tolist()):
+                             (p[:, 0] - p[:, 1]).tolist(), strict=True):
                 out[i2] = v
                 _TONE_CACHE[keys[i2]] = v
             resolved += len(batch_idx)

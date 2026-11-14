@@ -163,10 +163,10 @@ def _spread_fig(p):
     import pandas as pd
 
     idx = pd.DatetimeIndex(pd.to_datetime(dates))
-    pts = [(d, v) for d, v in zip(idx, vals) if v is not None]
+    pts = [(d, v) for d, v in zip(idx, vals, strict=True) if v is not None]
     runs = []
     run = [pts[0]]
-    for (d0, v0), (d1, v1) in zip(pts, pts[1:]):
+    for (d0, v0), (d1, v1) in zip(pts, pts[1:], strict=False):
         if (v0 > 0) != (v1 > 0) and v0 != v1:
             frac = (0.0 - v0) / (v1 - v0)
             dc = d0 + (d1 - d0) * frac

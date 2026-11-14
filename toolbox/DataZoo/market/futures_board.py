@@ -368,7 +368,7 @@ def _history_bars(sym):
         .get("close") or []
     today = datetime.datetime.now(ET).date()
     out = []
-    for t, c in zip(ts, closes):
+    for t, c in zip(ts, closes, strict=True):
         if c is None:
             continue
         d = datetime.datetime.fromtimestamp(t, ET).date()
@@ -447,7 +447,7 @@ def rsi14(closes):
     if len(closes) < 15:
         return None
     gains, losses = [], []
-    for prev, cur in zip(closes, closes[1:]):
+    for prev, cur in zip(closes, closes[1:], strict=False):
         d = cur - prev
         gains.append(max(d, 0.0))
         losses.append(max(-d, 0.0))
@@ -725,7 +725,7 @@ _RED = (248, 105, 107)
 
 
 def _lerp(c1, c2, t):
-    return tuple(round(a + (b - a) * t) for a, b in zip(c1, c2))
+    return tuple(round(a + (b - a) * t) for a, b in zip(c1, c2, strict=True))
 
 
 def shade_zero(v, scale):

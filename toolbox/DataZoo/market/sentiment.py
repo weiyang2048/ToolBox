@@ -327,7 +327,7 @@ def _add_gold_trace(fig, g, geom, *, color, box):
         name="Gold futures (GC=F, $/oz)", opacity=0.95,
         line=dict(color=color, width=1.6),
         customdata=[[d, v] for d, v in
-                    zip(_dates(g.index), g.values)],
+                    zip(_dates(g.index), g.values, strict=True)],
         hovertemplate="%{customdata[0]}<br>"
                       "%{customdata[1]:$,.0f}/oz<extra>"
                       "Gold</extra>"))
@@ -364,7 +364,7 @@ def _add_endpoint_labels(fig, endpoints, warp_one, *, box):
     # preserved, LABEL_MIN_SEP apart.
     placed = _spread_labels(
         [float(s.iloc[-1]) + 3.0 for _c, s in endpoints])
-    for (color, s), label_y in zip(endpoints, placed):
+    for (color, s), label_y in zip(endpoints, placed, strict=True):
         v = float(s.iloc[-1])
         fig.add_trace(go.Scatter(
             x=[warp_one(s.index[-1])], y=[v],

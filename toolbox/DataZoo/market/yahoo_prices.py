@@ -598,7 +598,7 @@ def _intraday_session_closes(ticker, instrument_type=None):
         closes = r["indicators"]["quote"][0]["close"]
         cutoff = 17 if instrument_type == "FUTURE" else 16
         ny = ZoneInfo("America/New_York")
-        for t, c in zip(r["timestamp"], closes):
+        for t, c in zip(r["timestamp"], closes, strict=True):
             if c is None:
                 continue
             et = datetime.datetime.fromtimestamp(
@@ -639,7 +639,7 @@ def yahoo_daily(ticker, p1=0, p2=None, include_partial=False):
     # A cache hit may hold a wider window than requested; slice
     # the raw bars to exactly the requested [p1, p2], as a direct
     # fetch of this window would have returned.
-    pairs = [(t, c) for t, c in zip(ts_all, closes_all)
+    pairs = [(t, c) for t, c in zip(ts_all, closes_all, strict=True)
              if p1 <= t <= p2]
     # Any recent bar still null (the index/futures shape: the
     # completed session's bar sits unfilled behind the live

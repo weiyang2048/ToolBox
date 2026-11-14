@@ -257,7 +257,7 @@ def _strategy_order(names: list[str]) -> list[str]:
     """
     ranks = [_combo_rank(s) for s in names]
     if all(r is not None for r in ranks):
-        return [s for _r, s in sorted(zip(ranks, names),
+        return [s for _r, s in sorted(zip(ranks, names, strict=True),
                                       key=lambda t: t[0])]
     base_rank = {s: i for i, s in enumerate(STRATEGY_NAMES)}
 
@@ -1580,7 +1580,7 @@ def walk_forward_backtest(
         n_reb += 1
         weights_history.append({
             "date": simple.index[start],
-            "weights": {lab: dict(zip(tickers, W[lab])) for lab in labels},
+            "weights": {lab: dict(zip(tickers, W[lab], strict=True)) for lab in labels},
         })
         for lab in labels:
             days, turn, drift[lab] = _hold_period(

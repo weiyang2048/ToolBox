@@ -195,7 +195,7 @@ def current_cycle_paths():
         syms = ("^GSPC",) + _XUS
         with ThreadPoolExecutor(max_workers=6) as pool:
             got = dict(zip(syms, pool.map(
-                lambda s: _indexed(s, p1), syms)))
+                lambda s: _indexed(s, p1), syms), strict=True))
         out = {}
 
         def put(key, leg):

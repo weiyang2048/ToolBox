@@ -67,7 +67,7 @@ class ImageLoader(Dataset):
         Returns:
             tuple: A tuple containing a batch of images and a batch of labels.
         """
-        images, labels = tuple(zip(*batch))
+        images, labels = tuple(zip(*batch, strict=True))
         images = torch.stack(images, dim=0)
         labels = torch.as_tensor(labels)
         return images, labels

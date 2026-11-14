@@ -179,7 +179,7 @@ def plot_revenue_components(results: pd.DataFrame, risk_aversion: float = 0.25) 
     colors = ['blue', 'green', 'red']
     labels = ['Wind Revenue', 'Offer Revenue', 'Bid Revenue']
     
-    for i, (comp, color, label) in enumerate(zip(components, colors, labels)):
+    for i, (comp, color, label) in enumerate(zip(components, colors, labels, strict=True)):
         values = results[comp].values
         x = np.array(hours) + i * bar_width
         ax1.bar(x, values, width=bar_width, color=color, alpha=0.7, label=label)

@@ -22,7 +22,7 @@ def scale(v, d0, d1, r0, r1):
 def line_path(xs, ys):
     return " ".join(
         ("M" if i == 0 else "L") + " %.1f %.1f" % (x, y)
-        for i, (x, y) in enumerate(zip(xs, ys)))
+        for i, (x, y) in enumerate(zip(xs, ys, strict=True)))
 
 
 def svg_elems(w, h, body):

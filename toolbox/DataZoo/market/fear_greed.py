@@ -199,7 +199,7 @@ class FearGreed:
 
         crypto_by_day = {
             timestamp.strftime("%Y-%m-%d"): value
-            for timestamp, value in zip(crypto["x"], crypto["y"])
+            for timestamp, value in zip(crypto["x"], crypto["y"], strict=True)
         }
         crypto_df = pd.DataFrame.from_dict(
             crypto_by_day,

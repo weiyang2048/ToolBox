@@ -201,7 +201,7 @@ def warped_panel(dates, series, colors, full_names,
     idx = pd.DatetimeIndex(pd.to_datetime(dates))
     fig = go.Figure()
     for key, vals in series.items():
-        pts = [(d, v) for d, v in zip(idx, vals)
+        pts = [(d, v) for d, v in zip(idx, vals, strict=True)
                if v is not None]
         kw = {}
         if fill_key == key:
@@ -238,7 +238,7 @@ def warped_panel(dates, series, colors, full_names,
             hi=y_range[1] - sep * 0.4, min_sep=sep)
         xw = _warp([idx[-1]])[0]
         xw_lbl = _warp([idx[-1] - pd.Timedelta(days=3)])[0]
-        for (key, v), ly in zip(ends, placed):
+        for (key, v), ly in zip(ends, placed, strict=True):
             fig.add_trace(go.Scatter(
                 x=[xw], y=[v], mode="markers",
                 showlegend=False, hoverinfo="skip",

@@ -242,7 +242,7 @@ def linked_cloud_html(topics, edges, caption=None):
             cb = [int(by_term[b]["tone_color"][j:j + 2], 16)
                   for j in (1, 3, 5)]
             color = "#{:02X}{:02X}{:02X}".format(
-                *[round((x + y) / 2) for x, y in zip(ca, cb)])
+                *[round((x + y) / 2) for x, y in zip(ca, cb, strict=True)])
         else:
             same = (by_term[a]["group"] == by_term[b]["group"]
                     and by_term[a]["group"] != "neutral")
