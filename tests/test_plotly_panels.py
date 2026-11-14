@@ -82,7 +82,7 @@ def test_warped_panel_short_window_golden():
 
     lines = [t for t in d["data"] if t.get("mode") == "lines"]
     assert [t["name"] for t in lines] == ["Alpha", "Beta"]
-    for trace, vals in zip(lines, (a, b)):
+    for trace, vals in zip(lines, (a, b), strict=True):
         assert list(trace["y"]) == vals
         assert np.allclose(trace["x"], expect_x, atol=1e-12)
     assert lines[0]["customdata"][0] == "Jan 05, 2026"

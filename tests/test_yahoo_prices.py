@@ -486,7 +486,7 @@ def test_download_progress_chunks_and_reports_counts(monkeypatch):
     assert seen[-1] == (45, 45)
     dones = [d for d, _t in seen]
     assert dones == sorted(dones)  # cumulative: never goes backwards
-    increments = [b - a for a, b in zip(dones, dones[1:])]
+    increments = [b - a for a, b in zip(dones, dones[1:], strict=False)]
     assert sorted(increments) == [5, 20, 20]  # one report per chunk
     assert list(out.columns) == tickers
     assert int(out["T44"].notna().sum()) == 100

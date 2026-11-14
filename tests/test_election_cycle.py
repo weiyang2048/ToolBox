@@ -109,7 +109,7 @@ def test_chips_four_per_panel_chronological():
     chips = [v for k, v in blocks
              if k == "html" and "12m before" in v]
     assert len(chips) == 4
-    for seg, (_, values, positive) in zip(chips, PANELS):
+    for seg, (_, values, positive) in zip(chips, PANELS, strict=True):
         order = [seg.index(s) for s in CHIP_LABELS]
         assert order == sorted(order)
         for v in values:
@@ -138,7 +138,7 @@ def test_label_plate_clears_overlay_and_band():
     df = election_series()
     figs = _figs(chart_figs(df, cur))
     days = df["day"].tolist()
-    for f, key in zip(figs[:2], ("mid_us", "mid_xus")):
+    for f, key in zip(figs[:2], ("mid_us", "mid_xus"), strict=True):
         ann = next(a for a in f.layout.annotations
                    if a.text == LABEL)
         # The plate is right-anchored at the overlay's
