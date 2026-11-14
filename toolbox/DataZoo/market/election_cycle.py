@@ -212,8 +212,7 @@ def current_cycle_paths():
         return out
 
 
-def _panel_fig(days, mean, q25, q75, title, overlay,
-               overlay_start):
+def _panel_fig(path, *, title, overlay, overlay_start):
     """One average-path panel as a Plotly figure (user
     direction 2026-11-10, demoed and approved — the SVG
     panel it replaces gave the axes 950x180 of its
@@ -228,8 +227,11 @@ def _panel_fig(days, mean, q25, q75, title, overlay,
     claims the panel for the plot: margins 10, the title
     in a thin top strip, the y scale inside on dark
     chips, the endpoint value inside at the line's end,
-    the legend under the plot."""
+    the legend under the plot. ``path`` is the data bundle
+    (days, mean, q25, q75)."""
     import math
+
+    days, mean, q25, q75 = path
 
     import plotly.graph_objects as go
 
@@ -402,10 +404,10 @@ def chart_figs(df, current=None):
             ostart = (current.get(okey + "_start", 0)
                       if okey else 0)
             blocks.append(("fig", _panel_fig(
-                days, df[key + "_mean"].tolist(),
-                df[key + "_q25"].tolist(),
-                df[key + "_q75"].tolist(), title,
-                overlay, ostart)))
+                (days, df[key + "_mean"].tolist(),
+                 df[key + "_q25"].tolist(),
+                 df[key + "_q75"].tolist()), title=title,
+                overlay=overlay, overlay_start=ostart)))
             blocks.append(("html", wrap(_chips([
                 f"12m before &nbsp;<b>{b12:+.1f}%</b> mean",
                 f"6m before &nbsp;<b>{b6:+.1f}%</b> mean",
