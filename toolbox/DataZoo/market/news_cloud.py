@@ -826,23 +826,14 @@ def _canon_of_term(term):
     return _canon_tokens(toks)
 
 
-def _mine_phrases(headlines, known_terms, top_n=10, min_weight=3):
-    """Frequent bigrams/trigrams across ALL headlines — the neutral
-    discovery layer, co-equal with the lexicon: it runs on the whole
-    sample (not just lexicon leftovers), so a story the lexicon has
-    no name for can still top the cloud, and one it has an entry
-    for can't hide a second theme. Phrases overlapping a lexicon
-    term (either direction) are dropped as duplicates of it.
-
-    Grams are counted by CANONICAL KEY, so surface variants of
-    one phrase pool their headlines before the min_weight cut
-    and the ranking; the display label is the key's most
-    frequent surface form, and the topic records every pooled
-    surface (the links layer matches on all of them)."""
+def _count_grams(headlines):
+    """Counting phase of _mine_phrases: canonical-key
+    counts, per-key sources, and per-surface examples,
+    links and best-ranked hits — the pool tuple the
+    scoring phase consumes."""
     counts = Counter()
     surf_counts = {}
     key_sources = {}
-    pool_outlets = len({h.get("source", "") for h in headlines})
     surf_example, surf_example_link = {}, {}
     surf_best, surf_best_link, surf_best_rank = {}, {}, {}
     for h in headlines:
@@ -885,6 +876,19 @@ def _mine_phrases(headlines, known_terms, top_n=10, min_weight=3):
                     surf_best_rank[gram] = rank
                     surf_best[gram] = h["title"]
                     surf_best_link[gram] = h.get("link", "")
+    return (counts, surf_counts, key_sources, surf_example,
+            surf_example_link, surf_best, surf_best_link)
+
+
+def _score_candidates(pool, known_terms, *, top_n, min_weight,
+                      pool_outlets):
+    """Scoring phase of _mine_phrases: boilerplate and
+    fragment suppression, then the ranked gate chain
+    (weight, boilerplate, independence, shape, outlet)
+    with overlap dedupe against the known terms and the
+    topics already accepted."""
+    counts, surf_counts, key_sources, surf_example, \
+        surf_example_link, surf_best, surf_best_link = pool
     # Template/boilerplate phrases are not topics: regional
     # editions carry formulaic headlines ("Q2 results 2026: X share
     # price ...") whose scaffolding would otherwise top the cloud.
@@ -967,6 +971,27 @@ def _mine_phrases(headlines, known_terms, top_n=10, min_weight=3):
                       "group": _family_of(surface), "mined": True,
                       "canon": key,
                       "surfaces": dict(surf_counts[key])})
+    return mined
+
+
+def _mine_phrases(headlines, known_terms, top_n=10, min_weight=3):
+    """Frequent bigrams/trigrams across ALL headlines — the neutral
+    discovery layer, co-equal with the lexicon: it runs on the whole
+    sample (not just lexicon leftovers), so a story the lexicon has
+    no name for can still top the cloud, and one it has an entry
+    for can't hide a second theme. Phrases overlapping a lexicon
+    term (either direction) are dropped as duplicates of it.
+
+    Grams are counted by CANONICAL KEY, so surface variants of
+    one phrase pool their headlines before the min_weight cut
+    and the ranking; the display label is the key's most
+    frequent surface form, and the topic records every pooled
+    surface (the links layer matches on all of them)."""
+    pool = _count_grams(headlines)
+    pool_outlets = len({h.get("source", "") for h in headlines})
+    mined = _score_candidates(pool, known_terms, top_n=top_n,
+                              min_weight=min_weight,
+                              pool_outlets=pool_outlets)
     folded = _fold_windows(mined, headlines, known_terms)
     # Template demotion: a mined phrase whose headlines live
     # inside one rotating-entity skeleton is a data template,
