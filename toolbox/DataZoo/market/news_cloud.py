@@ -1022,6 +1022,72 @@ _WINDOW_OK_INTERNAL = {"the", "a", "an", "is", "are", "was",
                        "were", "be", "been"}
 
 
+def _members(topic, titles):
+    hits = set()
+    grams = topic.get("surfaces") or {topic["term"].lower(): 1}
+    for gram in grams:
+        g = gram.lower().replace("-", " ")
+        for i, title in enumerate(titles):
+            if g in title:
+                hits.add(i)
+    return hits
+
+
+
+def _contains(stream, seq):
+    stream, seq = list(stream), list(seq)
+    return any(stream[i:i + len(seq)] == seq
+               for i in range(len(stream) - len(seq) + 1))
+
+
+
+def _overlaps(term, others):
+    dk = term.lower().replace("-", "").replace(" ", "")
+    for other in others:
+        k = other.lower().replace("-", "").replace(" ", "")
+        if dk in k or k in dk:
+            return True
+    return False
+
+
+def _foldable(x, y, mx, my, streams):
+    """The window-fold evidence bar for one pair (see
+    _fold_windows for the full statement): equal canonical
+    length, no ampersand entity tokens, no adjunct-heading
+    stopwords inside, a join that passes the shape gate,
+    identical member sets, and the joined phrase occurring
+    contiguously in >= FOLD_MIN_CONTAINMENT of the shared
+    headlines. Returns (joined, contig) or None."""
+    joined = None
+    if (len(x["canon"]) == len(y["canon"])
+            and not any("&" in tok
+                        for tok in x["canon"] + y["canon"])
+            and not any(tok in STOPWORDS
+                        and tok not in _WINDOW_OK_INTERNAL
+                        for tok in x["canon"][1:-1]
+                        + y["canon"][1:-1])):
+        joined = _join_windows(x["canon"], y["canon"])
+    # Fold-fragment gate (2026-11-02): the joined
+    # phrase must itself pass the shape gate — a
+    # fold may not assemble a fragment that neither
+    # gate would let render on its own. A failed
+    # join is an ordinary fold miss: the windows
+    # keep their separate topics. (The pinned
+    # explainer join, "What Is Behind The Move",
+    # passes the gate.)
+    if joined is not None and not _shape_ok(joined):
+        joined = None
+    contig = []
+    if joined is not None and mx and mx == my:
+        contig = [j for j in sorted(mx)
+                  if _contains(streams[j], joined)]
+        if len(contig) < FOLD_MIN_CONTAINMENT * len(mx):
+            contig = []
+    if not contig:
+        return None
+    return joined, contig
+
+
 def _fold_windows(mined, headlines, known_terms):
     """Window fold: two mined grams that are overlapping windows
     of one recurring headline phrase render as two topics for a
@@ -1064,70 +1130,23 @@ def _fold_windows(mined, headlines, known_terms):
     streams = [_canon_tokens(_tokens(h["title"])) for h in headlines]
     raw_streams = [_tokens(h["title"]) for h in headlines]
 
-    def _members(topic):
-        hits = set()
-        grams = topic.get("surfaces") or {topic["term"].lower(): 1}
-        for gram in grams:
-            g = gram.lower().replace("-", " ")
-            for i, title in enumerate(titles):
-                if g in title:
-                    hits.add(i)
-        return hits
-
-    def _contains(stream, seq):
-        stream, seq = list(stream), list(seq)
-        return any(stream[i:i + len(seq)] == seq
-                   for i in range(len(stream) - len(seq) + 1))
-
-    def _overlaps(term, others):
-        dk = term.lower().replace("-", "").replace(" ", "")
-        for other in others:
-            k = other.lower().replace("-", "").replace(" ", "")
-            if dk in k or k in dk:
-                return True
-        return False
 
     topics = [dict(t) for t in mined]
     changed = True
     while changed:
         changed = False
-        members = {t["term"]: _members(t) for t in topics}
+        members = {t["term"]: _members(t, titles) for t in topics}
         topics.sort(key=lambda t: (t["weight"], t["term"]))
         for i, x in enumerate(topics):
             if changed:
                 break
             for y in topics[i + 1:]:
-                if len(x["canon"]) != len(y["canon"]):
+                got = _foldable(x, y, members[x["term"]],
+                                members[y["term"]], streams)
+                if got is None:
                     continue
-                if any("&" in tok
-                       for tok in x["canon"] + y["canon"]):
-                    continue
-                if any(tok in STOPWORDS
-                       and tok not in _WINDOW_OK_INTERNAL
-                       for tok in x["canon"][1:-1]
-                       + y["canon"][1:-1]):
-                    continue
-                joined = _join_windows(x["canon"], y["canon"])
-                if joined is None:
-                    continue
-                # Fold-fragment gate (2026-11-02): the joined
-                # phrase must itself pass the shape gate — a
-                # fold may not assemble a fragment that neither
-                # gate would let render on its own. A failed
-                # join is an ordinary fold miss: the windows
-                # keep their separate topics. (The pinned
-                # explainer join, "What Is Behind The Move",
-                # passes the gate.)
-                if not _shape_ok(joined):
-                    continue
+                joined, contig = got
                 mx, my = members[x["term"]], members[y["term"]]
-                if not mx or mx != my:
-                    continue
-                contig = [j for j in sorted(mx)
-                          if _contains(streams[j], joined)]
-                if not contig or len(contig) < \
-                        FOLD_MIN_CONTAINMENT * len(mx):
-                    continue
                 # The joined surface, verbatim from the first
                 # headline whose token stream carries it.
                 j0 = contig[0]
