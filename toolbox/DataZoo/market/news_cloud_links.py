@@ -96,6 +96,12 @@ def _place_nodes(topics, sizes):
     return nodes
 
 
+# Ellipse-normalized distance inside which two words repel:
+# contact is rho = 1, so repulsion reaches 70% beyond the
+# boxes' edges (see _force_relax).
+_REPEL_RHO = 1.7
+
+
 def _force_relax(nodes, edges):
     """Ellipse-aware repulsion (a word clears its full
     box plus a margin, not just its center) with weak edge
@@ -114,8 +120,8 @@ def _force_relax(nodes, edges):
                 rx = (a["w"] + b["w"]) / 2 + margin
                 ry = (a["h"] + b["h"]) / 2 + margin
                 rho = math.hypot(dx / rx, dy / ry) or 0.01
-                if rho < 1.7:
-                    push = (1.7 - rho) * 3.2
+                if rho < _REPEL_RHO:
+                    push = (_REPEL_RHO - rho) * 3.2
                     ux, uy = dx / (rho * rx), dy / (rho * ry)
                     a["vx"] -= push * ux; a["vy"] -= push * uy
                     b["vx"] += push * ux; b["vy"] += push * uy
