@@ -142,8 +142,16 @@ def main():
         verdict.update(fields)
         fails.extend(script_fails)
 
-    out_dir = args.out_dir or os.path.dirname(os.path.abspath(args.audio))
-    stem = re.sub(r"\.(mp3|wav|m4a)$", "", os.path.basename(args.audio))
+    return _write_verdict(verdict, fails, text, args.audio,
+                          args.out_dir)
+
+
+def _write_verdict(verdict, fails, text, audio, out_dir):
+    """Write the transcript beside the report and finish the
+    verdict: set its result, print the verdict JSON and the
+    result line. Returns the process exit code."""
+    out_dir = out_dir or os.path.dirname(os.path.abspath(audio))
+    stem = re.sub(r"\.(mp3|wav|m4a)$", "", os.path.basename(audio))
     with open(os.path.join(out_dir, f"{stem}_transcript.txt"), "w") as f:
         f.write(text + "\n")
     verdict["result"] = "FAIL: " + "; ".join(fails) if fails else "PASS"
