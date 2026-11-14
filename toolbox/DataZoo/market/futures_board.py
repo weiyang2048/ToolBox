@@ -210,6 +210,10 @@ GLOBAL_SECTORS = [
     ("REET", "Real Est (REET)", 2),
 ]
 
+# Sessions in a trading year — the annualization basis for
+# the multi-year horizon columns.
+SESSIONS_PER_YEAR = 252
+
 # Trailing-horizon lookbacks, in sessions before the last completed one.
 HORIZONS = [("week", 5), ("month", 21), ("quarter", 63), ("year", 252),
             ("y3", 756), ("y5", 1260), ("y10", 2520)]
@@ -609,13 +613,13 @@ def _assemble_row(sym, label, dec, kind, result):
     for key, n in HORIZONS:
         if len(closes) > n:
             total = closes[-1] / closes[-1 - n] - 1.0
-            if n >= 252:
+            if n >= SESSIONS_PER_YEAR:
                 # Multi-year columns are CAGR (user request
                 # 2026-10-29): annualize at sessions/252
                 # years — exactly 1, 3, 5, 10 for the
                 # year-and-longer lookbacks (n = 252 is the
                 # identity).
-                total = (1.0 + total) ** (252.0 / n) - 1.0
+                total = (1.0 + total) ** (SESSIONS_PER_YEAR / n) - 1.0
             row[key] = 100.0 * total
     return row, notes, available
 
