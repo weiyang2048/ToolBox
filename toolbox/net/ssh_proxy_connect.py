@@ -49,7 +49,8 @@ def open_tunnel(host, port):
     while b"\r\n\r\n" not in buf:
         chunk = s.recv(4096)
         if not chunk:
-            raise OSError("proxy closed connection during CONNECT")
+            msg = "proxy closed connection during CONNECT"
+            raise OSError(msg)
         buf += chunk
     status = buf.split(b"\r\n", 1)[0].decode("latin-1")
     if " 200 " not in status:

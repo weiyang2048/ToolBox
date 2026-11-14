@@ -152,8 +152,8 @@ def fit_power_law_full(days_arr, values):
     values = np.asarray(values, dtype=float)
     n = len(days_arr)
     if n < 3:
-        raise ValueError(
-            f"fit_power_law_full needs >= 3 points, got {n}")
+        msg = f"fit_power_law_full needs >= 3 points, got {n}"
+        raise ValueError(msg)
     b, lnA, sigma = fit_power_law(days_arr, values)
     ln_d = np.log(days_arr)
     resid = np.log(values) - (lnA + b * ln_d)

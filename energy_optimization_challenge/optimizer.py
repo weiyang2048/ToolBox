@@ -128,11 +128,12 @@ class OptimalBiddingStrategy:
         results = opt.solve(model, tee=False)
         # check if optimization is successful
         if results.solver.status != pe.SolverStatus.ok:
-            raise ValueError(
+            msg = (
                 "Optimization failed: solver status "
                 f"{results.solver.status}, termination condition "
                 f"{results.solver.termination_condition}"
             )
+            raise ValueError(msg)
 
         # Pre-initialize variables if they're not populated from the solution
         for i in model.scenarios:

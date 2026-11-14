@@ -154,7 +154,8 @@ def _compute_raw_momentum(
 
     prices = prices.dropna()
     if prices.empty or (prices <= 0).any():
-        raise ValueError("All prices must be positive for momentum calculation")
+        msg = "All prices must be positive for momentum calculation"
+        raise ValueError(msg)
     if skip_days < 0 or lookback_days <= skip_days:
         return None
     # Use whatever history is available: clamp the lookback window to the data,

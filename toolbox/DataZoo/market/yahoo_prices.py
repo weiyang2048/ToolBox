@@ -424,11 +424,13 @@ def with_retry(fn, leg, attempts=3):
         except HTTPError as e:
             if (e.code not in (429, 500, 502, 503, 504)
                     or k == attempts - 1):
-                raise RuntimeError(f"{leg}: {e}") from e
+                msg = f"{leg}: {e}"
+                raise RuntimeError(msg) from e
             _time.sleep(delay)
             delay *= 2.5
         except Exception as e:
-            raise RuntimeError(f"{leg}: {e}") from e
+            msg = f"{leg}: {e}"
+            raise RuntimeError(msg) from e
 
 
 # The shared chart cache: ticker -> (window start fetched,

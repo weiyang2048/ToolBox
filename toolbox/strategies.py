@@ -165,9 +165,11 @@ def parse_window(name: str) -> tuple[str, int | None]:
     try:
         w = int(tail)
     except ValueError:
-        raise ValueError(f"Unknown strategy: {name}") from None
+        msg = f"Unknown strategy: {name}"
+        raise ValueError(msg) from None
     if w < 1:
-        raise ValueError(f"Unknown strategy: {name}")
+        msg = f"Unknown strategy: {name}"
+        raise ValueError(msg)
     return clean, w
 
 
@@ -229,7 +231,8 @@ def resolve_strategy(name: str) -> tuple[str, str | None, str | None]:
                         _MEAN_FROM_SHORT[mean_s])
         if base in _COV_ONLY_RULES and qual in _COV_FROM_SHORT:
             return base, _COV_FROM_SHORT[qual], None
-    raise ValueError(f"Unknown strategy: {name}")
+    msg = f"Unknown strategy: {name}"
+    raise ValueError(msg)
 
 
 _COMBO_RANK = {s: i for i, s in enumerate(COMBO_STRATEGY_NAMES)}
@@ -472,7 +475,8 @@ def clean_covariance(R: pd.DataFrame, method: str) -> tuple[np.ndarray, dict]:
     method's own parameter (LW shrinkage) when it has one.
     """
     if method not in COV_METHODS:
-        raise ValueError(f"Unknown covariance method: {method}")
+        msg = f"Unknown covariance method: {method}"
+        raise ValueError(msg)
     n, p = len(R), R.shape[1]
     q = p / n
     vols = R.std().values * np.sqrt((n - 1) / n)  # population vols, match S_raw
@@ -560,7 +564,8 @@ def clean_mean(R: pd.DataFrame, S: np.ndarray, method: str,
     risk-free rate ``rf_d`` (the briefs' convention).
     """
     if method not in MEAN_METHODS:
-        raise ValueError(f"Unknown mean method: {method}")
+        msg = f"Unknown mean method: {method}"
+        raise ValueError(msg)
     n = len(R)
     mu_hat = R.mean().values - rf_d
     vols = R.std().values
@@ -1055,15 +1060,17 @@ def strategy_weights(name: str, R: pd.DataFrame, S: np.ndarray,
         return spmo_weights(R)
     if name == SPMO_CAP_SCORE_NAME:
         if caps is None:
-            raise ValueError(
+            msg = (
                 f"{SPMO_CAP_SCORE_NAME} requires caps "
                 "(per-ticker market caps struck at the "
                 "window's end)")
+            raise ValueError(msg)
         return spmo_variant_weights(R, caps=caps)
     rs = _parse_rs(name)
     if rs is not None:
         return rs_weights(R, rs[0], rs[1])
-    raise ValueError(f"Unknown or ensemble strategy: {name}")
+    msg = f"Unknown or ensemble strategy: {name}"
+    raise ValueError(msg)
 
 
 def snapshot_weights(R: pd.DataFrame, cov_method: str, mean_method: str,
@@ -1537,7 +1544,8 @@ def walk_forward_backtest(
     if len(px) < seed + hold + 1:
         return None
     if window is not None and window < 1:
-        raise ValueError(f"window must be positive, got {window}")
+        msg = f"window must be positive, got {window}"
+        raise ValueError(msg)
     simple = px.pct_change().dropna()
     logret = np.log(px / px.shift(1)).dropna()
     simple = simple.loc[logret.index]
@@ -1554,9 +1562,10 @@ def walk_forward_backtest(
         eff_window[name] = w_suf if " @ " in name else window
     if caps_shares is None and any(
             r[0] == SPMO_CAP_SCORE_NAME for r in resolved.values()):
-        raise ValueError(
+        msg = (
             f"{SPMO_CAP_SCORE_NAME} requires caps_shares "
             "(per-ticker shares outstanding)")
+        raise ValueError(msg)
     labels = list(base) + (["Average"] if "Average" in strategies and base else [])
     if not labels:
         return None

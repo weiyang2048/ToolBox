@@ -91,7 +91,8 @@ def _load_nlp():
     if _NLP is not None:
         return _NLP
     if _NLP_FAILED:
-        raise ImportError("spaCy unavailable in this process")
+        msg = "spaCy unavailable in this process"
+        raise ImportError(msg)
     try:
         import spacy
         _NLP = spacy.load("en_core_web_sm")

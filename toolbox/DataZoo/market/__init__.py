@@ -54,9 +54,8 @@ def __getattr__(name):
         return importlib.import_module(
             f".{name}", __name__)
     except ModuleNotFoundError:
-        raise AttributeError(
-            f"module {__name__!r} has no attribute {name!r}"
-        ) from None
+        msg = f"module {__name__!r} has no attribute {name!r}"
+        raise AttributeError(msg) from None
 
 
 def __dir__():

@@ -39,7 +39,8 @@ class EfficientNetModel:
         """
         self.model_size = model_size.lower()
         if not self.model_size in [f"b{i}" for i in range(8)]:
-            raise ValueError(f"model_size must be one of {[f'b{i}' for i in range(8)]}")
+            msg = f"model_size must be one of {[f'b{i}' for i in range(8)]}"
+            raise ValueError(msg)
 
         self.num_classes = num_classes
         self.pretrained = pretrained

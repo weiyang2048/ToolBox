@@ -64,7 +64,8 @@ def _draw_shape(rng, shape, size):
         for i in range(n_bars):
             mask[:, int(edges[2 * i]) : int(edges[2 * i + 1])] = True
     else:  # pragma: no cover - generate_dataset validates the names
-        raise ValueError(f"unknown shape {shape!r}; choose from {SHAPES}")
+        msg = f"unknown shape {shape!r}; choose from {SHAPES}"
+        raise ValueError(msg)
     return np.where(mask, foreground, background)
 
 
@@ -97,18 +98,24 @@ def generate_dataset(
     """
     classes = tuple(classes)
     if not classes:
-        raise ValueError("classes must name at least one shape")
+        msg = "classes must name at least one shape"
+        raise ValueError(msg)
     unknown = [name for name in classes if name not in SHAPES]
     if unknown:
-        raise ValueError(f"unknown shapes {unknown}; choose from {SHAPES}")
+        msg = f"unknown shapes {unknown}; choose from {SHAPES}"
+        raise ValueError(msg)
     if len(set(classes)) != len(classes):
-        raise ValueError(f"classes must not repeat: {classes}")
+        msg = f"classes must not repeat: {classes}"
+        raise ValueError(msg)
     if n_per_class < 1:
-        raise ValueError(f"n_per_class must be at least 1, got {n_per_class}")
+        msg = f"n_per_class must be at least 1, got {n_per_class}"
+        raise ValueError(msg)
     if size < _MIN_SIZE:
-        raise ValueError(f"size must be at least {_MIN_SIZE}, got {size}")
+        msg = f"size must be at least {_MIN_SIZE}, got {size}"
+        raise ValueError(msg)
     if not 0.0 <= noise <= 1.0:
-        raise ValueError(f"noise must lie in [0, 1], got {noise}")
+        msg = f"noise must lie in [0, 1], got {noise}"
+        raise ValueError(msg)
 
     class_names = tuple(sorted(classes))
     rng = np.random.default_rng(seed)
@@ -161,9 +168,8 @@ def write_dataset(
     try:
         from PIL import Image
     except ImportError as err:  # pragma: no cover - env-dependent
-        raise ImportError(
-            "write_dataset needs Pillow (the ToolBox 'vision' extra)"
-        ) from err
+        msg = "write_dataset needs Pillow (the ToolBox 'vision' extra)"
+        raise ImportError(msg) from err
     images, _, class_names = generate_dataset(
         n_per_class, classes=classes, size=size, seed=seed, noise=noise
     )

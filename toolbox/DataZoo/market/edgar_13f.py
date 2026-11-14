@@ -99,7 +99,8 @@ def _latest_13f(cik: str, user_agent: str) -> dict:
                 "filing_date": recent.get("filingDate", [""])[i],
                 "report_period": report,
             }
-    raise ValueError(f"No 13F-HR filing for CIK {cik}")
+    msg = f"No 13F-HR filing for CIK {cik}"
+    raise ValueError(msg)
 
 
 def _holdings_xml_url(cik: str, accession: str, user_agent: str) -> str:
@@ -119,7 +120,8 @@ def _holdings_xml_url(cik: str, accession: str, user_agent: str) -> str:
         and "xsl" not in str(item.get("name", "")).lower()
     ]
     if not xml_names:
-        raise ValueError(f"No holdings XML for {accession}")
+        msg = f"No holdings XML for {accession}"
+        raise ValueError(msg)
     name = next(
         (n for n in xml_names if re.search(r"info|holding|13f", n, re.I)),
         xml_names[0],
