@@ -69,6 +69,15 @@ EDGE_STRIP = {"the", "a", "an", "its", "his", "her", "their",
               "this", "that", "these", "those", "'s", "new"}
 MIN_STORIES = 3
 MAX_TOPICS = 20
+MAX_SPAN_TOKENS = 4
+
+# Key-overlap floor shared by both theme-merge stages. The
+# weight-ratio caps differ BY STAGE on purpose — within-source
+# theme clustering is stricter than the cross-source merge —
+# and must not be unified.
+MIN_KEY_OVERLAP = 0.5
+THEME_MAX_WEIGHT_RATIO = 2.5
+CLUSTER_MAX_WEIGHT_RATIO = 3.0
 
 _NLP = None
 _NLP_FAILED = False
@@ -118,7 +127,7 @@ def _candidate_spans(doc):
             toks = toks[1:]
         while toks and _norm_lemma(toks[-1]) in EDGE_STRIP:
             toks = toks[:-1]
-        if not toks or len(toks) > 4:
+        if not toks or len(toks) > MAX_SPAN_TOKENS:
             continue
         for i in range(len(toks)):
             for j in range(i + 1, len(toks) + 1):
@@ -243,7 +252,7 @@ def _theme_topics(kept, headlines):
             ratio = max(kept[i]["weight"], kept[j]["weight"]) \
                 / max(1, min(kept[i]["weight"],
                              kept[j]["weight"]))
-            if overlap >= 0.5 and ratio <= 2.5:
+            if overlap >= MIN_KEY_OVERLAP and ratio <= THEME_MAX_WEIGHT_RATIO:
                 pi, pj = find(i), find(j)
                 if pi != pj:
                     parent[pi] = pj
@@ -388,7 +397,7 @@ def _cluster_themes(cands):
             overlap = len(sa & sb) / max(1, min(len(sa), len(sb)))
             ratio = max(weights[i], weights[j]) / max(
                 1, min(weights[i], weights[j]))
-            if overlap >= 0.5 and ratio <= 3.0:
+            if overlap >= MIN_KEY_OVERLAP and ratio <= CLUSTER_MAX_WEIGHT_RATIO:
                 union(i, j)
                 continue
             if sa < sb or sb < sa:
