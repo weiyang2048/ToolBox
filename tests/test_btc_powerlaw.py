@@ -234,7 +234,8 @@ def test_with_retry_recovers_from_transient_429():
     def flaky():
         calls["n"] += 1
         if calls["n"] < 3:
-            raise HTTPError("u", 429, "Too Many Requests",
+            url = "u"
+            raise HTTPError(url, 429, "Too Many Requests",
                             None, None)
         return "ok"
 
@@ -246,7 +247,8 @@ def test_with_retry_names_the_leg_on_final_failure():
     import pytest
 
     def bad():
-        raise ValueError("boom")
+        msg = "boom"
+        raise ValueError(msg)
 
     with pytest.raises(RuntimeError, match="leg-y: boom"):
         bp._with_retry(bad, "leg-y")
@@ -261,7 +263,8 @@ def test_with_retry_does_not_retry_permanent_http_errors():
 
     def gone():
         calls["n"] += 1
-        raise HTTPError("u", 404, "Not Found", None, None)
+        url = "u"
+        raise HTTPError(url, 404, "Not Found", None, None)
 
     with pytest.raises(RuntimeError, match="leg-z"):
         bp._with_retry(gone, "leg-z")

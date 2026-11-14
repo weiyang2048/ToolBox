@@ -24,7 +24,8 @@ def test_with_retry_recovers_from_transient_429():
     def flaky():
         calls["n"] += 1
         if calls["n"] < 3:
-            raise HTTPError("u", 429, "Too Many Requests",
+            url = "u"
+            raise HTTPError(url, 429, "Too Many Requests",
                             None, None)
         return "ok"
 
@@ -34,7 +35,8 @@ def test_with_retry_recovers_from_transient_429():
 
 def test_with_retry_names_the_leg_on_final_failure():
     def bad():
-        raise ValueError("boom")
+        msg = "boom"
+        raise ValueError(msg)
 
     with pytest.raises(RuntimeError, match="leg-y: boom"):
         yp.with_retry(bad, "leg-y")
@@ -47,7 +49,8 @@ def test_with_retry_exhausts_attempts_on_persistent_429():
 
     def limited():
         calls["n"] += 1
-        raise HTTPError("u", 429, "Too Many Requests",
+        url = "u"
+        raise HTTPError(url, 429, "Too Many Requests",
                         None, None)
 
     with pytest.raises(RuntimeError, match="leg-w: HTTP"):
@@ -62,7 +65,8 @@ def test_with_retry_does_not_retry_permanent_http_errors():
 
     def gone():
         calls["n"] += 1
-        raise HTTPError("u", 404, "Not Found", None, None)
+        url = "u"
+        raise HTTPError(url, 404, "Not Found", None, None)
 
     with pytest.raises(RuntimeError, match="leg-z"):
         yp.with_retry(gone, "leg-z")
@@ -93,7 +97,8 @@ def _counting_fetch(calls, fail_first=False):
     def fake(url, timeout, user_agent=None):
         calls["n"] += 1
         if fail_first and calls["n"] == 1:
-            raise ValueError("boom")
+            msg = "boom"
+            raise ValueError(msg)
         p1 = int(url.split("period1=")[1].split("&")[0])
         return _payload(p1)
     return fake
@@ -317,7 +322,8 @@ def test_yahoo_daily_survives_an_intraday_failure(monkeypatch):
                         lambda t, a, b: _dxy_daily_payload())
 
     def boom(url, timeout, user_agent=None):
-        raise ValueError("no intraday")
+        msg = "no intraday"
+        raise ValueError(msg)
 
     monkeypatch.setattr(yp, "fetch_json", boom)
     s = yp.yahoo_daily("DX-Y.NYB", include_partial=True)
@@ -436,7 +442,8 @@ def test_download_survives_a_failed_refill(monkeypatch):
                         lambda t, p, start=None: _batch_frame({"AAA": full}))
 
     def boom(t, p1=0, p2=None, include_partial=False):
-        raise RuntimeError("chart down")
+        msg = "chart down"
+        raise RuntimeError(msg)
 
     monkeypatch.setattr(yp, "yahoo_daily", boom)
     out = yp.download_close_prices(["AAA", "BBB"], period="5y")

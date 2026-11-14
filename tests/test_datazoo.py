@@ -41,7 +41,8 @@ class _Response:
 
 
 def _fail_get(*args, **kwargs):
-    raise RuntimeError("network unavailable")
+    msg = "network unavailable"
+    raise RuntimeError(msg)
 
 
 # --- package surface ------------------------------------------------------
@@ -87,7 +88,8 @@ def _history_frame():
 
 def test_download_no_tickers_returns_empty_without_fetch(monkeypatch):
     def _forbidden(*args, **kwargs):
-        raise AssertionError("history must not be fetched for no tickers")
+        msg = "history must not be fetched for no tickers"
+        raise AssertionError(msg)
 
     monkeypatch.setattr(yp_module, "_history", _forbidden)
     assert download_close_prices([]).empty
@@ -370,7 +372,8 @@ def test_download_ticker_sectors_maps_and_marks_missing(monkeypatch):
         @property
         def info(self):
             if self._symbol == "BOOM":
-                raise RuntimeError("network down")
+                msg = "network down"
+                raise RuntimeError(msg)
             return infos[self._symbol]
 
     fake_yf = types.ModuleType("yfinance")

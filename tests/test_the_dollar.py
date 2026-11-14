@@ -73,7 +73,8 @@ def test_fetch_survives_a_transient_429_on_one_leg(monkeypatch):
     def fake(sym, p1=0, **kw):
         calls[sym] = calls.get(sym, 0) + 1
         if sym == "EURUSD=X" and calls[sym] == 1:
-            raise HTTPError("u", 429, "Too Many Requests",
+            url = "u"
+            raise HTTPError(url, 429, "Too Many Requests",
                             None, None)
         if sym == "DX-Y.NYB":
             return pd.Series(100.0, index=IDX)

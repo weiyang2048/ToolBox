@@ -118,7 +118,8 @@ def test_fetch_retries_a_flaky_leg(monkeypatch):
         calls[sym] = calls.get(sym, 0) + 1
         if sym == "BTAL" and calls[sym] == 1:
             from urllib.error import HTTPError
-            raise HTTPError("u", 429, "Too Many Requests", None, None)
+            url = "u"
+            raise HTTPError(url, 429, "Too Many Requests", None, None)
         return frame[sym]
 
     monkeypatch.setattr(ialt_tab, "yahoo_daily", fake_daily)
@@ -133,7 +134,8 @@ def test_fetch_names_a_failing_leg(monkeypatch):
 
     def dead(sym, p1=0, p2=None, include_partial=False):
         if sym == "AGG":
-            raise RuntimeError("boom")
+            msg = "boom"
+            raise RuntimeError(msg)
         return frame[sym]
 
     monkeypatch.setattr(ialt_tab, "yahoo_daily", dead)
