@@ -137,5 +137,5 @@ def test_fetch_names_a_failing_leg(monkeypatch):
         return frame[sym]
 
     monkeypatch.setattr(ialt_tab, "yahoo_daily", dead)
-    with pytest.raises(Exception):
+    with pytest.raises(RuntimeError, match="boom"):
         fetch_ialt_tab()
