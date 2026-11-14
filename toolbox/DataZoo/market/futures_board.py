@@ -503,6 +503,128 @@ def group_year_average(rows):
     return sum(ys) / len(ys) if ys else None
 
 
+def _fetch_all(order, progress):
+    """Submit every line's fetch on the pool and collect
+    the results by symbol, reporting progress per
+    completed line."""
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futs = {sym: pool.submit(_fetch_row, sym)
+                for _, sym, _, _, _ in order}
+        # Collect the fetches as they complete (progress
+        # reports each), then assemble in board order below —
+        # the values assembled are identical either way.
+        results = {}
+        if progress is not None:
+            progress(0, len(futs), "")
+        by_fut = {f: s for s, f in futs.items()}
+        for fut in as_completed(futs.values()):
+            results[by_fut[fut]] = fut.result()
+            if progress is not None:
+                progress(len(results), len(futs), by_fut[fut])
+    return results
+
+
+def _fill_from_quote(row, got, dec):
+    """Fill a row from its live quote (last/change/percent,
+    market time and data date, cash decimals from the
+    level). True when a quote was present."""
+    if got is not None:
+        last, settle, mtime = got
+        row["last"] = last
+        row["chg"] = last - settle
+        row["pct"] = 100.0 * (last - settle) / settle
+        if mtime:
+            mkt = datetime.datetime.fromtimestamp(mtime, ET)
+            row["mtime"] = mkt.strftime("%m-%d %H:%M %Z")
+            # The row's data date (Eastern, ISO): the
+            # calendar date of the same market time the
+            # mtime string renders — plumbed through in
+            # machine-usable form so renderers can compare
+            # it against today (the Markets page grays a
+            # day % whose date is before today, user
+            # direction 2026-11-01).
+            row["date"] = mkt.date().isoformat()
+        if dec is None:  # cash index: decimals from its level
+            row["dec"] = cash_dec(last)
+        return True
+    elif dec is None:
+        row["dec"] = cash_dec(None)
+    return False
+
+
+def _fill_from_history(row, got, closes, last_bar_date, dec):
+    """The completed-closes fallback for a quoteless row:
+    some contracts serve a full history with no quote meta,
+    so the last two completed closes stand in (the day
+    change then lags one session). True when the fallback
+    filled the row."""
+    if got is None and len(closes) >= 2 and closes[-2]:
+        # No live quote but a usable history (Yahoo serves
+        # some contracts, e.g. RMB=F, as ALTSYMBOL: full
+        # history, no quote meta): fall back to the last two
+        # completed closes — the cash convention, last vs
+        # the prior completed close. The day change then
+        # lags one session behind live-quoted rows.
+        row["last"] = closes[-1]
+        row["chg"] = closes[-1] - closes[-2]
+        row["pct"] = 100.0 * row["chg"] / closes[-2]
+        if last_bar_date is not None:
+            # The fallback's data is its last completed
+            # bar; that bar's Eastern date is the row's
+            # data date (it lags the live-quoted rows by
+            # construction, so renderers can gray it).
+            row["date"] = last_bar_date.isoformat()
+        if dec is None:  # cash index: decimals from its level
+            row["dec"] = cash_dec(row["last"])
+        return True
+    return False
+
+
+def _assemble_row(sym, label, dec, kind, result):
+    """One board row from its fetch result (see _fetch_row
+    for the slot contract): quote fill, completed-closes
+    fallback, trend states and horizon returns. Returns
+    (row, notes, available)."""
+    row = {"sym": sym, "label": label, "dec": dec, "kind": kind,
+           "last": None, "chg": None, "pct": None, "mtime": None,
+           "date": None, "ls": (None, None, None),
+           "oversold": None}
+    for key, _n in HORIZONS:
+        row[key] = None
+    got, closes, last_bar_date = result
+    notes = []
+    if isinstance(got, Exception):  # 404, timeout, bad JSON...
+        notes.append(f"futures: {sym} unavailable ({got})")
+        got = None
+    if isinstance(closes, Exception):  # horizons degrade to null
+        notes.append(f"futures: {sym} history unavailable ({closes})")
+        closes = []
+    available = _fill_from_quote(row, got, dec)
+    if _fill_from_history(row, got, closes, last_bar_date, dec):
+        available = True
+        notes.append(f"futures: {sym} quote unavailable; last/day "
+                     "from completed closes")
+    row["ls"] = ls_states(closes)
+    row["oversold"] = oversold_up(closes)
+    for key, n in HORIZONS:
+        if len(closes) > n:
+            total = closes[-1] / closes[-1 - n] - 1.0
+            if n >= 252:
+                # Multi-year columns are CAGR (user request
+                # 2026-10-29): annualize at sessions/252
+                # years — exactly 1, 3, 5, 10 for the
+                # year-and-longer lookbacks (n = 252 is the
+                # identity).
+                total = (1.0 + total) ** (252.0 / n) - 1.0
+            row[key] = 100.0 * total
+    return row, notes, available
+
+
+def _group_key(item):
+    avg = group_year_average(item[1])
+    return (avg is None, -(avg or 0.0))
+
+
 def fetch_board(now=None, groups=None, progress=None):
     """Pull the whole board, or only the named groups.
 
@@ -557,91 +679,14 @@ def fetch_board(now=None, groups=None, progress=None):
              for gname, contracts in registry
              for sym, label, dec, kind in contracts
              if wanted is None or gname in wanted]
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        futs = {sym: pool.submit(_fetch_row, sym)
-                for _, sym, _, _, _ in order}
-        # Collect the fetches as they complete (progress
-        # reports each), then assemble in board order below —
-        # the values assembled are identical either way.
-        results = {}
-        if progress is not None:
-            progress(0, len(futs), "")
-        by_fut = {f: s for s, f in futs.items()}
-        for fut in as_completed(futs.values()):
-            results[by_fut[fut]] = fut.result()
-            if progress is not None:
-                progress(len(results), len(futs), by_fut[fut])
-        for gname, sym, label, dec, kind in order:
-            rows = data.setdefault(gname, [])
-            row = {"sym": sym, "label": label, "dec": dec, "kind": kind,
-                   "last": None, "chg": None, "pct": None, "mtime": None,
-                   "date": None, "ls": (None, None, None),
-                   "oversold": None}
-            for key, _n in HORIZONS:
-                row[key] = None
-            got, closes, last_bar_date = results[sym]
-            if isinstance(got, Exception):  # 404, timeout, bad JSON...
-                notes.append(f"futures: {sym} unavailable ({got})")
-                got = None
-            if got is not None:
-                last, settle, mtime = got
-                row["last"] = last
-                row["chg"] = last - settle
-                row["pct"] = 100.0 * (last - settle) / settle
-                if mtime:
-                    mkt = datetime.datetime.fromtimestamp(mtime, ET)
-                    row["mtime"] = mkt.strftime("%m-%d %H:%M %Z")
-                    # The row's data date (Eastern, ISO): the
-                    # calendar date of the same market time the
-                    # mtime string renders — plumbed through in
-                    # machine-usable form so renderers can compare
-                    # it against today (the Markets page grays a
-                    # day % whose date is before today, user
-                    # direction 2026-11-01).
-                    row["date"] = mkt.date().isoformat()
-                if dec is None:  # cash index: decimals from its level
-                    row["dec"] = cash_dec(last)
-                available += 1
-            elif dec is None:
-                row["dec"] = cash_dec(None)
-            if isinstance(closes, Exception):  # horizons degrade to null
-                notes.append(f"futures: {sym} history unavailable ({closes})")
-                closes = []
-            if got is None and len(closes) >= 2 and closes[-2]:
-                # No live quote but a usable history (Yahoo serves
-                # some contracts, e.g. RMB=F, as ALTSYMBOL: full
-                # history, no quote meta): fall back to the last two
-                # completed closes — the cash convention, last vs
-                # the prior completed close. The day change then
-                # lags one session behind live-quoted rows.
-                row["last"] = closes[-1]
-                row["chg"] = closes[-1] - closes[-2]
-                row["pct"] = 100.0 * row["chg"] / closes[-2]
-                if last_bar_date is not None:
-                    # The fallback's data is its last completed
-                    # bar; that bar's Eastern date is the row's
-                    # data date (it lags the live-quoted rows by
-                    # construction, so renderers can gray it).
-                    row["date"] = last_bar_date.isoformat()
-                if dec is None:  # cash index: decimals from its level
-                    row["dec"] = cash_dec(row["last"])
-                available += 1
-                notes.append(f"futures: {sym} quote unavailable; last/day "
-                             "from completed closes")
-            row["ls"] = ls_states(closes)
-            row["oversold"] = oversold_up(closes)
-            for key, n in HORIZONS:
-                if len(closes) > n:
-                    total = closes[-1] / closes[-1 - n] - 1.0
-                    if n >= 252:
-                        # Multi-year columns are CAGR (user request
-                        # 2026-10-29): annualize at sessions/252
-                        # years — exactly 1, 3, 5, 10 for the
-                        # year-and-longer lookbacks (n = 252 is the
-                        # identity).
-                        total = (1.0 + total) ** (252.0 / n) - 1.0
-                    row[key] = 100.0 * total
-            rows.append(row)
+    results = _fetch_all(order, progress)
+    for gname, sym, label, dec, kind in order:
+        row, row_notes, ok = _assemble_row(sym, label, dec, kind,
+                                           results[sym])
+        notes.extend(row_notes)
+        if ok:
+            available += 1
+        data.setdefault(gname, []).append(row)
     for rows in data.values():
         # Within-group order is by Year % CAGR, best first; the sort
         # is stable, so ties (and the year-less tail) keep the
@@ -653,10 +698,6 @@ def fetch_board(now=None, groups=None, progress=None):
     # in data order within each of their boards, so this one
     # sort orders every board. Stable — ties and groups with
     # no year values keep the configured group order, last.
-    def _group_key(item):
-        avg = group_year_average(item[1])
-        return (avg is None, -(avg or 0.0))
-
     data = dict(sorted(data.items(), key=_group_key))
     return {"asof": asof, "source": "Yahoo Finance",
             "available": available, "data": data, "notes": notes}
