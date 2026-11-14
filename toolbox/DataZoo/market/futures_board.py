@@ -404,7 +404,10 @@ def ls_states(closes):
     sessions). 0x20: last close above its EMA20; 20x50: EMA20 above
     EMA50; 50x200: EMA50 above EMA200. EMAs are the adjust=False
     recursion, identical to pandas ewm(span=N, adjust=False) final
-    values on the same closes."""
+    values on the same closes. This is the canonical trend-state
+    implementation (2026-11-14 consolidation): the briefs'
+    movement-tracker px_ema20 / ema_signal / ema_regime delegate
+    here, as does strategies.merged_stats."""
     n = len(closes)
     if n < 20:
         return (None, None, None)
@@ -433,12 +436,14 @@ def _ema_last_alpha(values, alpha):
 def rsi14(closes):
     """Wilder RSI(14) at the last close: gains and losses
     smoothed with the adjust=False alpha=1/14 recursion over
-    the close-to-close differences — the exact construction
-    of the briefs' movement-tracker.rsi14 and of the
-    2026-11-13 days-level entry research, so every surface
-    agrees tick for tick. None when the history holds fewer
-    than 15 closes or the smoothed loss is zero (the value
-    is undefined, e.g. a flat or only-rising series)."""
+    the close-to-close differences — the canonical
+    implementation (2026-11-14 consolidation: the briefs'
+    movement-tracker.rsi14 delegates here) of the exact
+    construction of the 2026-11-13 days-level entry research,
+    so every surface agrees tick for tick. None when the
+    history holds fewer than 15 closes or the smoothed loss
+    is zero (the value is undefined, e.g. a flat or
+    only-rising series)."""
     if len(closes) < 15:
         return None
     gains, losses = [], []
@@ -463,9 +468,10 @@ def oversold_up(closes):
     winning entry condition of the 2026-11-13 days-level
     entry research. False when the condition does not hold;
     None when the history holds fewer than 200 sessions
-    (the EMA200 leg is undefined). Mirrors the briefs'
-    movement-tracker.oversold_up, with ls_states' EMA
-    conventions."""
+    (the EMA200 leg is undefined). The canonical
+    implementation (2026-11-14 consolidation: the briefs'
+    movement-tracker.oversold_up delegates here), with
+    ls_states' EMA conventions."""
     if len(closes) < 200:
         return None
     r = rsi14(closes)

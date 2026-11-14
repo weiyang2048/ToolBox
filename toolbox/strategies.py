@@ -53,7 +53,7 @@ from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.optimize import linprog, minimize
 from scipy.spatial.distance import squareform
 
-from toolbox.DataZoo.market.futures_board import oversold_up
+from toolbox.DataZoo.market.futures_board import ls_states, oversold_up
 
 TRADING_DAYS = 252
 
@@ -1209,24 +1209,6 @@ def asset_stats(prices: pd.DataFrame, benchmark: pd.Series | None = None) -> pd.
     return pd.DataFrame(rows).T
 
 
-def _ema_state(s: pd.Series, fast: int, slow: int | None) -> bool | None:
-    """One EMA trend state at a series' last close — the briefs'
-    convention (movement-tracker's px_ema20 / ema_signal /
-    ema_regime): pandas ewm(span=N, adjust=False) final values on
-    the full history handed in; ``slow=None`` compares the last
-    close itself against the fast EMA. None when the series holds
-    fewer sessions than the slower span requires."""
-    s = s.dropna()
-    need = fast if slow is None else slow
-    if len(s) < need:
-        return None
-    e_fast = s.ewm(span=fast, adjust=False).mean().iloc[-1]
-    if slow is None:
-        return bool(s.iloc[-1] > e_fast)
-    e_slow = s.ewm(span=slow, adjust=False).mean().iloc[-1]
-    return bool(e_fast > e_slow)
-
-
 def _weekly_win_rate(w: pd.Series, bench: pd.Series) -> float:
     """Share of calendar weeks (W-FRI, per-period return from the
     available trading days, edges partial — winrate.py's
@@ -1347,10 +1329,10 @@ def merged_stats(prices: pd.DataFrame,
                                / px.iloc[-TRADING_DAYS - 1] - 1.0)
                          if len(px) >= TRADING_DAYS + 1
                          else float("nan"))
-        row["px_ema20"] = _ema_state(px, 20, None)
-        row["ema_long"] = _ema_state(px, 20, 50)
-        row["ema_regime"] = _ema_state(px, 50, 200)
-        row["oversold"] = oversold_up([float(x) for x in px])
+        closes = [float(x) for x in px]
+        (row["px_ema20"], row["ema_long"],
+         row["ema_regime"]) = ls_states(closes)
+        row["oversold"] = oversold_up(closes)
         lr = np.log(w / w.shift(1)).dropna()
         row["vol"] = (float(lr.std() * np.sqrt(TRADING_DAYS))
                       if len(lr) >= 2 else 0.0)
