@@ -56,6 +56,9 @@ GOLD_PEAK = 85.0
 # compresses into the rest. See chart_fig.
 TAIL_DAYS = 30
 TAIL_SHARE = 0.25
+# A fetched source series shorter than this is dropped as
+# unusable — too few points to band or chart.
+MIN_SERIES_POINTS = 30
 # Endpoint labels: minimum vertical separation (index units)
 # between two label centers, and the band they must stay in.
 LABEL_MIN_SEP = 8.0
@@ -217,7 +220,7 @@ def fetch_sentiment(progress=None):
     for i, (name, label, fn) in enumerate(sources, start=1):
         try:
             s = fn().dropna()
-            if len(s) >= 30:
+            if len(s) >= MIN_SERIES_POINTS:
                 series[name] = s
         except Exception:  # noqa: BLE001 - degrade per source
             pass
