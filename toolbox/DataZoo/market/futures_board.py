@@ -447,7 +447,7 @@ def rsi14(closes):
     if dn == 0:
         return None
     v = 100.0 - 100.0 / (1.0 + up / dn)
-    return None if v != v else v
+    return None if math.isnan(v) else v
 
 
 def oversold_up(closes):

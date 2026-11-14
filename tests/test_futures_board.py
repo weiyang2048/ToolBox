@@ -415,6 +415,12 @@ def test_rsi14_gates():
     assert fb.rsi14(rising[:14]) is None        # too short
     assert fb.rsi14(rising) is None             # no losses: undefined
     assert fb.rsi14([100.0] * 300) is None      # flat: undefined
+    # A NaN close poisons the smoothed gains/losses, so the
+    # value is NaN and the isnan guard (converted from the
+    # `v != v` idiom 2026-11-14) returns None.
+    poisoned = [100.0 + (i % 7) for i in range(60)]
+    poisoned[30] = float("nan")
+    assert fb.rsi14(poisoned) is None
 
 
 def test_oversold_up_gates_and_states():
