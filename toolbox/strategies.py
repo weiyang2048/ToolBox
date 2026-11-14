@@ -45,6 +45,7 @@ application coupling: callers pass price frames (see
 from __future__ import annotations
 
 import math
+from typing import NamedTuple
 
 import numpy as np
 import pandas as pd
@@ -1388,6 +1389,89 @@ def merged_stats(prices: pd.DataFrame,
 # ---------------------------------------------------------------------------
 
 
+class _WalkRun(NamedTuple):
+    """The run-fixed inputs of one walk_forward_backtest
+    call, bundled so the per-rebalance helper stays small:
+    the resolved strategy table with each name's effective
+    window, the estimation inputs, and the fallback
+    cleaning pair."""
+
+    base: list
+    resolved: dict
+    eff_window: dict
+    logret: pd.DataFrame
+    rf_all: pd.Series
+    px: pd.DataFrame
+    caps_shares: pd.Series | None
+    cov_method: str
+    mean_method: str
+
+
+def _rebalance_weights(start, run):
+    """Target weights at one rebalance: estimate each
+    distinct (window, cleaning pair) once, then score every
+    strategy on its own slice."""
+    base, resolved, eff_window = (run.base, run.resolved,
+                                  run.eff_window)
+    logret, rf_all, px = run.logret, run.rf_all, run.px
+    caps_shares = run.caps_shares
+    cov_method, mean_method = run.cov_method, run.mean_method
+    cache: dict = {}
+    slices: dict = {}
+    W = {}
+    for name in base:
+        rule, cov_m, mean_m = resolved[name]
+        pair = (cov_m or cov_method, mean_m or mean_method)
+        win = eff_window[name]
+        key = (win, pair)
+        if key not in cache:
+            lo = 0 if win is None else max(0, start - win)
+            R_w = logret.iloc[lo:start]
+            rf_w = float(rf_all[lo:start].mean())
+            cache[key] = estimate_inputs(R_w, pair[0], pair[1],
+                                         rf_w)[:2]
+            slices[key] = (R_w, rf_w)
+        mu, S = cache[key]
+        R_w, rf_w = slices[key]
+        caps = None
+        if rule == SPMO_CAP_SCORE_NAME:
+            # Caps struck at this window's end: the
+            # caller's share counts × the close at the
+            # estimation window's last session.
+            caps = (caps_shares.reindex(px.columns)
+                    * px.loc[R_w.index[-1]])
+        W[name] = strategy_weights(rule, R_w, S, mu, rf_w,
+                                   caps=caps)
+    return W
+
+
+def _hold_period(w, drift_w, span, *, simple, cost_bps):
+    """One holding period: charge the trade from the
+    drifted weights to ``w`` (when there are drifted
+    weights) to the first day, then drift ``w`` with daily
+    simple returns. Returns (daily returns, turnover or
+    None, drifted weights)."""
+    start, end = span
+    days = []
+    turnover = None
+    trade = 0.0
+    if drift_w is not None:
+        delta = float(np.abs(w - drift_w).sum())
+        turnover = 0.5 * delta
+        trade = delta * cost_bps / 1e4
+    wcur = w.copy()
+    for t in range(start, end):
+        r = simple.iloc[t].values
+        day = float(wcur @ r)
+        if t == start:
+            day -= trade
+        days.append(day)
+        wcur = wcur * (1.0 + r)
+        s = wcur.sum()
+        wcur = wcur / s if s > 0 else np.ones_like(wcur) / len(wcur)
+    return days, turnover, wcur
+
+
 def walk_forward_backtest(
     prices: pd.DataFrame,
     *,
@@ -1491,34 +1575,13 @@ def walk_forward_backtest(
     reb_starts = list(range(seed, len(simple), hold))
     if progress is not None:
         progress(0, len(reb_starts), simple.index[reb_starts[0]])
+    run = _WalkRun(base=base, resolved=resolved,
+                   eff_window=eff_window, logret=logret,
+                   rf_all=rf_all, px=px, caps_shares=caps_shares,
+                   cov_method=cov_method, mean_method=mean_method)
     for start in reb_starts:
         end = min(start + hold, len(simple))
-        cache: dict = {}
-        slices: dict = {}
-        W = {}
-        for name in base:
-            rule, cov_m, mean_m = resolved[name]
-            pair = (cov_m or cov_method, mean_m or mean_method)
-            win = eff_window[name]
-            key = (win, pair)
-            if key not in cache:
-                lo = 0 if win is None else max(0, start - win)
-                R_w = logret.iloc[lo:start]
-                rf_w = float(rf_all[lo:start].mean())
-                cache[key] = estimate_inputs(R_w, pair[0], pair[1],
-                                             rf_w)[:2]
-                slices[key] = (R_w, rf_w)
-            mu, S = cache[key]
-            R_w, rf_w = slices[key]
-            caps = None
-            if rule == SPMO_CAP_SCORE_NAME:
-                # Caps struck at this window's end: the
-                # caller's share counts × the close at the
-                # estimation window's last session.
-                caps = (caps_shares.reindex(px.columns)
-                        * px.loc[R_w.index[-1]])
-            W[name] = strategy_weights(rule, R_w, S, mu, rf_w,
-                                       caps=caps)
+        W = _rebalance_weights(start, run)
         if "Average" in labels:
             W["Average"] = np.mean([W[s] for s in base], axis=0)
         n_reb += 1
@@ -1527,23 +1590,12 @@ def walk_forward_backtest(
             "weights": {lab: dict(zip(tickers, W[lab])) for lab in labels},
         })
         for lab in labels:
-            w = W[lab]
-            trade = 0.0
-            if drift[lab] is not None:
-                delta = float(np.abs(w - drift[lab]).sum())
-                turnover[lab].append(0.5 * delta)
-                trade = delta * cost_bps / 1e4
-            wcur = w.copy()
-            for t in range(start, end):
-                r = simple.iloc[t].values
-                day = float(wcur @ r)
-                if t == start:
-                    day -= trade
-                port[lab].append(day)
-                wcur = wcur * (1.0 + r)
-                s = wcur.sum()
-                wcur = wcur / s if s > 0 else np.ones_like(wcur) / len(wcur)
-            drift[lab] = wcur
+            days, turn, drift[lab] = _hold_period(
+                W[lab], drift[lab], (start, end),
+                simple=simple, cost_bps=cost_bps)
+            port[lab].extend(days)
+            if turn is not None:
+                turnover[lab].append(turn)
         if progress is not None:
             progress(n_reb, len(reb_starts), simple.index[start])
     dates = simple.index[seed:]
