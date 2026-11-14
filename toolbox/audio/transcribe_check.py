@@ -33,6 +33,17 @@ from difflib import SequenceMatcher
 
 import numpy as np
 
+# The checker's pass/fail contract — the knobs a tuner adjusts
+# live here together (both briefs' podcast steps rely on this
+# verdict): the transcript's opening/closing word-sequence
+# similarity to the script must clear the floor, its word
+# count must land inside the ratio band around the script's,
+# and no 4-gram may repeat more than the loop limit.
+_EDGE_SIM_MIN = 0.65
+_RATIO_MIN = 0.8
+_RATIO_MAX = 1.25
+_MAX_4GRAM_REPEATS = 6
+
 
 def decode_samples(path):
     raw = subprocess.run(
@@ -70,16 +81,17 @@ def compare_to_script(words, script_text):
     ratio = len(words) / max(len(swords), 1)
     open_sim = SequenceMatcher(None, words[:12], swords[:12]).ratio()
     close_sim = SequenceMatcher(None, words[-12:], swords[-12:]).ratio()
-    open_ok = open_sim >= 0.65
-    close_ok = close_sim >= 0.65
+    open_ok = open_sim >= _EDGE_SIM_MIN
+    close_ok = close_sim >= _EDGE_SIM_MIN
     line = (f"script words {len(swords)} ratio {ratio:.2f} "
             f"open_match {open_ok} ({open_sim:.2f}) "
             f"close_match {close_ok} ({close_sim:.2f})")
     fields = {"script_words": len(swords), "ratio": round(ratio, 2),
               "open_match": open_ok, "close_match": close_ok}
     fails = []
-    if not (0.8 <= ratio <= 1.25):
-        fails.append(f"word-count ratio {ratio:.2f} outside 0.80-1.25")
+    if not (_RATIO_MIN <= ratio <= _RATIO_MAX):
+        fails.append(f"word-count ratio {ratio:.2f} outside "
+                     f"{_RATIO_MIN:.2f}-{_RATIO_MAX:.2f}")
     if not open_ok:
         fails.append("opening does not match the script")
     if not close_ok:
@@ -127,7 +139,7 @@ def main():
     print(f"coverage last segment ends {coverage:.1f}s of {secs:.1f}s")
 
     fails = []
-    if worst_n > 6:
+    if worst_n > _MAX_4GRAM_REPEATS:
         fails.append(f"4-gram repeated {worst_n}x (loop?)")
     if segments and coverage < 0.9 * secs:
         fails.append("transcript ends well before the audio does")
