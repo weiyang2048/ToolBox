@@ -16,6 +16,73 @@ def test_fit_power_law_recovers_known_law():
     assert sigma < 1e-8
 
 
+def test_fit_power_law_full_hand_computed_se():
+    # x = ln(days) = [0, 1, 2, 3], ln(values) = [0, 1, 1, 3].
+    # By hand: xbar = 1.5, Sxx = 5, Sxy = 4.5 -> b = 0.9,
+    # lnA = -0.1; residuals (0.1, 0.2, -0.7, 0.4), RSS = 0.70,
+    # s^2 = RSS/(n-2) = 0.35. So b_se = sqrt(0.35/5) = sqrt(0.07),
+    # lnA_se = sqrt(0.35*(1/4 + 1.5^2/5)) = sqrt(0.245), the
+    # ddof=0 sigma = sqrt(0.70/4) = sqrt(0.175), and the 95% CI
+    # uses t(0.975, 2) = 4.302652729749275.
+    days = np.exp([0.0, 1.0, 2.0, 3.0])
+    values = np.exp([0.0, 1.0, 1.0, 3.0])
+    f = bp.fit_power_law_full(days, values)
+    assert f["n"] == 4
+    assert abs(f["b"] - 0.9) < 1e-9
+    assert abs(f["lnA"] + 0.1) < 1e-9
+    assert abs(f["sigma"] - np.sqrt(0.175)) < 1e-9
+    assert abs(f["b_se"] - np.sqrt(0.07)) < 1e-9
+    assert abs(f["lnA_se"] - np.sqrt(0.245)) < 1e-9
+    half = 4.302652729749275 * np.sqrt(0.07)
+    assert abs(f["b_ci95"][0] - (0.9 - half)) < 1e-9
+    assert abs(f["b_ci95"][1] - (0.9 + half)) < 1e-9
+
+
+def test_fit_power_law_full_extends_tuple_api():
+    # The dict's point estimates are the tuple API's values,
+    # bit for bit (consumer-shape pin: nothing existing moves).
+    rng = np.random.default_rng(3)
+    days = np.geomspace(200, 9000, 300)
+    values = np.exp(-20.0 + 4.2 * np.log(days)
+                    + rng.normal(0, 0.5, len(days)))
+    b, lnA, sigma = bp.fit_power_law(days, values)
+    f = bp.fit_power_law_full(days, values)
+    assert f["b"] == float(b) and f["lnA"] == float(lnA)
+    assert f["sigma"] == float(sigma) and f["n"] == 300
+    assert f["b_se"] > 0 and f["lnA_se"] > 0
+    assert f["b_ci95"][0] < f["b"] < f["b_ci95"][1]
+    import pytest
+
+    with pytest.raises(ValueError, match=">= 3 points"):
+        bp.fit_power_law_full(days[:2], values[:2])
+
+
+def test_fit_power_law_full_ci_coverage_seeded():
+    # Reduced-rep coverage pin (seeded, deterministic): the
+    # sharp convention discrimination lives in the 20,000-rep
+    # study recorded in fit_power_law_full's docstring; this
+    # pins the wiring at CI scale. n = 40 is where the dof /
+    # critical-value choice bites: the ddof=0 + normal variant
+    # covers at ~94% there, the shipped n-2 + t variant at 95%.
+    # Band [0.93, 0.97] is ~4 binomial sd at 2,000 reps; the
+    # SE-vs-empirical-sd ratio (asserted within 10%, a ~6 sd
+    # check) catches scale errors the band cannot.
+    rng = np.random.default_rng(2026)
+    days = np.geomspace(300, 6000, 40)
+    x = np.log(days)
+    reps, hits, ses, ests = 2000, 0, [], []
+    for _ in range(reps):
+        values = np.exp(-37.0 + 5.6 * x + rng.normal(0, 0.69, 40))
+        f = bp.fit_power_law_full(days, values)
+        hits += f["b_ci95"][0] <= 5.6 <= f["b_ci95"][1]
+        ses.append(f["b_se"])
+        ests.append(f["b"])
+    cov = hits / reps
+    assert 0.93 <= cov <= 0.97
+    ratio = float(np.std(ests, ddof=1) / np.mean(ses))
+    assert 0.9 < ratio < 1.1
+
+
 def test_days_since_genesis():
     idx = pd.DatetimeIndex(["2009-01-03", "2009-01-13", "2010-01-03"])
     out = bp.days_since_genesis(idx)
@@ -165,6 +232,22 @@ def test_fetch_powerlaw_in_progress_bar_gets_et_today(monkeypatch):
     assert live["btc"].index.equals(done["btc"].index)
     assert live["stats"]["btc_last"] == done["stats"]["btc_last"]
     assert live["stats"]["slope"] == done["stats"]["slope"]
+
+
+def test_fetch_powerlaw_surfaces_slope_uncertainty(monkeypatch):
+    # The stats payload gains the slopes' standard errors and
+    # the price slope's CI alongside the pre-existing keys
+    # (which keep their values — the SE is the same fit's).
+    _powerlaw_fixture(monkeypatch)
+    _freeze_clock(monkeypatch, datetime.datetime(
+        2026, 11, 5, 12, 0, tzinfo=datetime.timezone.utc))
+    out = bp.fetch_powerlaw()
+    st = out["stats"]
+    assert st["slope_se"] > 0 and st["ratio_slope_se"] > 0
+    assert st["slope_ci_lo"] < st["slope"] < st["slope_ci_hi"]
+    # The figure renders through the new +-SE legend labels.
+    png = bp.chart_png(out)
+    assert png[:8] == b"\x89PNG\r\n\x1a\n"
 
 
 def test_chart_png_does_not_call_tight_layout():

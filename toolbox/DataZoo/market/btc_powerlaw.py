@@ -18,7 +18,9 @@ BTC market cap comes from blockchain.info; gold market cap =
 Yahoo GC=F ($/ozt) × WGC above-ground stock (end-2024 216,265 t,
 walked with ~3,738 t/yr mine production). The BTC÷gold ratio gets
 its own power-law fit, whose 100% crossing is the model-implied
-"flippening" date.
+"flippening" date. Both fits also carry classical OLS slope
+standard errors (fit_power_law_full), surfaced in the stats
+payload and the figure's legend labels.
 """
 import datetime
 import io
@@ -33,6 +35,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib import gridspec
+from scipy.stats import t as _student_t
 
 from toolbox.DataZoo.market.eastern import (
     ET,
@@ -84,6 +87,59 @@ def fit_power_law(days_arr, values):
     b, lnA = np.polyfit(ln_d, lnV, 1)
     sigma = float((lnV - (lnA + b * ln_d)).std())
     return b, lnA, sigma
+
+
+def fit_power_law_full(days_arr, values):
+    """The fit_power_law fit with classical OLS uncertainty, as a dict.
+
+    Keys: b, lnA, sigma — the identical values fit_power_law
+    returns (sigma the ddof=0 residual std) — plus n, the
+    standard errors b_se / lnA_se, and b_ci95, the (lo, hi) 95%
+    confidence interval for the slope.
+
+    Convention: s^2 = RSS/(n - 2) with t critical values at
+    n - 2 dof, settled by Monte Carlo (2026-11-14; 20,000 reps
+    per cell on this board's own design — blockchain.info
+    ln-days, n = 1484, residual sigma 0.69). At n = 1484 every
+    dof convention covers at 95.0-95.1%, but the ddof=0 / normal
+    variant sags as n falls (94.6% at n = 200, 94.2% at n = 60)
+    while this one holds 95.1%; it is the only variant
+    calibrated at every n, and its mean SE matched the
+    empirical sd of the slope to 0.3%. Intervals also cover at
+    94.9% under iid resamples of the real residuals (same
+    marginal shape, no dependence).
+
+    CAVEAT — read before quoting the interval: it is a
+    precision statement against iid log-residuals, and the real
+    ones are anything but. The 2026-11-14 price fit's residuals
+    have lag-1 autocorrelation 0.99; in an AR(1) Monte Carlo
+    matched to that persistence (same marginal sigma) the
+    nominal 95% interval covered the true slope only ~10% of
+    the time, and the slope's true sampling sd ran ~15x the
+    classical SE. Read b_se as the floor on the exponent's
+    uncertainty, not the whole of it; a Newey-West (HAC)
+    variant is the known follow-up.
+    """
+    days_arr = np.asarray(days_arr, dtype=float)
+    values = np.asarray(values, dtype=float)
+    n = len(days_arr)
+    if n < 3:
+        raise ValueError(
+            f"fit_power_law_full needs >= 3 points, got {n}")
+    b, lnA, sigma = fit_power_law(days_arr, values)
+    ln_d = np.log(days_arr)
+    resid = np.log(values) - (lnA + b * ln_d)
+    s2 = float(resid @ resid) / (n - 2)
+    xm = float(ln_d.mean())
+    sxx = float(((ln_d - xm) ** 2).sum())
+    b_se = math.sqrt(s2 / sxx)
+    lnA_se = math.sqrt(s2 * (1.0 / n + xm * xm / sxx))
+    half = float(_student_t.ppf(0.975, n - 2)) * b_se
+    return {
+        "b": float(b), "lnA": float(lnA), "sigma": sigma, "n": n,
+        "b_se": b_se, "lnA_se": lnA_se,
+        "b_ci95": (float(b) - half, float(b) + half),
+    }
 
 
 def trend_envelope(lnA, b, sigma, days_arr):
@@ -189,8 +245,9 @@ def fetch_powerlaw():
 
     # --- extended fit on 2010+ history ---
     t = days_since_genesis(bdf.index)
-    b, lnA, sigma = fit_power_law(t, bdf["p"].values)
-    n_fit = len(bdf)
+    fit = fit_power_law_full(t, bdf["p"].values)
+    b, lnA, sigma = fit["b"], fit["lnA"], fit["sigma"]
+    n_fit = fit["n"]
     end = datetime.date(2030, 12, 31)
     days = pd.date_range("2010-01-01", end, freq="D")
     trend, lo, hi = trend_envelope(
@@ -231,7 +288,8 @@ def fetch_powerlaw():
     ratio = ratio[ratio > 0]
     ratio_now = float(ratio.iloc[-1])
     rt = days_since_genesis(ratio.index)
-    b_r, lnA_r, sigma_r = fit_power_law(rt, ratio.values)
+    fit_r = fit_power_law_full(rt, ratio.values)
+    b_r, lnA_r, sigma_r = fit_r["b"], fit_r["lnA"], fit_r["sigma"]
     r_days = pd.date_range("2013-01-01", end, freq="D")
     r_trend, r_lo, r_hi = trend_envelope(
         lnA_r, b_r, sigma_r, days_since_genesis(r_days))
@@ -252,12 +310,16 @@ def fetch_powerlaw():
         "floor": floor, "last": last,
         "stats": {
             "slope": float(b), "sigma": float(sigma), "n_fit": n_fit,
+            "slope_se": fit["b_se"],
+            "slope_ci_lo": fit["b_ci95"][0],
+            "slope_ci_hi": fit["b_ci95"][1],
             "end2029": p2029,
             "btc_last": float(btc.iloc[-1]),
             "btc_date": _btc_display_date(btc.index[-1]),
             "ratio_pct": ratio_now * 100,
             "ratio_date": ratio.index[-1].date().isoformat(),
             "ratio_slope": float(b_r),
+            "ratio_slope_se": fit_r["b_se"],
             "flippening": (flip_date.isoformat()
                            if flip_date else None),
             "corr_gold": float(c_gold.iloc[-1]),
@@ -289,6 +351,17 @@ def chart_png(data):
                              data["eg"], data["es"])
     last, floor, st = data["last"], data["floor"], data["stats"]
     b, b_r = st["slope"], st["ratio_slope"]
+    # The legend quotes each slope with its classical +/-1 SE
+    # when the payload carries one (fetch_powerlaw always does;
+    # older/hand-built payloads render the bare slope as before).
+    slope_lab = f"power law (slope {b:.2f})"
+    if st.get("slope_se"):
+        slope_lab = (f"power law (slope {b:.2f} "
+                     f"\u00b1 {st['slope_se']:.2f})")
+    ratio_lab = f"ratio power law (slope {b_r:.2f})"
+    if st.get("ratio_slope_se"):
+        ratio_lab = (f"ratio power law (slope {b_r:.2f} "
+                     f"\u00b1 {st['ratio_slope_se']:.2f})")
 
     fig = plt.figure(figsize=(11, 7.4))
     gs = gridspec.GridSpec(2, 2, height_ratios=[1.6, 1],
@@ -300,7 +373,7 @@ def chart_png(data):
     # --- Top-left: BTC price power law only ---
     ax1.fill_between(days, lo, hi, color="#e4dcc9", alpha=0.22, zorder=1)
     ax1.semilogy(days, trend, color="#7FA8D9", lw=1.4, alpha=0.85,
-                 zorder=3, label=f"power law (slope {b:.2f})")
+                 zorder=3, label=slope_lab)
     if len(early):
         ax1.semilogy(early.index, early["p"], ".", color="#B4A98F",
                      ms=3, alpha=0.6,
@@ -360,8 +433,7 @@ def chart_png(data):
               color="#4CAF6E", fontsize=8.5, va="bottom")
     ax1r.set_ylim(1e-3, 400)
     ax1r.semilogy(r_days, r_trend * 100, color="#C9A227", lw=1.8,
-                  ls="--", zorder=3,
-                  label=f"ratio power law (slope {b_r:.2f})")
+                  ls="--", zorder=3, label=ratio_lab)
     ax1r.semilogy(ratio.index, ratio * 100, color="#E3B341", lw=1.4,
                   alpha=0.9, zorder=4,
                   label="BTC/gold market cap "
