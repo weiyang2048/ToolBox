@@ -65,17 +65,10 @@ def cooccurrence_edges(topics, members, min_shared=LINK_MIN_SHARED,
     return edges[:max_edges]
 
 
-def _linked_layout(topics, edges, sizes):
-    """Deterministic spread layout for the linked cloud: greedy
-    max-min placement over the whole panel, then ellipse-aware
-    repulsion (a word clears its full box plus a margin, not just
-    its center) with weak edge springs and weak gravity, and a
-    padded de-overlap pass. Tuned through four demo rounds with
-    the user on 2026-10-30: spiral start clustered (v1), box
-    repulsion spread it (v2), wider still (v3, wired first),
-    then tightened back at his word — shorter panel, smaller
-    margin, stronger springs (v4, the settled form)."""
-    margin = 20.0
+def _place_nodes(topics, sizes):
+    """Greedy max-min placement over the whole panel:
+    each topic, in order, takes the grid point farthest
+    from those already placed."""
     nodes = {}
     placed = []
     grid = [(gx, gy) for gx in range(40, LINK_PANEL_W - 39, 40)
@@ -100,6 +93,15 @@ def _linked_layout(topics, edges, sizes):
         placed.append((x, y))
         nodes[term] = {"x": float(x), "y": float(y), "vx": 0.0,
                        "vy": 0.0, "w": w, "h": h}
+    return nodes
+
+
+def _force_relax(nodes, edges):
+    """Ellipse-aware repulsion (a word clears its full
+    box plus a margin, not just its center) with weak edge
+    springs and weak gravity, 500 iterations. Mutates
+    ``nodes`` in place."""
+    margin = 20.0
     strength = {}
     for a, b, s in edges:
         strength[(a, b)] = strength[(b, a)] = s
@@ -132,6 +134,13 @@ def _linked_layout(topics, edges, sizes):
             n["x"] += n["vx"]; n["y"] += n["vy"]
             n["x"] = min(max(n["x"], n["w"] / 2), LINK_PANEL_W - n["w"] / 2)
             n["y"] = min(max(n["y"], n["h"] / 2), LINK_PANEL_H - n["h"] / 2)
+
+
+def _deoverlap(nodes):
+    """Padded de-overlap pass: push apart any pair whose
+    boxes (plus padding) still intersect, up to 80 rounds,
+    early exit when nothing moves. Mutates ``nodes``."""
+    terms = list(nodes)
     for _ in range(80):
         moved = False
         for i in range(len(terms)):
@@ -154,6 +163,21 @@ def _linked_layout(topics, edges, sizes):
                                      LINK_PANEL_H - n["h"] / 2)
         if not moved:
             break
+
+
+def _linked_layout(topics, edges, sizes):
+    """Deterministic spread layout for the linked cloud: greedy
+    max-min placement over the whole panel, then ellipse-aware
+    repulsion (a word clears its full box plus a margin, not just
+    its center) with weak edge springs and weak gravity, and a
+    padded de-overlap pass. Tuned through four demo rounds with
+    the user on 2026-10-30: spiral start clustered (v1), box
+    repulsion spread it (v2), wider still (v3, wired first),
+    then tightened back at his word — shorter panel, smaller
+    margin, stronger springs (v4, the settled form)."""
+    nodes = _place_nodes(topics, sizes)
+    _force_relax(nodes, edges)
+    _deoverlap(nodes)
     return nodes
 
 
