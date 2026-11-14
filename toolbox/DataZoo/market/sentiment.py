@@ -27,6 +27,7 @@ labeled in $/oz) as a Plotly figure (user direction
 PNG this module rendered before).
 """
 import datetime
+import functools
 
 import pandas as pd
 
@@ -238,6 +239,284 @@ def fetch_sentiment(progress=None):
     return {"series": series, "latest": latest}
 
 
+def _dates(idx):
+    return [d.strftime("%b %d, %Y") for d in idx]
+
+
+def _warp(idx, geom):
+    x0, span_days, cut_day, warped = geom
+    days = (idx - x0).total_seconds() / 86400.0
+    if span_days <= 0:
+        return [0.0] * len(days)
+    if not warped:
+        return [float(d) / span_days for d in days]
+    return [
+        float(d) / cut_day * (1.0 - TAIL_SHARE)
+        if d <= cut_day else
+        (1.0 - TAIL_SHARE) + (float(d) - cut_day)
+        / (span_days - cut_day) * TAIL_SHARE
+        for d in days]
+
+
+def _warp_one(ts, geom):
+    return _warp(pd.DatetimeIndex([ts]), geom)[0]
+
+
+
+def _add_bands(fig, mute):
+    """Zone bands with their labels, behind everything."""
+
+    for lo, hi, label, color in BANDS:
+        fig.add_shape(
+            type="rect", xref="x", yref="y", x0=0.0, x1=1.0,
+            y0=lo, y1=hi, fillcolor=color, opacity=0.14,
+            line=dict(width=0), layer="below")
+        fig.add_annotation(
+            x=0.0, y=(lo + hi) / 2, text=label, showarrow=False,
+            xanchor="left", yanchor="middle", xshift=4,
+            font=dict(size=9, color=mute))
+
+
+
+def _add_index_traces(fig, series, warp, specs):
+    """The Fear & Greed lines on the index axis, one per
+    (key, color, name, opacity) spec whose key is present in
+    ``series``; a spec's hover text is its name, verbatim, in
+    the shared template."""
+    import plotly.graph_objects as go
+
+    for key, color, name, opacity in specs:
+        if key not in series:
+            continue
+        s = series[key]
+        extra = {} if opacity is None else {"opacity": opacity}
+        fig.add_trace(go.Scatter(
+            x=warp(s.index), y=s.values, mode="lines",
+            name=name, **extra,
+            line=dict(color=color, width=1.6),
+            customdata=_dates(s.index),
+            hovertemplate=f"%{{customdata}}<br>{name}: "
+                          f"%{{y}}<extra></extra>"))
+
+
+
+def _add_gold_trace(fig, g, geom, *, color, box):
+    """Gold, min-max normalized onto the right axis, with
+    its endpoint marker and $ label."""
+    import plotly.graph_objects as go
+
+    warp = functools.partial(_warp, geom=geom)
+    warp_one = functools.partial(_warp_one, geom=geom)
+    gmin, gmax = float(g.min()), float(g.max())
+    # Headroom repair (2026-11-02, second round, carried
+    # from the PNG): normalizing the peak to exactly 100
+    # put it on the band ceiling, the top gridline and the
+    # top gold tick at once, so the Jan\u2013Feb spikes read as
+    # truncated even with the axis extended to 115. The
+    # peak maps to GOLD_PEAK on a 0-100 gold axis: the
+    # axis top is the max plus ~17.6% of the range, and
+    # the peak renders below the band ceiling.
+    gn = ((g - gmin) / (gmax - gmin) * GOLD_PEAK
+          if gmax > gmin else g * 0 + GOLD_PEAK / 2)
+    fig.add_trace(go.Scatter(
+        x=warp(g.index), y=gn.values, mode="lines",
+        yaxis="y2",
+        name="Gold futures (GC=F, $/oz)", opacity=0.95,
+        line=dict(color=color, width=1.6),
+        customdata=[[d, v] for d, v in
+                    zip(_dates(g.index), g.values)],
+        hovertemplate="%{customdata[0]}<br>"
+                      "%{customdata[1]:$,.0f}/oz<extra>"
+                      "Gold</extra>"))
+    fig.add_trace(go.Scatter(
+        x=[warp_one(g.index[-1])], y=[gn.iloc[-1]],
+        mode="markers",
+        yaxis="y2", showlegend=False, hoverinfo="skip",
+        marker=dict(color=color, size=9,
+                    line=dict(color="white", width=1))))
+    fig.add_annotation(
+        x=warp_one(g.index[-1]), y=float(gn.iloc[-1]),
+        yref="y2",
+        text=f"${g.iloc[-1]:,.0f}/oz", showarrow=False,
+        xanchor="right", yanchor="middle", ax=-8, ay=-14,
+        font=dict(size=11, color=color),
+        bgcolor=box, bordercolor=color, borderwidth=1,
+        borderpad=3)
+
+
+
+def _add_endpoint_labels(fig, endpoints, warp_one, *, box):
+    """Endpoint markers and value-zone labels for the two
+    index series."""
+    import plotly.graph_objects as go
+
+    if not endpoints:
+        return
+    # Label collision handling (2026-11-02, second round,
+    # carried from the PNG): identical offsets put
+    # converged endpoints' labels on top of each other
+    # (crypto 26 vs CNN 23 live). Labels anchor inside the
+    # plot (right-aligned, ending just before each series'
+    # last date) at _spread_labels positions \u2014 order
+    # preserved, LABEL_MIN_SEP apart.
+    placed = _spread_labels(
+        [float(s.iloc[-1]) + 3.0 for _c, s in endpoints])
+    for (color, s), label_y in zip(endpoints, placed):
+        v = float(s.iloc[-1])
+        fig.add_trace(go.Scatter(
+            x=[warp_one(s.index[-1])], y=[v],
+            mode="markers",
+            showlegend=False, hoverinfo="skip",
+            marker=dict(color=color, size=9,
+                        line=dict(color="white", width=1))))
+        fig.add_annotation(
+            x=warp_one(s.index[-1]
+                        - pd.Timedelta(days=3)), y=label_y,
+            text=f"{v:.0f} \u00b7 {zone(v)}", showarrow=False,
+            xanchor="right", yanchor="middle",
+            font=dict(size=11, color=color),
+            bgcolor=box, bordercolor=color, borderwidth=1,
+            borderpad=3)
+
+
+
+def _add_seam(fig, *, mute):
+    """The dotted seam where the time warp begins."""
+
+    # The seam: a dotted line where the stretch
+    # begins, with its note in the headroom strip.
+    fig.add_shape(
+        type="line", xref="x", yref="paper",
+        x0=1.0 - TAIL_SHARE, x1=1.0 - TAIL_SHARE,
+        y0=0, y1=1,
+        line=dict(color="rgba(232,236,236,0.45)",
+                  width=1, dash="dot"))
+    fig.add_annotation(
+        x=1.0 - TAIL_SHARE, y=103, xref="x", yref="y",
+        text="last 30 days \u2192", showarrow=False,
+        xanchor="left", yanchor="middle", xshift=4,
+        font=dict(size=9.5, color=mute))
+
+
+
+def _apply_layout(fig, series, axis, *, ink, gold):
+    """Axes, ticks, legend and the inside scale labels.
+
+    ``axis`` bundles the warp geometry the ticks are built
+    from: (x0, x1, cut, warped, warp_one)."""
+    x0, x1, cut, warped, warp_one = axis
+
+    # Headroom (2026-11-02 live fix, carried from the PNG;
+    # trimmed 2026-11-10 at the user's word — the plot
+    # claims the dead strip): the index axis runs to 105 —
+    # enough for the endpoint labels, whose spread clamp
+    # (LABEL_HI) lowered to 103 with it, so a 100 reading's
+    # label still sits inside; gold carries its own 0-100
+    # axis with the peak at GOLD_PEAK (see above). The
+    # zone bands stay 0-100.
+    # Inside scale labels (user direction 2026-11-10, the
+    # plot-space follow-up): the vertical scales print
+    # inside the plot, so the axes span nearly the full
+    # figure width — neither axis can take the native
+    # route (measured 2026-11-10: ticklabelposition=
+    # "inside" on the left axis makes the bundled
+    # plotly.js automargin reserve ~280px and the axes
+    # collapse), so both axes hide their tick labels.
+    # Gold's scale moved left and concatenated with the
+    # index scale (user direction 2026-11-10, demoed then
+    # approved): one annotation per index tick on a dark
+    # chip, "40 · $4,480" — the index value and the gold
+    # price at that tick's height, the $ in gold. The
+    # labels interleave with the band names (centers
+    # 10..90) at the ticks (0, 20, ..., 100).
+    yaxis = dict(range=[0, 105],
+                 tickvals=[0, 20, 40, 60, 80, 100],
+                 showticklabels=False,
+                 tickfont=dict(color=ink), zeroline=False,
+                 gridcolor="rgba(232,236,236,0.25)",
+                 griddash="dash")
+    # Plot space (user direction 2026-11-10, from the live
+    # phone render): the legend runs horizontally UNDER the
+    # plot — the Strategies charts' treatment (2026-11-04) —
+    # instead of a box inside it over the Extreme Greed
+    # band, both axis titles are dropped (the bands name the
+    # left axis, the legend names gold's), the base margins
+    # are tight with automargin fitting the tick labels,
+    # and the figure is taller, so the axes themselves get
+    # the room on a phone.
+    # Axis ticks on the warped scale: month starts in
+    # the compressed head ("%b %y"), skipping any within
+    # 15 days of the seam so its label cannot collide,
+    # then the seam date and the last date as "%b %d".
+    # (The axis spans exactly the data — the pinning of
+    # 2026-11-10, kept: range [0, 1] IS first-to-last
+    # observation under the warp.) A short unwarped
+    # window falls back to first/middle/last dates.
+    if warped:
+        tick_vals, tick_text = [], []
+        m = pd.Timestamp(x0.year, x0.month, 1)
+        while m <= x1:
+            if x0 <= m < cut - pd.Timedelta(days=15):
+                tick_vals.append(warp_one(m))
+                tick_text.append(m.strftime("%b %y"))
+            m += pd.DateOffset(months=1)
+        tick_vals += [1.0 - TAIL_SHARE, 1.0]
+        tick_text += [cut.strftime("%b %d"),
+                      x1.strftime("%b %d")]
+    else:
+        mid = x0 + (x1 - x0) / 2
+        tick_vals = [0.0, 0.5, 1.0]
+        tick_text = [d.strftime("%b %d")
+                     for d in (x0, mid, x1)]
+    xaxis = dict(range=[0.0, 1.0], tickmode="array",
+                 tickvals=tick_vals, ticktext=tick_text,
+                 tickfont=dict(color=ink, size=10),
+                 ticklabeloverflow="allow",
+                 showgrid=False)
+    layout = dict(
+        height=600, margin=dict(l=10, r=10, t=10, b=10),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color=ink), hovermode="x unified",
+        legend=dict(orientation="h", x=0, y=-0.12,
+                    xanchor="left", yanchor="top",
+                    bgcolor="rgba(0,0,0,0)", borderwidth=0,
+                    font=dict(color=ink, size=10.5)),
+        xaxis=xaxis,
+        yaxis=yaxis)
+    gold_range = None
+    if "gold" in series:
+        g = series["gold"]
+        gmin, gmax = float(g.min()), float(g.max())
+        gold_range = (gmin, gmax)
+        fracs = (0, 0.25, 0.5, 0.75, 1.0)
+        layout["yaxis2"] = dict(
+            range=[0, 100], overlaying="y", side="right",
+            tickvals=[GOLD_PEAK * f for f in fracs],
+            showticklabels=False, showgrid=False,
+            zeroline=False)
+    for v in (0, 20, 40, 60, 80, 100):
+        text = str(v)
+        if gold_range is not None:
+            gmin, gmax = gold_range
+            # The gold price at this tick's height: the
+            # tick sits at v/105 of the plot (the index
+            # range), gold's axis reads (v/105)*100 there,
+            # and its $ mapping runs through GOLD_PEAK.
+            usd = (gmin + (gmax - gmin)
+                   * (v / 105.0 * 100.0) / GOLD_PEAK)
+            text = (f"{v} \u00b7 <span style=\"color:"
+                    f"{gold}\">${usd:,.0f}</span>")
+        fig.add_annotation(
+            x=0.0, y=v, xref="x", yref="y",
+            text=text, showarrow=False, xanchor="left",
+            yanchor="middle", xshift=4,
+            font=dict(size=10, color=ink),
+            bgcolor="rgba(11,17,24,0.72)", borderpad=2)
+    fig.update_layout(**layout)
+
+
+
 def chart_fig(series):
     """The one-year banded sentiment chart as a Plotly figure
     (user direction 2026-11-10, replacing the matplotlib PNG
@@ -281,240 +560,23 @@ def chart_fig(series):
     cut = x1 - pd.Timedelta(days=TAIL_DAYS)
     cut_day = (cut - x0).total_seconds() / 86400.0
     warped = span_days > TAIL_DAYS
-
-    def _warp(idx):
-        days = (idx - x0).total_seconds() / 86400.0
-        if span_days <= 0:
-            return [0.0] * len(days)
-        if not warped:
-            return [float(d) / span_days for d in days]
-        return [
-            float(d) / cut_day * (1.0 - TAIL_SHARE)
-            if d <= cut_day else
-            (1.0 - TAIL_SHARE) + (float(d) - cut_day)
-            / (span_days - cut_day) * TAIL_SHARE
-            for d in days]
-
-    def _warp_one(ts):
-        return _warp(pd.DatetimeIndex([ts]))[0]
-
-    def _dates(idx):
-        return [d.strftime("%b %d, %Y") for d in idx]
-
-    for lo, hi, label, color in BANDS:
-        fig.add_shape(
-            type="rect", xref="x", yref="y", x0=0.0, x1=1.0,
-            y0=lo, y1=hi, fillcolor=color, opacity=0.14,
-            line=dict(width=0), layer="below")
-        fig.add_annotation(
-            x=0.0, y=(lo + hi) / 2, text=label, showarrow=False,
-            xanchor="left", yanchor="middle", xshift=4,
-            font=dict(size=9, color=_MUTE))
-    if "cnn" in series:
-        s = series["cnn"]
-        fig.add_trace(go.Scatter(
-            x=_warp(s.index), y=s.values, mode="lines",
-            name="CNN (US stocks)",
-            line=dict(color=_CNN, width=1.6),
-            customdata=_dates(s.index),
-            hovertemplate="%{customdata}<br>CNN (US stocks): "
-                          "%{y}<extra></extra>"))
-    if "crypto" in series:
-        s = series["crypto"]
-        fig.add_trace(go.Scatter(
-            x=_warp(s.index), y=s.values, mode="lines",
-            name="Crypto (alternative.me)", opacity=0.9,
-            line=dict(color=_CRYPTO, width=1.6),
-            customdata=_dates(s.index),
-            hovertemplate="%{customdata}<br>Crypto "
-                          "(alternative.me): %{y}<extra></extra>"))
+    geom = (x0, span_days, cut_day, warped)
+    warp = functools.partial(_warp, geom=geom)
+    warp_one = functools.partial(_warp_one, geom=geom)
+    _add_bands(fig, _MUTE)
+    _add_index_traces(fig, series, warp, (
+        ("cnn", _CNN, "CNN (US stocks)", None),
+        ("crypto", _CRYPTO, "Crypto (alternative.me)", 0.9)))
     if "gold" in series:
-        g = series["gold"]
-        gmin, gmax = float(g.min()), float(g.max())
-        # Headroom repair (2026-11-02, second round, carried
-        # from the PNG): normalizing the peak to exactly 100
-        # put it on the band ceiling, the top gridline and the
-        # top gold tick at once, so the Jan\u2013Feb spikes read as
-        # truncated even with the axis extended to 115. The
-        # peak maps to GOLD_PEAK on a 0-100 gold axis: the
-        # axis top is the max plus ~17.6% of the range, and
-        # the peak renders below the band ceiling.
-        gn = ((g - gmin) / (gmax - gmin) * GOLD_PEAK
-              if gmax > gmin else g * 0 + GOLD_PEAK / 2)
-        fig.add_trace(go.Scatter(
-            x=_warp(g.index), y=gn.values, mode="lines",
-            yaxis="y2",
-            name="Gold futures (GC=F, $/oz)", opacity=0.95,
-            line=dict(color=_GOLD, width=1.6),
-            customdata=[[d, v] for d, v in
-                        zip(_dates(g.index), g.values)],
-            hovertemplate="%{customdata[0]}<br>"
-                          "%{customdata[1]:$,.0f}/oz<extra>"
-                          "Gold</extra>"))
-        fig.add_trace(go.Scatter(
-            x=[_warp_one(g.index[-1])], y=[gn.iloc[-1]],
-            mode="markers",
-            yaxis="y2", showlegend=False, hoverinfo="skip",
-            marker=dict(color=_GOLD, size=9,
-                        line=dict(color="white", width=1))))
-        fig.add_annotation(
-            x=_warp_one(g.index[-1]), y=float(gn.iloc[-1]),
-            yref="y2",
-            text=f"${g.iloc[-1]:,.0f}/oz", showarrow=False,
-            xanchor="right", yanchor="middle", ax=-8, ay=-14,
-            font=dict(size=11, color=_GOLD),
-            bgcolor=_BOX, bordercolor=_GOLD, borderwidth=1,
-            borderpad=3)
+        _add_gold_trace(fig, series["gold"], geom,
+                        color=_GOLD, box=_BOX)
     endpoints = [(color, series[name])
                  for name, color in (("cnn", _CNN),
                                      ("crypto", _CRYPTO))
                  if name in series]
-    if endpoints:
-        # Label collision handling (2026-11-02, second round,
-        # carried from the PNG): identical offsets put
-        # converged endpoints' labels on top of each other
-        # (crypto 26 vs CNN 23 live). Labels anchor inside the
-        # plot (right-aligned, ending just before each series'
-        # last date) at _spread_labels positions \u2014 order
-        # preserved, LABEL_MIN_SEP apart.
-        placed = _spread_labels(
-            [float(s.iloc[-1]) + 3.0 for _c, s in endpoints])
-        for (color, s), label_y in zip(endpoints, placed):
-            v = float(s.iloc[-1])
-            fig.add_trace(go.Scatter(
-                x=[_warp_one(s.index[-1])], y=[v],
-                mode="markers",
-                showlegend=False, hoverinfo="skip",
-                marker=dict(color=color, size=9,
-                            line=dict(color="white", width=1))))
-            fig.add_annotation(
-                x=_warp_one(s.index[-1]
-                            - pd.Timedelta(days=3)), y=label_y,
-                text=f"{v:.0f} \u00b7 {zone(v)}", showarrow=False,
-                xanchor="right", yanchor="middle",
-                font=dict(size=11, color=color),
-                bgcolor=_BOX, bordercolor=color, borderwidth=1,
-                borderpad=3)
+    _add_endpoint_labels(fig, endpoints, warp_one, box=_BOX)
     if warped:
-        # The seam: a dotted line where the stretch
-        # begins, with its note in the headroom strip.
-        fig.add_shape(
-            type="line", xref="x", yref="paper",
-            x0=1.0 - TAIL_SHARE, x1=1.0 - TAIL_SHARE,
-            y0=0, y1=1,
-            line=dict(color="rgba(232,236,236,0.45)",
-                      width=1, dash="dot"))
-        fig.add_annotation(
-            x=1.0 - TAIL_SHARE, y=103, xref="x", yref="y",
-            text="last 30 days \u2192", showarrow=False,
-            xanchor="left", yanchor="middle", xshift=4,
-            font=dict(size=9.5, color=_MUTE))
-    # Headroom (2026-11-02 live fix, carried from the PNG;
-    # trimmed 2026-11-10 at the user's word — the plot
-    # claims the dead strip): the index axis runs to 105 —
-    # enough for the endpoint labels, whose spread clamp
-    # (LABEL_HI) lowered to 103 with it, so a 100 reading's
-    # label still sits inside; gold carries its own 0-100
-    # axis with the peak at GOLD_PEAK (see above). The
-    # zone bands stay 0-100.
-    # Inside scale labels (user direction 2026-11-10, the
-    # plot-space follow-up): the vertical scales print
-    # inside the plot, so the axes span nearly the full
-    # figure width — neither axis can take the native
-    # route (measured 2026-11-10: ticklabelposition=
-    # "inside" on the left axis makes the bundled
-    # plotly.js automargin reserve ~280px and the axes
-    # collapse), so both axes hide their tick labels.
-    # Gold's scale moved left and concatenated with the
-    # index scale (user direction 2026-11-10, demoed then
-    # approved): one annotation per index tick on a dark
-    # chip, "40 · $4,480" — the index value and the gold
-    # price at that tick's height, the $ in gold. The
-    # labels interleave with the band names (centers
-    # 10..90) at the ticks (0, 20, ..., 100).
-    yaxis = dict(range=[0, 105],
-                 tickvals=[0, 20, 40, 60, 80, 100],
-                 showticklabels=False,
-                 tickfont=dict(color=_INK), zeroline=False,
-                 gridcolor="rgba(232,236,236,0.25)",
-                 griddash="dash")
-    # Plot space (user direction 2026-11-10, from the live
-    # phone render): the legend runs horizontally UNDER the
-    # plot — the Strategies charts' treatment (2026-11-04) —
-    # instead of a box inside it over the Extreme Greed
-    # band, both axis titles are dropped (the bands name the
-    # left axis, the legend names gold's), the base margins
-    # are tight with automargin fitting the tick labels,
-    # and the figure is taller, so the axes themselves get
-    # the room on a phone.
-    # Axis ticks on the warped scale: month starts in
-    # the compressed head ("%b %y"), skipping any within
-    # 15 days of the seam so its label cannot collide,
-    # then the seam date and the last date as "%b %d".
-    # (The axis spans exactly the data — the pinning of
-    # 2026-11-10, kept: range [0, 1] IS first-to-last
-    # observation under the warp.) A short unwarped
-    # window falls back to first/middle/last dates.
-    if warped:
-        tick_vals, tick_text = [], []
-        m = pd.Timestamp(x0.year, x0.month, 1)
-        while m <= x1:
-            if x0 <= m < cut - pd.Timedelta(days=15):
-                tick_vals.append(_warp_one(m))
-                tick_text.append(m.strftime("%b %y"))
-            m += pd.DateOffset(months=1)
-        tick_vals += [1.0 - TAIL_SHARE, 1.0]
-        tick_text += [cut.strftime("%b %d"),
-                      x1.strftime("%b %d")]
-    else:
-        mid = x0 + (x1 - x0) / 2
-        tick_vals = [0.0, 0.5, 1.0]
-        tick_text = [d.strftime("%b %d")
-                     for d in (x0, mid, x1)]
-    xaxis = dict(range=[0.0, 1.0], tickmode="array",
-                 tickvals=tick_vals, ticktext=tick_text,
-                 tickfont=dict(color=_INK, size=10),
-                 ticklabeloverflow="allow",
-                 showgrid=False)
-    layout = dict(
-        height=600, margin=dict(l=10, r=10, t=10, b=10),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(color=_INK), hovermode="x unified",
-        legend=dict(orientation="h", x=0, y=-0.12,
-                    xanchor="left", yanchor="top",
-                    bgcolor="rgba(0,0,0,0)", borderwidth=0,
-                    font=dict(color=_INK, size=10.5)),
-        xaxis=xaxis,
-        yaxis=yaxis)
-    gold_range = None
-    if "gold" in series:
-        g = series["gold"]
-        gmin, gmax = float(g.min()), float(g.max())
-        gold_range = (gmin, gmax)
-        fracs = (0, 0.25, 0.5, 0.75, 1.0)
-        layout["yaxis2"] = dict(
-            range=[0, 100], overlaying="y", side="right",
-            tickvals=[GOLD_PEAK * f for f in fracs],
-            showticklabels=False, showgrid=False,
-            zeroline=False)
-    for v in (0, 20, 40, 60, 80, 100):
-        text = str(v)
-        if gold_range is not None:
-            gmin, gmax = gold_range
-            # The gold price at this tick's height: the
-            # tick sits at v/105 of the plot (the index
-            # range), gold's axis reads (v/105)*100 there,
-            # and its $ mapping runs through GOLD_PEAK.
-            usd = (gmin + (gmax - gmin)
-                   * (v / 105.0 * 100.0) / GOLD_PEAK)
-            text = (f"{v} \u00b7 <span style=\"color:"
-                    f"{_GOLD}\">${usd:,.0f}</span>")
-        fig.add_annotation(
-            x=0.0, y=v, xref="x", yref="y",
-            text=text, showarrow=False, xanchor="left",
-            yanchor="middle", xshift=4,
-            font=dict(size=10, color=_INK),
-            bgcolor="rgba(11,17,24,0.72)", borderpad=2)
-    fig.update_layout(**layout)
+        _add_seam(fig, mute=_MUTE)
+    _apply_layout(fig, series, (x0, x1, cut, warped, warp_one),
+                  ink=_INK, gold=_GOLD)
     return fig
