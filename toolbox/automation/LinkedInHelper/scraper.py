@@ -41,7 +41,7 @@ def get_jobs_current_page(driver):
     logger.info(f"Found {len(job_cards)} job cards on page")
 
     jobs = []
-    for i, job in enumerate(job_cards):
+    for job in job_cards:
         lines = job.text.split("\n")
         job_dict = {}
         # remove ', Verified'

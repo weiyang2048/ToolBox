@@ -64,7 +64,7 @@ def extract_price_quantity_tuples(results: pd.DataFrame) -> list[tuple[float, fl
     """
     tuples = []
     action_type = []
-    for idx, row in results.iterrows():
+    for _idx, row in results.iterrows():
         price = row["p"]
         # The effective quantity is either q_offer or q_bid depending on which is non-zero
         if row["q_offer"] > 0:
