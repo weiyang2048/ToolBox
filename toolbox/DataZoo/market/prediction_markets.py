@@ -73,6 +73,15 @@ _INK = "#E8ECEC"
 _MUTE = "#9AA0A6"
 _BLUE = "#5B8DEF"
 
+# A probability below 99.5% keeps one decimal; at or above
+# it, whole percent — at one decimal 99.95% would print as a
+# false-certain 100.0%.
+_DECIMAL_PCT_MAX = 0.995
+
+# A move colours once it reaches half the 0.1-point display
+# step — exactly when its printed digit becomes nonzero.
+_MOVE_COLOR_MIN_PTS = 0.05
+
 
 def _get(url):
     """Parsed JSON from a public API, or None on any
@@ -242,13 +251,13 @@ def _money(v):
 
 
 def _pct(p):
-    return f"{p * 100:.1f}%" if p < 0.995 else f"{p * 100:.0f}%"
+    return f"{p * 100:.1f}%" if p < _DECIMAL_PCT_MAX else f"{p * 100:.0f}%"
 
 
 def _chg(c):
     pts = c * 100
-    col = ("#7FB069" if pts > 0.05 else
-           "#E4572E" if pts < -0.05 else _MUTE)
+    col = ("#7FB069" if pts > _MOVE_COLOR_MIN_PTS else
+           "#E4572E" if pts < -_MOVE_COLOR_MIN_PTS else _MUTE)
     return f'<span style="color:{col}">{pts:+.1f}</span>'
 
 
