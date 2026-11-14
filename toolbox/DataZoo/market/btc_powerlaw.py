@@ -18,9 +18,10 @@ BTC market cap comes from blockchain.info; gold market cap =
 Yahoo GC=F ($/ozt) × WGC above-ground stock (end-2024 216,265 t,
 walked with ~3,738 t/yr mine production). The BTC÷gold ratio gets
 its own power-law fit, whose 100% crossing is the model-implied
-"flippening" date. Both fits also carry classical OLS slope
-standard errors (fit_power_law_full), surfaced in the stats
-payload and the figure's legend labels.
+"flippening" date. Both fits also carry slope standard errors
+(fit_power_law_full) — classical OLS and a prewhitened
+Newey-West (HAC) variant for the residuals' strong persistence —
+surfaced in the stats payload and the figure's legend labels.
 """
 import datetime
 import io
@@ -90,35 +91,62 @@ def fit_power_law(days_arr, values):
 
 
 def fit_power_law_full(days_arr, values):
-    """The fit_power_law fit with classical OLS uncertainty, as a dict.
+    """The fit_power_law fit with slope uncertainty, as a dict.
 
     Keys: b, lnA, sigma — the identical values fit_power_law
     returns (sigma the ddof=0 residual std) — plus n, the
-    standard errors b_se / lnA_se, and b_ci95, the (lo, hi) 95%
-    confidence interval for the slope.
+    classical OLS standard errors b_se / lnA_se and interval
+    b_ci95, and the Newey-West (HAC) counterparts b_se_nw /
+    lnA_se_nw / b_ci95_nw with the bandwidth nw_bandwidth and
+    the recoloring coefficient nw_rho actually used.
 
-    Convention: s^2 = RSS/(n - 2) with t critical values at
-    n - 2 dof, settled by Monte Carlo (2026-11-14; 20,000 reps
-    per cell on this board's own design — blockchain.info
-    ln-days, n = 1484, residual sigma 0.69). At n = 1484 every
-    dof convention covers at 95.0-95.1%, but the ddof=0 / normal
-    variant sags as n falls (94.6% at n = 200, 94.2% at n = 60)
-    while this one holds 95.1%; it is the only variant
-    calibrated at every n, and its mean SE matched the
-    empirical sd of the slope to 0.3%. Intervals also cover at
-    94.9% under iid resamples of the real residuals (same
-    marginal shape, no dependence).
+    Classical convention: s^2 = RSS/(n - 2) with t critical
+    values at n - 2 dof, settled by Monte Carlo (2026-11-14;
+    20,000 reps per cell on this board's own design —
+    blockchain.info ln-days, n = 1484, residual sigma 0.69).
+    At n = 1484 every dof convention covers at 95.0-95.1%, but
+    the ddof=0 / normal variant sags as n falls (94.6% at
+    n = 200, 94.2% at n = 60) while this one holds 95.1%; it
+    is the only variant calibrated at every n, and its mean SE
+    matched the empirical sd of the slope to 0.3%. Intervals
+    also cover at 94.9% under iid resamples of the real
+    residuals (same marginal shape, no dependence).
 
-    CAVEAT — read before quoting the interval: it is a
-    precision statement against iid log-residuals, and the real
-    ones are anything but. The 2026-11-14 price fit's residuals
-    have lag-1 autocorrelation 0.99; in an AR(1) Monte Carlo
-    matched to that persistence (same marginal sigma) the
-    nominal 95% interval covered the true slope only ~10% of
-    the time, and the slope's true sampling sd ran ~15x the
-    classical SE. Read b_se as the floor on the exponent's
-    uncertainty, not the whole of it; a Newey-West (HAC)
-    variant is the known follow-up.
+    CAVEAT — the classical interval is a precision statement
+    against iid log-residuals, and the real ones are anything
+    but: the price fit's residuals have lag-1 autocorrelation
+    0.99. In an AR(1) Monte Carlo matched to that persistence
+    (same design, same marginal sigma) the classical interval
+    covers the true slope only ~10% of the time and the true
+    sampling sd runs ~15x b_se. Read b_se as the floor on the
+    exponent's uncertainty; b_se_nw is the persistence-aware
+    figure.
+
+    Newey-West design (Monte Carlo record, 2026-11-14, same
+    harness): plain Bartlett NW on the residual scores fails
+    at EVERY bandwidth here — coverage peaks at 68% near
+    L = 200 — because OLS projection attenuates the residual
+    autocovariances at exactly the long lags that carry the
+    long-run variance (the population autocovariance at lag
+    100 is 1.7e-7; the residual sample analogue is ~0). The
+    shipped variant therefore prewhitens (Andrews-Monahan):
+    the scores are filtered by the residuals' AR(1)
+    coefficient, a Bartlett long-run variance with a
+    Newey-West-1994 plug-in bandwidth (nw_bandwidth, small by
+    construction) is computed on the whitened scores, and the
+    sandwich is recolored by (1 - nw_rho)^-2 with nw_rho the
+    Kendall bias-corrected AR(1) coefficient — the correction
+    is first-order here because (1 - rho)^-2 amplifies the
+    coefficient's -0.0045 small-sample bias (measured) into a
+    ~40% variance understatement if left raw. Measured
+    coverage of b_ci95_nw: ~92% under the matched AR(1), 95%
+    under iid (where it agrees with the classical interval).
+    92 is not 95, and no residual-based variant in the
+    harness did better without inflating the mean SE to ~2x
+    the true sd: at rho = 0.99 the long-run variance rests on
+    ~n(1 - rho) ~ 15 effective observations, so treat the NW
+    interval as the honest scale of the uncertainty, not an
+    exact 95%.
     """
     days_arr = np.asarray(days_arr, dtype=float)
     values = np.asarray(values, dtype=float)
@@ -135,10 +163,38 @@ def fit_power_law_full(days_arr, values):
     b_se = math.sqrt(s2 / sxx)
     lnA_se = math.sqrt(s2 * (1.0 / n + xm * xm / sxx))
     half = float(_student_t.ppf(0.975, n - 2)) * b_se
+
+    # --- Newey-West, AR(1)-prewhitened (see docstring) ---
+    xtx_inv = np.array([[1.0 / n + xm * xm / sxx, -xm / sxx],
+                        [-xm / sxx, 1.0 / sxx]])
+    scores = np.column_stack([resid, resid * ln_d])
+    rho = float(resid[:-1] @ resid[1:] / (resid[:-1] @ resid[:-1]))
+    rho = min(max(rho, -0.999), 0.999)
+    white = scores[1:] - rho * scores[:-1]
+    nw_n = n - 1
+    v_w = white @ xtx_inv[1]
+    vv = float(v_w @ v_w)
+    r_w = float(v_w[:-1] @ v_w[1:] / vv) if vv > 0 else 0.0
+    r_w = min(max(r_w, -0.999), 0.999)
+    alpha1 = (2.0 * r_w / (1.0 - r_w ** 2)) ** 2
+    nw_lag = int(min(25, max(0, math.floor(
+        1.1447 * (alpha1 * nw_n) ** (1.0 / 3.0)))))
+    s_mat = (white.T @ white) / nw_n
+    for j in range(1, nw_lag + 1):
+        gj = (white[:-j].T @ white[j:]) / nw_n
+        s_mat = s_mat + (1.0 - j / (nw_lag + 1.0)) * (gj + gj.T)
+    rho_t = min(max(rho + (1.0 + 3.0 * rho) / n, -0.9995), 0.9995)
+    cov_nw = nw_n * xtx_inv @ (s_mat / (1.0 - rho_t) ** 2) @ xtx_inv
+    lnA_se_nw = math.sqrt(max(float(cov_nw[0, 0]), 0.0))
+    b_se_nw = math.sqrt(max(float(cov_nw[1, 1]), 0.0))
+    half_nw = float(_student_t.ppf(0.975, n - 2)) * b_se_nw
     return {
         "b": float(b), "lnA": float(lnA), "sigma": sigma, "n": n,
         "b_se": b_se, "lnA_se": lnA_se,
         "b_ci95": (float(b) - half, float(b) + half),
+        "b_se_nw": b_se_nw, "lnA_se_nw": lnA_se_nw,
+        "b_ci95_nw": (float(b) - half_nw, float(b) + half_nw),
+        "nw_bandwidth": nw_lag, "nw_rho": rho_t,
     }
 
 
@@ -313,6 +369,9 @@ def fetch_powerlaw():
             "slope_se": fit["b_se"],
             "slope_ci_lo": fit["b_ci95"][0],
             "slope_ci_hi": fit["b_ci95"][1],
+            "slope_se_nw": fit["b_se_nw"],
+            "slope_ci_nw_lo": fit["b_ci95_nw"][0],
+            "slope_ci_nw_hi": fit["b_ci95_nw"][1],
             "end2029": p2029,
             "btc_last": float(btc.iloc[-1]),
             "btc_date": _btc_display_date(btc.index[-1]),
@@ -320,6 +379,7 @@ def fetch_powerlaw():
             "ratio_date": ratio.index[-1].date().isoformat(),
             "ratio_slope": float(b_r),
             "ratio_slope_se": fit_r["b_se"],
+            "ratio_slope_se_nw": fit_r["b_se_nw"],
             "flippening": (flip_date.isoformat()
                            if flip_date else None),
             "corr_gold": float(c_gold.iloc[-1]),
@@ -351,15 +411,25 @@ def chart_png(data):
                              data["eg"], data["es"])
     last, floor, st = data["last"], data["floor"], data["stats"]
     b, b_r = st["slope"], st["ratio_slope"]
-    # The legend quotes each slope with its classical +/-1 SE
-    # when the payload carries one (fetch_powerlaw always does;
-    # older/hand-built payloads render the bare slope as before).
+    # The legend quotes each slope with its +/-1 SE when the
+    # payload carries one (fetch_powerlaw always does; older/
+    # hand-built payloads render the bare slope as before).
+    # The Newey-West SE is the quoted figure when present: the
+    # residuals are strongly persistent (lag-1 autocorrelation
+    # 0.99), under which the classical SE understates the
+    # slope's sampling sd ~15x (see fit_power_law_full).
     slope_lab = f"power law (slope {b:.2f})"
-    if st.get("slope_se"):
+    if st.get("slope_se_nw"):
+        slope_lab = (f"power law (slope {b:.2f} "
+                     f"\u00b1 {st['slope_se_nw']:.2f} NW SE)")
+    elif st.get("slope_se"):
         slope_lab = (f"power law (slope {b:.2f} "
                      f"\u00b1 {st['slope_se']:.2f})")
     ratio_lab = f"ratio power law (slope {b_r:.2f})"
-    if st.get("ratio_slope_se"):
+    if st.get("ratio_slope_se_nw"):
+        ratio_lab = (f"ratio power law (slope {b_r:.2f} "
+                     f"\u00b1 {st['ratio_slope_se_nw']:.2f} NW SE)")
+    elif st.get("ratio_slope_se"):
         ratio_lab = (f"ratio power law (slope {b_r:.2f} "
                      f"\u00b1 {st['ratio_slope_se']:.2f})")
 

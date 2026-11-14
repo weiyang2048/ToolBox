@@ -83,6 +83,127 @@ def test_fit_power_law_full_ci_coverage_seeded():
     assert 0.9 < ratio < 1.1
 
 
+def _nw_independent(days, values):
+    """fit_power_law_full's Newey-West block, recomputed from the
+    definitions with plain loops (no shared code): AR(1) score
+    filter, Bartlett LRV of the whitened scores with the NW94
+    plug-in bandwidth, Kendall-corrected recolor, sandwich."""
+    import math
+
+    n = len(days)
+    x = [math.log(float(dv)) for dv in days]
+    y = [math.log(float(vv)) for vv in values]
+    xm = math.fsum(x) / n
+    ym = math.fsum(y) / n
+    sxx = math.fsum((v - xm) ** 2 for v in x)
+    b = math.fsum((x[i] - xm) * (y[i] - ym) for i in range(n)) / sxx
+    lnA = ym - b * xm
+    e = [y[i] - lnA - b * x[i] for i in range(n)]
+    i00 = 1.0 / n + xm * xm / sxx
+    i01 = -xm / sxx
+    i11 = 1.0 / sxx
+    rho = max(-0.999, min(0.999,
+                          math.fsum(e[i] * e[i + 1] for i in range(n - 1))
+                          / math.fsum(e[i] ** 2 for i in range(n - 1))))
+    u = [(e[i] - rho * e[i - 1],
+          x[i] * e[i] - rho * x[i - 1] * e[i - 1])
+         for i in range(1, n)]
+    nn = n - 1
+    v = [i01 * a + i11 * bb for a, bb in u]
+    vv = math.fsum(t * t for t in v)
+    rw = (math.fsum(v[i] * v[i + 1] for i in range(len(v) - 1)) / vv
+          if vv > 0 else 0.0)
+    rw = max(-0.999, min(0.999, rw))
+    alpha1 = (2.0 * rw / (1.0 - rw ** 2)) ** 2
+    lag = int(min(25, max(0, math.floor(
+        1.1447 * (alpha1 * nn) ** (1.0 / 3.0)))))
+    S = [[0.0, 0.0], [0.0, 0.0]]
+    for j in range(lag + 1):
+        wgt = 1.0 if j == 0 else 1.0 - j / (lag + 1.0)
+        for a_ in range(2):
+            for b_ in range(2):
+                gj = math.fsum(u[t][a_] * u[t + j][b_]
+                               for t in range(nn - j)) / nn
+                S[a_][b_] += wgt * (gj if j == 0 else gj + math.fsum(
+                    u[t][b_] * u[t + j][a_] for t in range(nn - j)) / nn)
+    rho_t = max(-0.9995, min(0.9995, rho + (1.0 + 3.0 * rho) / n))
+    fac = 1.0 / (1.0 - rho_t) ** 2
+    var_b = nn * fac * (i01 ** 2 * S[0][0] + 2 * i01 * i11 * S[0][1]
+                        + i11 ** 2 * S[1][1])
+    var_a = nn * fac * (i00 ** 2 * S[0][0] + 2 * i00 * i01 * S[0][1]
+                        + i01 ** 2 * S[1][1])
+    return math.sqrt(var_b), math.sqrt(var_a), lag, rho_t
+
+
+def test_fit_power_law_full_nw_hand_computed():
+    # Same hand-computed dataset as the classical-SE test:
+    # x = [0, 1, 2, 3], residuals (0.1, 0.2, -0.7, 0.4). By hand
+    # the residuals' lag-1 OLS coefficient is
+    # (0.02 - 0.14 - 0.28) / (0.01 + 0.04 + 0.49) = -0.40/0.54
+    # = -20/27, and the Kendall-corrected recolor coefficient
+    # is -20/27 + (1 - 60/27)/4 = -113/108 < -0.9995, so the
+    # clip binds and nw_rho is exactly -0.9995. The SEs
+    # themselves are pinned against the independent loop
+    # implementation above (agreement to 1e-12).
+    days = np.exp([0.0, 1.0, 2.0, 3.0])
+    values = np.exp([0.0, 1.0, 1.0, 3.0])
+    f = bp.fit_power_law_full(days, values)
+    b_nw, a_nw, lag, rho_t = _nw_independent(days, values)
+    assert f["nw_rho"] == -0.9995 and rho_t == -0.9995
+    assert f["nw_bandwidth"] == lag
+    assert abs(f["b_se_nw"] - b_nw) < 1e-12
+    assert abs(f["lnA_se_nw"] - a_nw) < 1e-12
+    assert f["b_ci95_nw"][0] < f["b"] < f["b_ci95_nw"][1]
+
+
+def test_fit_power_law_full_nw_iid_matches_classical():
+    # iid control (seeded): with no persistence to correct, the
+    # NW SE tracks the classical one — the prewhitening must
+    # not wreck the case that already worked. Across seeds the
+    # ratio concentrates near 1; the band is ~3 sd of it.
+    rng = np.random.default_rng(11)
+    days = np.geomspace(200, 9000, 400)
+    x = np.log(days)
+    ratios = []
+    for _ in range(25):
+        values = np.exp(-20.0 + 4.2 * x + rng.normal(0, 0.5, len(days)))
+        f = bp.fit_power_law_full(days, values)
+        ratios.append(f["b_se_nw"] / f["b_se"])
+    assert 0.8 < float(np.mean(ratios)) < 1.25
+
+
+def test_fit_power_law_full_nw_ar1_coverage_seeded():
+    # Seeded AR(1) coverage at the board's own scale (n = 1484,
+    # rho = 0.99, sigma = 0.69 — the live fit's persistence).
+    # The 20,000-rep study in fit_power_law_full's docstring
+    # measures the shipped interval at ~92% here while the
+    # classical interval covers ~11%; 300 reps keeps CI time
+    # ~2 s, and the bands are ~4 binomial sd around those
+    # rates. The mean-SE / empirical-sd ratio pins the scale.
+    rng = np.random.default_rng(4242)
+    n = 1484
+    days = np.geomspace(550, 6400, n)
+    x = np.log(days)
+    rho, sigma = 0.99, 0.69
+    reps, hits_nw, hits_cl = 300, 0, 0
+    ses, ests = [], []
+    for _ in range(reps):
+        u = rng.normal(0, sigma * np.sqrt(1 - rho ** 2), n)
+        e = np.empty(n)
+        e[0] = rng.normal(0, sigma)
+        for t in range(1, n):
+            e[t] = rho * e[t - 1] + u[t]
+        f = bp.fit_power_law_full(days, np.exp(-37.3 + 5.6 * x + e))
+        hits_nw += f["b_ci95_nw"][0] <= 5.6 <= f["b_ci95_nw"][1]
+        hits_cl += f["b_ci95"][0] <= 5.6 <= f["b_ci95"][1]
+        ses.append(f["b_se_nw"])
+        ests.append(f["b"])
+    assert 0.84 <= hits_nw / reps <= 0.99
+    assert hits_cl / reps < 0.30
+    ratio = float(np.mean(ses) / np.std(ests, ddof=1))
+    assert 0.8 < ratio < 1.9
+
+
 def test_days_since_genesis():
     idx = pd.DatetimeIndex(["2009-01-03", "2009-01-13", "2010-01-03"])
     out = bp.days_since_genesis(idx)
@@ -248,6 +369,30 @@ def test_fetch_powerlaw_surfaces_slope_uncertainty(monkeypatch):
     # The figure renders through the new +-SE legend labels.
     png = bp.chart_png(out)
     assert png[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_fetch_powerlaw_surfaces_nw_uncertainty(monkeypatch):
+    # The payload gains the Newey-West SEs alongside the
+    # classical ones, the NW interval brackets its slope, and
+    # the figure renders through every label fallback: NW
+    # present, classical only, and no SEs at all (hand-built
+    # payloads keep rendering exactly as before).
+    _powerlaw_fixture(monkeypatch)
+    _freeze_clock(monkeypatch, datetime.datetime(
+        2026, 11, 5, 12, 0, tzinfo=datetime.timezone.utc))
+    out = bp.fetch_powerlaw()
+    st = out["stats"]
+    assert st["slope_se_nw"] > 0 and st["ratio_slope_se_nw"] > 0
+    assert st["slope_ci_nw_lo"] < st["slope"] < st["slope_ci_nw_hi"]
+    assert bp.chart_png(out)[:8] == b"\x89PNG\r\n\x1a\n"
+    for drop in (["slope_se_nw", "slope_ci_nw_lo", "slope_ci_nw_hi",
+                  "ratio_slope_se_nw"],
+                 ["slope_se_nw", "slope_ci_nw_lo", "slope_ci_nw_hi",
+                  "ratio_slope_se_nw", "slope_se", "slope_ci_lo",
+                  "slope_ci_hi", "ratio_slope_se"]):
+        legacy = dict(out)
+        legacy["stats"] = {k: v for k, v in st.items() if k not in drop}
+        assert bp.chart_png(legacy)[:8] == b"\x89PNG\r\n\x1a\n"
 
 
 def test_chart_png_does_not_call_tight_layout():
