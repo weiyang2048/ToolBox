@@ -42,6 +42,9 @@ from toolbox.DataZoo.market.yahoo_prices import with_retry, yahoo_daily
 _MUTE = "#9AA0A6"
 _ACCENT = "#FFB066"
 PEERS = ("QAI", "HDG", "MNA", "DBMF", "CTA", "KMLM", "BTAL")
+# The 63-session rolling correlations are computed only with
+# more daily returns than this on hand.
+_MIN_ROLL_OBS = 70
 _SYMS = ("IALT", "SPY", "AGG", "VOO") + PEERS
 
 
@@ -81,7 +84,7 @@ def _compute(df):
     dd_voo = df["VOO"] / df["VOO"].cummax() - 1
     rets = df[["IALT", "SPY", "AGG"]].pct_change().dropna()
     roll = None
-    if len(rets) > 70:
+    if len(rets) > _MIN_ROLL_OBS:
         roll = {
             "spy": rets["IALT"].rolling(63).corr(rets["SPY"]),
             "agg": rets["IALT"].rolling(63).corr(rets["AGG"])}
