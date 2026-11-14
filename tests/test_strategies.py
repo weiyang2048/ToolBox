@@ -10,10 +10,14 @@ from toolbox.strategies import (
     bbp_clean_corr,
     clean_covariance,
     clean_mean,
+    cvar_weights,
     estimate_inputs,
+    hrp_weights,
     james_stein,
     log_returns,
+    nco_weights,
     nlshrink_eigs,
+    performance_stats,
     resolve_strategy,
     snapshot_weights,
     strategy_weights,
@@ -735,3 +739,194 @@ def test_spmo_cap_score_snapshot_and_backtest():
             prices, strategies=[SPMO_CAP_SCORE_NAME],
             cov_method="bbp", mean_method="sample", seed=252,
             hold=21)
+
+
+# ---------------------------------------------------------------------------
+# Known-value tests (idea search #2, candidate 3): every expectation below
+# is derived independently of the implementation — by hand, by brute
+# force, or by first-principles arithmetic in the test itself.
+# ---------------------------------------------------------------------------
+
+
+def test_hrp_two_unrelated_assets_is_inverse_variance():
+    # Two uncorrelated assets: the single bisection allocates
+    # between the singleton clusters in inverse proportion to
+    # their variances (cluster variance of a singleton is its own
+    # variance, and HRP gives the left cluster v_r / (v_l + v_r)).
+    # v = (0.04, 0.01) -> w = (0.01, 0.04) / 0.05 = (0.2, 0.8).
+    w = hrp_weights(np.diag([0.04, 0.01]))
+    assert np.allclose(w, [0.2, 0.8], atol=1e-12)
+
+
+def test_hrp_two_identical_pairs_hand_computed():
+    # Assets {0, 1} are the same asset twice (var 0.04, corr 1);
+    # assets {2, 3} likewise with var 0.01; the pairs are
+    # uncorrelated. Quasi-diagonalisation keeps each identical
+    # pair adjacent (they merge at distance 0), and the first
+    # bisection cut (midpoint of the 4-leaf order) always falls
+    # between the pairs, so the result does not depend on the
+    # dendrogram's leaf traversal order:
+    #   cluster variance of an identical pair under its
+    #   inverse-variance portfolio (1/2, 1/2) is the pair's own
+    #   variance, so the pairs split inverse-variance:
+    #   pair {0,1} gets 0.01 / (0.04 + 0.01) = 0.2, pair {2,3}
+    #   gets 0.8; within a pair the split is equal.
+    S = np.array([[0.04, 0.04, 0.0, 0.0],
+                  [0.04, 0.04, 0.0, 0.0],
+                  [0.0, 0.0, 0.01, 0.01],
+                  [0.0, 0.0, 0.01, 0.01]])
+    assert np.allclose(hrp_weights(S), [0.1, 0.1, 0.4, 0.4], atol=1e-12)
+    # Relabelling the assets (pairs swapped) moves the weights
+    # with them — the allocation is a property of the covariance,
+    # not of the leaf order.
+    P = [2, 3, 0, 1]
+    assert np.allclose(hrp_weights(S[np.ix_(P, P)]),
+                       [0.4, 0.4, 0.1, 0.1], atol=1e-12)
+
+
+def _returns_with_exact_cov(S: np.ndarray) -> pd.DataFrame:
+    """Returns whose *sample* covariance (ddof=1) is exactly ``S``.
+
+    Hadamard columns are mean-zero and mutually orthogonal with
+    squared norm = n, so X = Z·chol(S)·sqrt((n-1)/n) has
+    X'X / (n-1) = S by construction — no sampling error in the
+    correlations NCO clusters on.
+    """
+    from scipy.linalg import hadamard
+
+    n = 8
+    Z = hadamard(n)[:, 1:S.shape[0] + 1].astype(float)
+    X = Z @ (np.linalg.cholesky(S) * np.sqrt((n - 1) / n))
+    return pd.DataFrame(X, columns=[f"A{i}" for i in range(S.shape[0])])
+
+
+def test_nco_diagonal_covariance_is_inverse_variance():
+    # With a diagonal covariance, min-variance inside any cluster
+    # is inverse-variance there, the cluster portfolio variance
+    # is 1 / sum(1/sigma^2) over the cluster, and min-variance
+    # across clusters divides by those variances — the cluster
+    # sums telescope, so for ANY partition NCO is exactly the
+    # global inverse-variance portfolio. (SLSQP solves the two
+    # min-variance steps, hence the solver tolerance.)
+    S = np.diag([0.04, 0.01, 0.09, 0.0025])
+    R = _returns_with_exact_cov(S)
+    iv = 1.0 / np.diag(S)
+    assert np.allclose(nco_weights(R, S, k=2), iv / iv.sum(), atol=1e-6)
+
+
+def test_nco_two_block_composition_hand_computed():
+    # Block 1: vars (0.04, 0.04), cov 0.02. Its 2-asset
+    # min-variance weight is (0.04 - 0.02) / (0.04 + 0.04 - 2*0.02)
+    # = 1/2 on each, with portfolio variance
+    # (0.04 + 0.04 + 2*0.02) / 4 = 0.03.
+    # Block 2: vars (0.09, 0.01), cov 0.015. The unconstrained
+    # min-variance weight on the first asset is
+    # (0.01 - 0.015) / (0.09 + 0.01 - 2*0.015) < 0, so the
+    # long-only optimum is the corner (0, 1) — the portfolio
+    # variance is 0.01 (the variance function's derivative at
+    # w = 0 is +0.01 > 0, confirming the corner).
+    # Across blocks (independent): inverse-variance on
+    # (0.03, 0.01) gives (1/4, 3/4). Composed:
+    # (1/4 * 1/2, 1/4 * 1/2, 3/4 * 0, 3/4 * 1) = (1/8, 1/8, 0, 3/4).
+    S = np.array([[0.04, 0.02, 0.0, 0.0],
+                  [0.02, 0.04, 0.0, 0.0],
+                  [0.0, 0.0, 0.09, 0.015],
+                  [0.0, 0.0, 0.015, 0.01]])
+    R = _returns_with_exact_cov(S)
+    assert np.allclose(nco_weights(R, S, k=2),
+                       [0.125, 0.125, 0.0, 0.75], atol=1e-6)
+
+
+def _cvar_tail_mean(w: np.ndarray, R: np.ndarray, alpha: float) -> float:
+    """CVaR_alpha of portfolio losses by the definition: the mean
+    of the worst (1 - alpha) * n scenario losses (the test cases
+    keep (1 - alpha) * n a whole number, so no fractional-tail
+    convention is involved)."""
+    losses = -(R @ w)
+    k = int(round((1.0 - alpha) * len(losses)))
+    return float(np.sort(losses)[::-1][:k].mean())
+
+
+def test_cvar_two_asset_worst_case_hand_computed():
+    # 4 scenarios, alpha = 0.75: (1 - alpha) * n = 1, so CVaR is
+    # the single worst scenario loss. Scenario losses as
+    # functions of w (weight on asset A):
+    #   s1: -0.02 - 0.08w   (a gain, never the worst)
+    #   s2:  0.01 + 0.19w   (rising)
+    #   s3:  0.03 - 0.08w   (falling)
+    #   s4: -0.04 + 0.09w   (a gain at the crossing)
+    # The worst case is minimised where the rising and falling
+    # lines cross: 0.01 + 0.19w = 0.03 - 0.08w -> w = 2/27.
+    R = np.array([[0.10, 0.02],
+                  [-0.20, -0.01],
+                  [0.05, -0.03],
+                  [-0.05, 0.04]])
+    w = cvar_weights(R, alpha=0.75)
+    assert np.allclose(w, [2.0 / 27.0, 25.0 / 27.0], atol=1e-8)
+
+
+def test_cvar_three_asset_matches_simplex_grid():
+    # Independent oracle: exhaustive grid over the weight
+    # simplex (step 0.01) scoring CVaR by the tail-mean
+    # definition above — no LP, no shared code path. The grid's
+    # own minimum sits at (0.3, 0, 0.7); the LP must attain the
+    # same CVaR value and land within one grid step of it.
+    R = np.array([[0.08, 0.01, 0.03],
+                  [-0.12, -0.02, -0.05],
+                  [0.04, 0.06, -0.02],
+                  [-0.03, -0.09, 0.01],
+                  [0.02, -0.04, -0.07],
+                  [-0.06, 0.03, 0.05]])
+    best_val, best_w = np.inf, None
+    grid = np.arange(0.0, 1.0 + 1e-12, 0.01)
+    for a in grid:
+        for b in grid[grid <= 1.0 - a + 1e-12]:
+            cand = np.array([a, b, 1.0 - a - b])
+            val = _cvar_tail_mean(cand, R, 0.5)
+            if val < best_val:
+                best_val, best_w = val, cand
+    w = cvar_weights(R, alpha=0.5)
+    assert _cvar_tail_mean(w, R, 0.5) == pytest.approx(best_val, abs=1e-9)
+    assert np.allclose(w, best_w, atol=0.011)
+
+
+def test_performance_stats_known_series():
+    # Four days with a constant risk-free rate; every expected
+    # value is recomputed here from the definitions with plain
+    # arithmetic (statistics/math, explicit loops) — equity
+    # curve by running product, drawdowns against the running
+    # peak, sample stdev with ddof=1, 252 trading days.
+    import math
+    import statistics as st
+
+    r = [0.10, -0.05, 0.02, -0.01]
+    rf = [0.001] * 4
+    exc = [x - 0.001 for x in r]
+    eq, v = [], 1.0
+    for x in r:
+        v *= 1.0 + x
+        eq.append(v)
+    peak, dds = eq[0], []
+    for e_ in eq:
+        peak = max(peak, e_)
+        dds.append(e_ / peak - 1.0)
+    max_dd = min(dds)
+    cagr = eq[-1] ** (252.0 / len(r)) - 1.0
+    expected = {
+        "total_return": eq[-1] - 1.0,
+        "cagr": cagr,
+        "vol": st.stdev(r) * math.sqrt(252),
+        "sharpe": (sum(exc) / 4) / st.stdev(exc) * math.sqrt(252),
+        "sortino": (sum(exc) / 4)
+        / math.sqrt(sum(min(e_, 0.0) ** 2 for e_ in exc) / 4)
+        * math.sqrt(252),
+        "max_dd": max_dd,
+        "calmar": cagr / abs(max_dd),
+        "ulcer": math.sqrt(sum((d * 100.0) ** 2 for d in dds) / 4),
+        "win_rate": 0.5,
+        "turnover": 0.3,
+        "n_days": 4,
+    }
+    out = performance_stats(np.array(r), np.array(rf), [0.2, 0.4])
+    for key, want in expected.items():
+        assert out[key] == pytest.approx(want, rel=1e-9, abs=1e-12), key
