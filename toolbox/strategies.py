@@ -57,6 +57,16 @@ from toolbox.DataZoo.market.futures_board import oversold_up
 
 TRADING_DAYS = 252
 
+# 12-1 momentum span: the return runs from TRADING_DAYS + 1
+# closes back to one trading month (21 days + the current
+# close) back, skipping the most recent month.
+_MOM_SPAN_DAYS = TRADING_DAYS + 1
+_MOM_SKIP_DAYS = 22
+
+# A beta is only reported on more than a trading month of
+# overlapping observations with the benchmark.
+_MIN_BETA_OBS = 20
+
 COV_METHODS = ("sample", "bbp", "clip", "ledoit_wolf", "nlshrink")
 COV_LABELS = {
     "sample": "Sample (raw)",
@@ -1175,12 +1185,13 @@ def asset_stats(prices: pd.DataFrame, benchmark: pd.Series | None = None) -> pd.
         r = R[t]
         eq = px / px.iloc[0]
         dd = eq / eq.cummax() - 1.0
-        mom = (px.iloc[-22] / px.iloc[-253] - 1.0) if len(px) >= 253 else np.nan
+        mom = (px.iloc[-_MOM_SKIP_DAYS] / px.iloc[-_MOM_SPAN_DAYS] - 1.0) \
+            if len(px) >= _MOM_SPAN_DAYS else np.nan
         beta = np.nan
         if bench_ret is not None:
             sr = px.pct_change()
             common = sr.index.intersection(bench_ret.index)
-            if len(common) > 20 and bench_ret.loc[common].var() > 0:
+            if len(common) > _MIN_BETA_OBS and bench_ret.loc[common].var() > 0:
                 beta = float(sr.loc[common].cov(bench_ret.loc[common])
                              / bench_ret.loc[common].var())
         mu = float(r.mean() * TRADING_DAYS)
