@@ -1057,7 +1057,7 @@ def strategy_weights(name: str, R: pd.DataFrame, S: np.ndarray,
 
 
 def snapshot_weights(R: pd.DataFrame, cov_method: str, mean_method: str,
-                     rf_d: float, strategies: list[str],
+                     rf_d: float, strategies: list[str], *,
                      progress=None,
                      caps: pd.Series | None = None
                      ) -> tuple[pd.DataFrame, dict]:
