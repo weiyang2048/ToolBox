@@ -144,22 +144,10 @@ def _candidate_spans(doc):
     return out
 
 
-def spacy_topics(headlines, min_stories=MIN_STORIES,
-                 max_topics=MAX_TOPICS):
-    """Topic dicts in the cloud's topic shape (term, weight,
-    group, canon, surfaces, example/link, _members) for the
-    spaCy-generated candidates that clear the bars. Raises
-    if spaCy is unavailable — the caller's wrapper converts
-    that to the incumbent fallback."""
-    nlp = _load_nlp()
-    # Work per distinct title (wire duplicates are one
-    # story); members are recorded against the FULL headline
-    # list, whose indexes the pipeline's recount expects.
-    by_title = {}
-    for idx, h in enumerate(headlines):
-        by_title.setdefault(h["title"], []).append(idx)
-    titles = list(by_title)
-    docs = list(nlp.pipe(titles))
+def _pool_candidates(titles, docs, by_title, headlines):
+    """Pool the spaCy candidates over the distinct titles:
+    per-key member indexes, outlets, surfaces, proper
+    counts and full-span story titles."""
     cand_members = defaultdict(set)     # key -> headline idxs
     cand_outlets = defaultdict(set)
     cand_surfaces = defaultdict(Counter)
@@ -178,7 +166,16 @@ def spacy_topics(headlines, min_stories=MIN_STORIES,
             cand_outlets[key].add(
                 headlines[by_title[title][0]].get("source", ""))
             cand_surfaces[key][per_story[key]] += 1
-    pool_outlets = len({h.get("source", "") for h in headlines})
+    return (cand_members, cand_outlets, cand_surfaces,
+            cand_proper, cand_full)
+
+
+def _gate_candidates(pool, headlines, min_stories, pool_outlets):
+    """The candidate bars: story/outlet minimums, and the
+    unigram rules (generic furniture, name-ness, standing
+    alone)."""
+    cand_members, cand_outlets, cand_surfaces, cand_proper, \
+        cand_full = pool
     cands = []
     for key, members in cand_members.items():
         stories = {headlines[i]["title"] for i in members}
@@ -200,6 +197,12 @@ def spacy_topics(headlines, min_stories=MIN_STORIES,
                       "stories": stories,
                       "weight": len(stories),
                       "surfaces": dict(cand_surfaces[key])})
+    return cands
+
+
+def _containment_dedup(cands):
+    """Candidates absorbed by a kept candidate whose key
+    contains theirs and whose stories cover >= 80%."""
     # Containment dedup among the candidates themselves.
     cands.sort(key=lambda c: (-c["weight"], -len(c["key"]),
                               c["key"]))
@@ -214,6 +217,12 @@ def spacy_topics(headlines, min_stories=MIN_STORIES,
                     break
         if not absorbed:
             kept.append(c)
+    return kept
+
+
+def _theme_topics(kept, headlines):
+    """Cluster the kept candidates into themes and build
+    the topic dicts."""
     # Theme clustering: lemma-overlap >= 0.5 with a weight
     # ratio <= 2.5 merges surface variants of one theme;
     # the label is the shortest surface among the members
@@ -267,6 +276,31 @@ def spacy_topics(headlines, min_stories=MIN_STORIES,
             "surfaces": surfaces,
             "_members": hits_idx,
         })
+    return topics
+
+
+def spacy_topics(headlines, min_stories=MIN_STORIES,
+                 max_topics=MAX_TOPICS):
+    """Topic dicts in the cloud's topic shape (term, weight,
+    group, canon, surfaces, example/link, _members) for the
+    spaCy-generated candidates that clear the bars. Raises
+    if spaCy is unavailable — the caller's wrapper converts
+    that to the incumbent fallback."""
+    nlp = _load_nlp()
+    # Work per distinct title (wire duplicates are one
+    # story); members are recorded against the FULL headline
+    # list, whose indexes the pipeline's recount expects.
+    by_title = {}
+    for idx, h in enumerate(headlines):
+        by_title.setdefault(h["title"], []).append(idx)
+    titles = list(by_title)
+    docs = list(nlp.pipe(titles))
+    pool = _pool_candidates(titles, docs, by_title, headlines)
+    pool_outlets = len({h.get("source", "") for h in headlines})
+    cands = _gate_candidates(pool, headlines, min_stories,
+                             pool_outlets)
+    kept = _containment_dedup(cands)
+    topics = _theme_topics(kept, headlines)
     topics.sort(key=lambda t: (-t["weight"], t["term"]))
     return topics[:max_topics]
 
