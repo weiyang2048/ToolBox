@@ -1633,6 +1633,11 @@ def cloud_html(topics, caption=None):
             + _frame_html(topics, caption, max_px=60) + "</div>")
 
 
+# Grayscale level (0-255) below which a screenshot pixel counts
+# as content when trimming the frame's blank margins.
+_NEAR_WHITE = 250
+
+
 def render_html(topics, png_path, caption=None):
     """The fancy renderer as a PNG: the same frame at a fixed
     1200x600, screenshotted with headless Chromium (demo / offline
@@ -1667,8 +1672,8 @@ style="width:1200px;height:600px;">{_frame_html(topics, caption, max_px=76)}</di
         from PIL import Image
         im = Image.open(png_path).convert("L")
         import numpy as np
-        rows = np.where(np.asarray(im).min(axis=1) < 250)[0]
-        cols = np.where(np.asarray(im).min(axis=0) < 250)[0]
+        rows = np.where(np.asarray(im).min(axis=1) < _NEAR_WHITE)[0]
+        cols = np.where(np.asarray(im).min(axis=0) < _NEAR_WHITE)[0]
         if len(rows) and len(cols):
             box = (max(int(cols.min()) - 4, 0), max(int(rows.min()) - 4, 0),
                    int(cols.max()) + 5, int(rows.max()) + 5)
