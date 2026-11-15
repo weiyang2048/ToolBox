@@ -122,8 +122,11 @@ target-version = "py310"
 # 35 -> 4 documented keeps (exceptions below), EM 45 -> 0 and C4
 # 73 -> 0, so enforcement starts from zero violations in EM/C4 and
 # the four excepted B sites.
+# PLR0124 added 2026-11-15 (user-approved nightly proposal): the
+# NaN self-comparison idiom (x != x) was zeroed twice and regressed
+# once for lack of a CI net; enforcement starts from zero violations.
 [tool.ruff.lint]
-select = ["F401", "F841", "I001", "UP006", "UP035", "UP045", "UP031", "UP032", "PLW1510", "BLE001", "E722", "B", "EM", "C4"]
+select = ["F401", "F841", "I001", "UP006", "UP035", "UP045", "UP031", "UP032", "PLW1510", "BLE001", "E722", "B", "EM", "C4", "PLR0124"]
 
 [tool.ruff.lint.per-file-ignores]
 # Intentional public re-exports (the energy package's API surface).
