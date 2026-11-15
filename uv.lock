@@ -5747,6 +5747,7 @@ name = "toolbox"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "defusedxml" },
     { name = "lxml" },
     { name = "matplotlib", version = "3.10.9", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "matplotlib", version = "3.11.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
@@ -5814,6 +5815,7 @@ vision = [
 requires-dist = [
     { name = "beautifulsoup4", marker = "extra == 'automation'", specifier = ">=4.12.0" },
     { name = "click", marker = "extra == 'automation'", specifier = ">=8.0.0" },
+    { name = "defusedxml", specifier = ">=0.7.1" },
     { name = "en-core-web-sm", marker = "extra == 'nlp'", url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" },
     { name = "faster-whisper", marker = "extra == 'audio'", specifier = ">=1.0" },
     { name = "ipykernel", marker = "extra == 'notebook'", specifier = ">=6.0.0" },

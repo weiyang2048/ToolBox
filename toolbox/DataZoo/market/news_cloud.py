@@ -48,11 +48,16 @@ import subprocess
 import sys
 import tempfile
 import urllib.request
-import xml.etree.ElementTree as ET
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
+
+# defusedxml's ElementTree is a drop-in for the stdlib module that
+# forbids entity declarations, so fetched feed XML cannot mount an
+# entity-expansion (billion laughs) attack; a hostile feed raises
+# inside _feed_items and degrades to None like any bad feed.
+from defusedxml import ElementTree as ET
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_PNG = os.path.join(HERE, "wordcloud-demo.png")

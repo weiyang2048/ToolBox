@@ -59,6 +59,46 @@ def test_parse_holdings_xml_skips_puts_and_zero_values():
     assert rows[0]["value"] == 1500 and rows[0]["shares"] == 100
 
 
+LAUGHS_XML = """<?xml version="1.0"?>
+<!DOCTYPE lolz [
+ <!ENTITY lol "lollollollollollollollollollol">
+ <!ENTITY lol2 "&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;">
+ <!ENTITY lol3 "&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;">
+]>
+<informationTable>
+  <infoTable>
+    <nameOfIssuer>&lol3;</nameOfIssuer>
+    <cusip>037833100</cusip>
+    <value>100</value>
+    <shrsOrPrnAmt><sshPrnamt>500</sshPrnamt></shrsOrPrnAmt>
+  </infoTable>
+</informationTable>"""
+
+XXE_XML = """<?xml version="1.0"?>
+<!DOCTYPE info [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>
+<informationTable>
+  <infoTable>
+    <nameOfIssuer>&xxe;</nameOfIssuer>
+  </infoTable>
+</informationTable>"""
+
+
+def test_parse_holdings_xml_rejects_entity_payloads():
+    # Filing XML is untrusted third-party content: the defusedxml
+    # parser forbids entity declarations outright, so both the
+    # entity-expansion (billion laughs) and external-entity payloads
+    # raise instead of expanding/resolving. EntitiesForbidden is a
+    # ValueError, so load_13f_lens's existing except still skips the
+    # investor with a warning.
+    import pytest
+    from defusedxml.common import EntitiesForbidden
+
+    with pytest.raises(EntitiesForbidden):
+        e._parse_holdings_xml(LAUGHS_XML)
+    with pytest.raises(EntitiesForbidden):
+        e._parse_holdings_xml(XXE_XML)
+
+
 def test_aggregate_sums_by_cusip_sorted_by_value():
     rows = e._aggregate(e._parse_holdings_xml(XML))
     assert len(rows) == 1

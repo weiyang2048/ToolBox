@@ -418,6 +418,28 @@ def test_feed_items_capture_the_publisher(monkeypatch):
     assert items[1][3] is None
 
 
+_LAUGHS_RSS = b"""<?xml version="1.0"?>
+<!DOCTYPE lolz [
+ <!ENTITY lol "lollollollollollollollollollol">
+ <!ENTITY lol2 "&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;">
+ <!ENTITY lol3 "&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;">
+]>
+<rss version="2.0"><channel>
+<item><title>&lol3;</title><link>https://example.com/z</link></item>
+</channel></rss>"""
+
+
+def test_feed_items_rejects_entity_expansion(monkeypatch):
+    from datetime import datetime, timezone
+
+    monkeypatch.setattr(news_cloud, "_fetch", lambda url: _LAUGHS_RSS)
+    # Feed XML is untrusted: defusedxml forbids entity declarations,
+    # so the billion-laughs feed raises inside _feed_items and
+    # degrades to None like any other unparseable feed.
+    assert _feed_items("https://example.com/feed",
+                       datetime(2020, 1, 1, tzinfo=timezone.utc)) is None
+
+
 def test_fetch_headlines_records_publisher(monkeypatch):
     monkeypatch.setattr(news_cloud, "_fetch",
                         lambda url: _CANNED_RSS)

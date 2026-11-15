@@ -15,12 +15,17 @@ import json
 import logging
 import re
 import time
-import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
 from tempfile import gettempdir
 
 import requests
+
+# defusedxml's ElementTree is a drop-in for the stdlib module that
+# forbids entity declarations, so untrusted SEC filing XML cannot
+# mount an entity-expansion (billion laughs) attack; it re-exports
+# the stdlib ParseError the error handling below catches.
+from defusedxml import ElementTree as ET
 
 logger = logging.getLogger(__name__)
 
