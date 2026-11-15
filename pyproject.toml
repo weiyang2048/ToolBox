@@ -129,8 +129,14 @@ target-version = "py310"
 # hits as keeps — date-only by construction, closed naive systems,
 # one guarded parse — so enforcement starts from 19 per-site noqa
 # exceptions, each carrying its dossier reason.
+# TRY003/TRY300/PLR5501/PLR0402 added 2026-11-15 (idea search #6):
+# all four measured zero today — TRY003 was closed as a clean
+# negative by its audit (the tree's only raises inside except
+# handlers are chained), the other three never fired — so, like
+# PLR0124, they are enforced purely as a regression net, starting
+# from zero violations.
 [tool.ruff.lint]
-select = ["F401", "F841", "I001", "UP006", "UP035", "UP045", "UP031", "UP032", "PLW1510", "BLE001", "E722", "B", "EM", "C4", "PLR0124", "DTZ"]
+select = ["F401", "F841", "I001", "UP006", "UP035", "UP045", "UP031", "UP032", "PLW1510", "BLE001", "E722", "B", "EM", "C4", "PLR0124", "DTZ", "TRY003", "TRY300", "PLR5501", "PLR0402"]
 
 [tool.ruff.lint.per-file-ignores]
 # Intentional public re-exports (the energy package's API surface).
