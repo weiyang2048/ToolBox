@@ -142,14 +142,17 @@ _SHORT = {"ialt": "IALT", "spy": "SPY", "agg": "AGG",
 # line would sink (the sentiment chart's approach).
 _PLOT_COLORS = {"ialt": _ACCENT, "spy": "#7FB3D5",
                 "agg": "#9AA0A6", "peers": "#35B26F",
-                "dd": "#E23B3E", "dd_voo": "#7FB3D5",
+                "dd": _ACCENT, "dd_voo": "#7FB3D5",
                 "cspy": "#7FB3D5", "cagg": "#9AA0A6"}
 def _panel(dates, series, **kw):
     """The tab's binding of the shared warped-panel builder
-    (plotly_panels) to this tab's colors and names; the
-    drawdown fill is the IALT red the SVG panel carried."""
+    (plotly_panels) to this tab's colors and names. The
+    drawdown's IALT series wears the same accent as the
+    total-return panel's IALT line (user direction
+    2026-11-15); its fill is that accent at 30%."""
     if kw.get("fill_key"):
-        kw.setdefault("fillcolor", "rgba(226,59,62,0.30)")
+        rgb = tuple(int(_ACCENT[i:i + 2], 16) for i in (1, 3, 5))
+        kw.setdefault("fillcolor", "rgba(%d,%d,%d,0.30)" % rgb)
     return warped_panel(dates, series, _PLOT_COLORS, _FULL,
                         _SHORT, **kw)
 
