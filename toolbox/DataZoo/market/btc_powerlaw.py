@@ -171,6 +171,18 @@ def fit_power_law_full(days_arr, values):
     side of c* by a factor ~1.4; the pooled collapse curve
     predicts 91.4% coverage there, against 92.0% measured
     directly at that cell.
+
+    The companion ratio fit (BTC/gold market cap, the same
+    shipped function) measures on the same scale
+    (2026-11-15): n = 1168, rho-hat = 0.9923, so c ~ -9.0 —
+    just inside the degrading side of c*, where the price
+    fit clears the boundary by a factor ~1.4 in |c| the
+    ratio reaches only ~0.94x |c*|. The pooled collapse
+    curve predicts ~90% coverage (0.897) for the ratio's
+    NW interval, against 91.4% predicted and 92.0%
+    measured for the price fit: ratio_slope_se_nw carries
+    no margin past the boundary, and its interval should
+    be read as already at the edge of the degrading zone.
     """
     days_arr = np.asarray(days_arr, dtype=float)
     values = np.asarray(values, dtype=float)
