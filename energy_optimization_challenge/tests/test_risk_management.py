@@ -2,11 +2,20 @@
 Tests for the risk_management module.
 """
 
+import shutil
 import unittest
 
 import pyomo.environ as pe
 
 from energy_optimization_challenge.risk_management import create_risk_mechanism
+
+# test_cvar_calculation solves with Pyomo's 'glpk' solver, which shells out
+# to the glpsol executable. CI installs it (glpk-utils); environments
+# without the binary should skip the solve, not fail it.
+requires_glpsol = unittest.skipUnless(
+    shutil.which("glpsol"),
+    "glpsol executable not installed (Pyomo 'glpk' solver unavailable)",
+)
 
 
 class TestRiskManagement(unittest.TestCase):
@@ -47,6 +56,7 @@ class TestRiskManagement(unittest.TestCase):
         # Test constraint dimensions
         self.assertEqual(len(model.cvar_constraint), self.num_scenarios)
         
+    @requires_glpsol
     def test_cvar_calculation(self):
         """Test the CVaR calculation with a simple example."""
         model = create_risk_mechanism(
