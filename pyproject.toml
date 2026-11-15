@@ -117,8 +117,12 @@ target-version = "py310"
 # the blind-except audit of 2026-11-06 left every remaining site
 # carrying a targeted noqa, and the repo has no bare excepts —
 # enforcement starts from zero violations.
+# B/EM/C4 added 2026-11-14: the same-day dossiers cleared Bugbear
+# 35 -> 4 documented keeps (exceptions below), EM 45 -> 0 and C4
+# 73 -> 0, so enforcement starts from zero violations in EM/C4 and
+# the four excepted B sites.
 [tool.ruff.lint]
-select = ["F401", "F841", "I001", "UP006", "UP035", "UP045", "UP031", "UP032", "PLW1510", "BLE001", "E722"]
+select = ["F401", "F841", "I001", "UP006", "UP035", "UP045", "UP031", "UP032", "PLW1510", "BLE001", "E722", "B", "EM", "C4"]
 
 [tool.ruff.lint.per-file-ignores]
 # Intentional public re-exports (the energy package's API surface).
@@ -132,3 +136,14 @@ select = ["F401", "F841", "I001", "UP006", "UP035", "UP045", "UP031", "UP032", "
 "toolbox/DataZoo/market/us_xus.py" = ["UP031"]
 "toolbox/DataZoo/market/ialt_tab.py" = ["UP031"]
 "toolbox/net/ssh_proxy_connect.py" = ["UP031"]
+# Bugbear dossier keeps (2026-11-14): the _trail closure in
+# merged_stats is defined and called three times within the same
+# loop iteration and never escapes it, so the loop variable it
+# captures cannot be observed rebound — benign as written.
+"toolbox/strategies.py" = ["B023"]
+# Bugbear dossier keep (2026-11-14): _openfigi_map zips the request
+# batch with the OpenFIGI response body — an external API contract,
+# positionally paired, so a short response can only leave tail
+# CUSIPs unmapped (the function's chosen degrade-and-warn outcome);
+# strict=True would raise outside the guarded try block.
+"toolbox/DataZoo/market/edgar_13f.py" = ["B905"]
