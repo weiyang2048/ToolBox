@@ -4,12 +4,13 @@ page), demoed and approved 2026-11-01.
     fetch_the_dollar()   DXY + the G10-and-renminbi spot set
                          (the board's Spot FX group), 10y
     dollar_head_html()   the as-of note + chips
-    chart_figs()         the two line panels as Plotly
-                         figures on the shared warped axis
-                         (plotly_panels); the currency bars
-                         panel between them stays SVG
-                         (dollar_bars_html) — it is
-                         categorical, not a time series
+    chart_figs()         the tab's three panels as Plotly
+                         figures: the two line panels on
+                         the shared warped axis
+                         (plotly_panels) and the currency
+                         bars panel between them (its own
+                         categorical figure since
+                         2026-11-15; SVG before that)
     dollar_foot_html()   the footnote
 
 Every currency series is the value of one unit of the
@@ -44,7 +45,6 @@ FX = [("EURUSD=X", "Euro"), ("GBPUSD=X", "British pound"),
       ("CNYUSD=X", "Chinese renminbi")]
 
 from toolbox.DataZoo.market.plotly_panels import nice_ticks, warped_panel
-from toolbox.DataZoo.market.svg_charts import scale, svg_elems
 
 
 def fetch_the_dollar():
@@ -117,53 +117,70 @@ def _ordinal(n):
     return "%d%s" % (n, suf)
 
 
-def _bars_panel(p):
-    w, h = 1120, 330
-    L, R, T = 178, 250, 40
+_BAR_GREEN, _BAR_RED = "#1B9E57", "#C0392B"
+
+
+def _bars_fig(p):
+    """The currency bars as a Plotly panel (user direction
+    2026-11-15, demoed and approved — the tab's last SVG
+    panel converted): the SVG panel's geometry carried
+    over — currencies ranked by their 1-year return vs
+    USD (weakest at top), bars from the zero line, green
+    for up / red for down, the bold value and the muted
+    1M/3M detail right of the zero line for negative bars
+    and right of the bar end for positives."""
+    import plotly.graph_objects as go
+
+    # Display order top-to-bottom is the SVG panel's: the
+    # payload reversed. Rows sit on a numeric axis (index
+    # from the top) so tied values keep the payload's
+    # order exactly — a category axis reorders ties.
     bars = p["bars"][::-1]
     lo = min(min(b["1Y"] for b in bars), 0.0) - 1.2
     hi = max(max(b["1Y"] for b in bars), 0.0) + 1.2
-    xz = scale(0.0, lo, hi, L, w - R)
-    body = ['<text x="10" y="15" font-size="13.5" font-weight="700" '
-            'fill="#FAFAFA">Who\'s beating the dollar — %d of 11 '
-            'currencies up over 1 year</text>' % p["breadth"]]
-    body.append('<line x1="%.1f" x2="%.1f" y1="%d" y2="%d" '
-                'stroke="#8A8378" stroke-width="1.1"/>'
-                % (xz, xz, T, h - 12))
-    n = len(bars)
+    fig = go.Figure(go.Bar(
+        x=[b["1Y"] for b in bars],
+        y=list(range(len(bars))),
+        orientation="h", width=0.58,
+        marker_color=[_BAR_GREEN if b["1Y"] >= 0 else _BAR_RED
+                      for b in bars],
+        hovertemplate="%{customdata}: %{x:+.1f}% over 1 "
+                      "year<extra></extra>",
+        customdata=[b["name"] for b in bars]))
+    ann = []
     for i, b in enumerate(bars):
-        y = T + i * (h - T - 16) / n
-        bh = (h - T - 16) / n * 0.58
-        x1 = scale(b["1Y"], lo, hi, L, w - R)
-        c = "#1B9E57" if b["1Y"] >= 0 else "#C0392B"
-        body.append('<rect x="%.1f" y="%.1f" width="%.1f" '
-                    'height="%.1f" fill="%s"/>'
-                    % (min(xz, x1), y, abs(x1 - xz), bh, c))
-        body.append('<text x="%d" y="%.1f" font-size="11.5" '
-                    'fill="#D8D8D8" text-anchor="end">%s</text>'
-                    % (L - 10, y + bh / 2 + 4,
-                       html.escape(b["name"])))
-        # Positive bars: value then detail, right of the bar.
-        # Negative bars: both texts start right of the zero
-        # line — the space left of it is the name column, and
-        # printing there collides with the names.
-        if b["1Y"] >= 0:
-            tx, dx, anchor = x1 + 8, x1 + 60, "start"
-        else:
-            tx, dx, anchor = xz + 8, xz + 60, "start"
-        body.append('<text x="%.1f" y="%.1f" font-size="11" '
-                    'font-weight="700" fill="%s" '
-                    'text-anchor="%s">%+.1f%%</text>'
-                    % (tx, y + bh / 2 + 4, c, anchor, b["1Y"]))
-        body.append('<text x="%.1f" y="%.1f" font-size="10.5" '
-                    'fill="%s" text-anchor="%s">1M %+.1f · 3M '
-                    '%+.1f</text>'
-                    % (dx, y + bh / 2 + 4, _MUTE, anchor,
-                       b["1M"], b["3M"]))
-    body.append('<text x="%.1f" y="%d" font-size="10.5" fill="%s" '
-                'text-anchor="middle">Return vs USD, 1 year (%%)'
-                '</text>' % ((L + w - R) / 2, h - 0, _MUTE))
-    return svg_elems(w, h, "".join(body))
+        c = _BAR_GREEN if b["1Y"] >= 0 else _BAR_RED
+        anchor = b["1Y"] if b["1Y"] >= 0 else 0.0
+        ann.append({
+            "x": anchor + 0.3, "y": i, "xref": "x", "yref": "y",
+            "text": "<b>%+.1f%%</b>" % b["1Y"], "showarrow": False,
+            "xanchor": "left", "yanchor": "middle",
+            "font": {"size": 11, "color": c}})
+        ann.append({
+            "x": anchor + 1.5, "y": i, "xref": "x", "yref": "y",
+            "text": "1M %+.1f · 3M %+.1f" % (b["1M"], b["3M"]),
+            "showarrow": False, "xanchor": "left",
+            "yanchor": "middle",
+            "font": {"size": 10.5, "color": _MUTE}})
+    fig.add_vline(x=0, line_color="#8A8378", line_width=1.1)
+    fig.update_layout(
+        height=330, showlegend=False,
+        margin={"l": 170, "r": 250, "t": 6, "b": 40},
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        annotations=ann,
+        xaxis={"range": (lo, hi), "showticklabels": False,
+               "showgrid": False, "zeroline": False,
+               "showline": False, "fixedrange": True,
+               "title": {"text": "Return vs USD, 1 year (%)",
+                         "font": {"size": 10.5, "color": _MUTE}}},
+        yaxis={"autorange": "reversed", "showgrid": False,
+               "fixedrange": True,
+               "tickmode": "array",
+               "tickvals": list(range(len(bars))),
+               "ticktext": [b["name"] for b in bars],
+               "tickfont": {"size": 11.5, "color": "#D8D8D8"}})
+    return fig
 
 
 _COLORS = {"dxy": "#7FB3D5", "ma": "#9AA0A6",
@@ -175,14 +192,14 @@ _SHORT = {"dxy": "DXY", "ma": "200-day avg",
 
 
 def chart_figs(p):
-    """The tab's two line panels as (title, figure) pairs
+    """The tab's three panels as (title, figure) pairs
     (user direction 2026-11-10, demoed and approved — the
     IALT treatment extended on the user's "do the same for
-    other plots"): the DXY panel stands 560 tall so the main
-    plot claims the space, the vol panel 280; both ride the
-    shared warped axis (last 30 days at 25%). The bars
-    panel between them is categorical and stays SVG
-    (dollar_bars_html)."""
+    other plots"; the bars panel joined them 2026-11-15 on
+    the user's "do this in plotly"): the DXY panel stands
+    560 tall so the main plot claims the space, the bars
+    panel 330, the vol panel 280; the line panels ride the
+    shared warped axis (last 30 days at 25%)."""
     allv = [v for s in (p["dxy"], p["ma200"]) for v in s
             if v is not None]
     lo, hi = min(allv) - 1.0, max(allv) + 1.8
@@ -205,6 +222,9 @@ def chart_figs(p):
         bold=("vol",), dash=("med",), min_sep=1.2)
     return [("The dollar cycle — DXY vs its 200-day "
              "average, 10 years", main),
+            ("Who's beating the dollar — %d of 11 "
+             "currencies up over 1 year" % p["breadth"],
+             _bars_fig(p)),
             ("Is FX awake — average realized vol across "
              "the 11 currencies (21d, annualized)", vol)]
 
@@ -215,8 +235,8 @@ def dollar_head_html(p, board_date=None):
     note carries the freshness pill (canonical
     toolbox.DataZoo.market.freshness). The Plotly panels
     render separately (chart_figs), centered on the same
-    measure by the caller, with dollar_bars_html between
-    them and dollar_foot_html closing the tab."""
+    measure by the caller, and dollar_foot_html closes
+    the tab."""
     from toolbox.DataZoo.market.freshness import lag_pill_html
 
     pill = lag_pill_html(board_date, p.get("last_date"))
@@ -244,14 +264,6 @@ def dollar_head_html(p, board_date=None):
             + '<div style="display:flex;gap:8px;flex-wrap:wrap;'
               'margin-bottom:12px">' + chip_html
             + "</div></div>")
-
-
-def dollar_bars_html(p):
-    """The currency bars panel (SVG, unchanged) in the
-    tab's centered block — it sits between the two Plotly
-    panels in display order."""
-    return ('<div style="max-width:1120px;margin:0 auto">'
-            + _bars_panel(p) + "</div>")
 
 
 def dollar_foot_html():

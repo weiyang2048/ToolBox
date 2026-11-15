@@ -13,7 +13,6 @@ from toolbox.DataZoo.market import the_dollar
 from toolbox.DataZoo.market.the_dollar import (
     _compute,
     chart_figs,
-    dollar_bars_html,
     dollar_foot_html,
     dollar_head_html,
 )
@@ -37,19 +36,31 @@ def test_dollar_math_on_synthetic():
     assert p["dxy_vs200"] == 0.0
     assert p["dxy_from_high"] == 0.0
     assert p["vol_now"] >= 0.0
-    # The tab's render split (2026-11-10): head chips, two
-    # Plotly line panels on the shared warped axis (main
-    # 560 tall, vol 280), the categorical bars panel still
-    # SVG, and the footnote — each block centered on the
-    # 1120px measure (2026-11-02).
+    # The tab's render split (2026-11-10; bars panel
+    # converted 2026-11-15): head chips, three Plotly
+    # panels — the two line panels on the shared warped
+    # axis (main 560 tall, vol 280) with the categorical
+    # bars panel (330) between them — and the footnote;
+    # each block centered on the 1120px measure
+    # (2026-11-02).
     head = dollar_head_html(p)
     assert "11 of 11" in head
     assert head.startswith(
         '<div style="max-width:1120px;margin:0 auto">')
     assert head.endswith("</div>")
     figs = chart_figs(p)
-    assert [f.layout.height for _t, f in figs] == [560, 280]
-    assert dollar_bars_html(p).count("<svg") == 1
+    assert [f.layout.height for _t, f in figs] == [560, 330, 280]
+    assert figs[1][0] == ("Who's beating the dollar — 11 "
+                          "of 11 currencies up over 1 year")
+    bars = figs[1][1].data[0]
+    assert bars.type == "bar"
+    # Every synthetic bar reads +10.0, so every marker is
+    # the up green; the display order is the payload
+    # reversed (all values tie here, so this also pins
+    # the tie order).
+    assert list(bars.marker.color) == ["#1B9E57"] * 11
+    assert list(figs[1][1].layout.yaxis.ticktext) == [
+        b["name"] for b in p["bars"][::-1]]
     assert "renminbi" in dollar_foot_html()
     # Freshness (2026-11-02): per-panel last dates are exposed
     # and the note takes the lag pill for a later board date.
