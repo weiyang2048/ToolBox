@@ -147,6 +147,30 @@ def fit_power_law_full(days_arr, values):
     ~n(1 - rho) ~ 15 effective observations, so treat the NW
     interval as the honest scale of the uncertainty, not an
     exact 95%.
+
+    Operating boundary, in local-to-unity terms (measured
+    2026-11-15 in "The HAC Grid in Local-to-Unity Terms",
+    extending "When Newey-West Fails" and "The Persistence
+    Grid"): in the persistent tail the coordinate that
+    governs HAC coverage is c = n(rho - 1), not rho alone.
+    At fixed c this prewhitened interval's coverage is
+    n-invariant (spread at most 0.89pp across n = 371 to
+    2968, 20,000 reps per cell) and crosses 90% at
+    c* ~ -9.6: trustworthy at or above c*, i.e. while
+    n(1 - rho) stays under ~9.6, and degrading beyond it by
+    standard-error dispersion, not bias (the median SE
+    stays at the true sd; the left tail of SE draws
+    fattens). Plain NW has no 90% crossing anywhere in
+    this regime at any n (its crossing sits at c ~ -255) —
+    broken throughout the tail, as recorded above. The
+    classical interval admits no c boundary at all: its
+    coverage is a function of (rho, n) jointly, with up to
+    31.6pp spread at fixed c, so b_se remains a floor,
+    never an interval. This board's price fit sits at
+    c ~ -13.7 (n = 1484, rho-hat = 0.9908), on the safe
+    side of c* by a factor ~1.4; the pooled collapse curve
+    predicts 91.4% coverage there, against 92.0% measured
+    directly at that cell.
     """
     days_arr = np.asarray(days_arr, dtype=float)
     values = np.asarray(values, dtype=float)
