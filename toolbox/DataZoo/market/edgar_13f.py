@@ -217,7 +217,7 @@ def _pretty_sec_date(value: str) -> str:
         return ""
     compact = raw.replace("-", "")[:8]
     try:
-        return datetime.strptime(compact, "%Y%m%d").strftime("%b %d, %Y")
+        return datetime.strptime(compact, "%Y%m%d").strftime("%b %d, %Y")  # noqa: DTZ007 - parse-then-format in one expression; never stored or compared
     except ValueError:
         return raw[:10]
 

@@ -34,7 +34,7 @@ def parse_payload_date(value):
     text = str(value).strip()
     for fmt in ("%Y-%m-%d", "%a %b %d, %Y", "%b %d, %Y"):
         try:
-            return datetime.datetime.strptime(text, fmt).date()
+            return datetime.datetime.strptime(text, fmt).date()  # noqa: DTZ007 - date-only: .date() taken in the same expression
         except ValueError:
             continue
     return None

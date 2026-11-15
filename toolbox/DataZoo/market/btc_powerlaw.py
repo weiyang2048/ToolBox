@@ -503,7 +503,7 @@ def chart_png(data):
                            "alpha": 0.9, "edgecolor": "#E08A70", "lw": 0.7},
                  arrowprops={"arrowstyle": "-", "color": "#E08A70", "lw": 0.9})
     ax1.axhline(300000, color="#4CAF6E", ls=":", lw=1.3)
-    ax1.text(datetime.datetime(2030, 12, 31), 345000, "$300,000 ",
+    ax1.text(datetime.datetime(2030, 12, 31), 345000, "$300,000 ",  # noqa: DTZ001 - chart axis coordinate; module dates are naive by construction
              color="#4CAF6E", fontsize=9, ha="right")
     # The "today" line marks the annotated last point — the shared
     # `last` (the correlations' data end) sat days away from the
@@ -526,14 +526,14 @@ def chart_png(data):
              color="#E8ECEC",
              bbox={"boxstyle": "round", "facecolor": "#0B1118", "alpha": 0.85})
     plt.setp(ax1.get_xticklabels(), visible=False)
-    ax1.set_xlim(datetime.datetime(2010, 1, 1),
-                 datetime.datetime(2030, 12, 31))
+    ax1.set_xlim(datetime.datetime(2010, 1, 1),  # noqa: DTZ001 - chart axis coordinate; module dates are naive by construction
+                 datetime.datetime(2030, 12, 31))  # noqa: DTZ001 - chart axis coordinate; module dates are naive by construction
 
     # --- Top-right: BTC/gold market-cap ratio power law only ---
     ax1r.fill_between(r_days, r_lo * 100, r_hi * 100, color="#e8d9a8",
                       alpha=0.22, zorder=1)
     ax1r.axhline(100, color="#4CAF6E", ls=":", lw=1.3, zorder=2)
-    ax1r.text(datetime.datetime(2010, 6, 1), 118,
+    ax1r.text(datetime.datetime(2010, 6, 1), 118,  # noqa: DTZ001 - chart axis coordinate; module dates are naive by construction
               "flippening \u2014 100%\nmodel \u2248 "
               f"{st['flippening'] or 'n/a'}",
               color="#4CAF6E", fontsize=8.5, va="bottom")
@@ -601,8 +601,8 @@ def chart_png(data):
              transform=ax2.transAxes, fontsize=8, va="bottom",
              color="#9AA5A5")
     ax2.grid(True, alpha=0.25)
-    ax2.set_xlim(datetime.datetime(2010, 1, 1),
-                 datetime.datetime(2030, 12, 31))
+    ax2.set_xlim(datetime.datetime(2010, 1, 1),  # noqa: DTZ001 - chart axis coordinate; module dates are naive by construction
+                 datetime.datetime(2030, 12, 31))  # noqa: DTZ001 - chart axis coordinate; module dates are naive by construction
     ax2.xaxis.set_major_locator(mdates.YearLocator(2))
     ax2.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
     # Geometry is pinned by the explicit subplots_adjust

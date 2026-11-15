@@ -21,7 +21,7 @@ def test_asof_stamp_renders_edt_in_summer():
 
 
 def test_asof_stamp_naive_is_eastern_wall_time():
-    when = datetime.datetime(2026, 10, 29, 12, 0)
+    when = datetime.datetime(2026, 10, 29, 12, 0)  # noqa: DTZ001 - naive input is the contract under test (Eastern wall time)
     assert eastern.asof_stamp(when) == "Thu Oct 29, 12:00 PM EDT"
 
 

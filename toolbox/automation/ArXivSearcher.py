@@ -51,7 +51,7 @@ def scraper_arxiv():
         messagebox.showinfo("Info", "No input provided. Exiting.")
         return
 
-    time_str = datetime.now().strftime("%Y-%m-%d-%H")
+    time_str = datetime.now().strftime("%Y-%m-%d-%H")  # noqa: DTZ005 - local wall-clock label for a folder name; zone unobservable in the output
     folder_path = downloadpath(time_str, "arxiv")
 
     url = f"https://arxiv.org/search/?query={'+'.join(inquiry.split())}&searchtype=all&abstracts=show&order=-announced_date_first&size=25"

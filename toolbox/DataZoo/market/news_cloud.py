@@ -481,7 +481,7 @@ def _parse_date(text):
             dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
         except ValueError:
             try:
-                dt = datetime.strptime(text, "%Y-%m-%d %H:%M:%S")
+                dt = datetime.strptime(text, "%Y-%m-%d %H:%M:%S")  # noqa: DTZ007 - guarded: a naive result is stamped UTC just below
             except ValueError:
                 return None
     if dt.tzinfo is None:

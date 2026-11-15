@@ -79,7 +79,7 @@ def _fake_fetch_board(monkeypatch, closes_by_sym):
 
     monkeypatch.setattr(fb, "fetch", fake_fetch)
     monkeypatch.setattr(fb, "_history_bars", fake_bars)
-    return fb.fetch_board(now=datetime.datetime(2026, 10, 29, 12, 0))
+    return fb.fetch_board(now=datetime.datetime(2026, 10, 29, 12, 0))  # noqa: DTZ001 - injectable-clock fixture; naive reads as Eastern wall time
 
 
 def test_fetch_board_progress_callback(monkeypatch):
@@ -100,7 +100,7 @@ def test_fetch_board_progress_callback(monkeypatch):
     monkeypatch.setattr(fb, "_history_bars", fake_bars)
     calls = []
     rep = fb.fetch_board(
-        now=datetime.datetime(2026, 10, 29, 12, 0),
+        now=datetime.datetime(2026, 10, 29, 12, 0),  # noqa: DTZ001 - injectable-clock fixture; naive reads as Eastern wall time
         progress=lambda d, t, s: calls.append((d, t, s)))
     total = len({sym for _g, contracts in fb.all_groups()
                  for sym, *_ in contracts})
@@ -149,7 +149,7 @@ def test_fetch_board_quote_fallback(monkeypatch):
     monkeypatch.setattr(fb, "_history_bars",
                         lambda sym: [(datetime.date(2026, 10, 28), c)
                                      for c in closes.get(sym) or []])
-    rep = fb.fetch_board(now=datetime.datetime(2026, 10, 29, 12, 0))
+    rep = fb.fetch_board(now=datetime.datetime(2026, 10, 29, 12, 0))  # noqa: DTZ001 - injectable-clock fixture; naive reads as Eastern wall time
     rmb = next(r for r in rep["data"]["FX"] if r["sym"] == "RMB=F")
     assert rmb["last"] == 101.0
     assert abs(rmb["pct"] - 1.0) < 1e-9     # 101 vs prior close 100
@@ -189,7 +189,7 @@ def test_row_date_is_the_market_times_eastern_date(monkeypatch):
     monkeypatch.setattr(fb, "_history_bars",
                         lambda sym: [(datetime.date(2026, 10, 29), c)
                                      for c in closes.get(sym) or []])
-    rep = fb.fetch_board(now=datetime.datetime(2026, 11, 1, 12, 0))
+    rep = fb.fetch_board(now=datetime.datetime(2026, 11, 1, 12, 0))  # noqa: DTZ001 - injectable-clock fixture; naive reads as Eastern wall time
     es = rep["data"]["US Equity"][0]
     assert es["date"] == "2026-10-30"
     assert es["mtime"].startswith("10-30")
@@ -218,7 +218,7 @@ def test_row_date_fallback_and_null(monkeypatch):
 
     monkeypatch.setattr(fb, "fetch", fake_fetch)
     monkeypatch.setattr(fb, "_history_bars", fake_bars)
-    rep = fb.fetch_board(now=datetime.datetime(2026, 10, 29, 12, 0))
+    rep = fb.fetch_board(now=datetime.datetime(2026, 10, 29, 12, 0))  # noqa: DTZ001 - injectable-clock fixture; naive reads as Eastern wall time
     rmb = next(r for r in rep["data"]["FX"] if r["sym"] == "RMB=F")
     assert rmb["pct"] is not None
     assert rmb["date"] == "2026-10-27"
@@ -233,7 +233,7 @@ def test_fetch_board_subset_groups(monkeypatch):
               for _g, contracts in fb.all_groups()
               for sym, _l, _d, _k in contracts}
     _fake_fetch_board(monkeypatch, closes)
-    rep = fb.fetch_board(now=datetime.datetime(2026, 10, 29, 12, 0),
+    rep = fb.fetch_board(now=datetime.datetime(2026, 10, 29, 12, 0),  # noqa: DTZ001 - injectable-clock fixture; naive reads as Eastern wall time
                          groups=("FX",))
     assert list(rep["data"]) == ["FX"]
     assert rep["available"] == 8
@@ -466,7 +466,7 @@ def test_alternatives_is_a_named_group_only(monkeypatch):
 
     monkeypatch.setattr(fb, "fetch", fake_fetch)
     monkeypatch.setattr(fb, "_history_bars", fake_bars)
-    now = datetime.datetime(2026, 10, 29, 12, 0)
+    now = datetime.datetime(2026, 10, 29, 12, 0)  # noqa: DTZ001 - injectable-clock fixture; naive reads as Eastern wall time
     rep = fb.fetch_board(now=now, groups=["Alternatives"])
     assert list(rep["data"]) == ["Alternatives"]
     rows = rep["data"]["Alternatives"]
@@ -501,7 +501,7 @@ def test_momentum_groups_are_named_only(monkeypatch):
 
     monkeypatch.setattr(fb, "fetch", fake_fetch)
     monkeypatch.setattr(fb, "_history_bars", fake_bars)
-    now = datetime.datetime(2026, 10, 29, 12, 0)
+    now = datetime.datetime(2026, 10, 29, 12, 0)  # noqa: DTZ001 - injectable-clock fixture; naive reads as Eastern wall time
     for name, roster in rosters.items():
         rep = fb.fetch_board(now=now, groups=[name])
         assert list(rep["data"]) == [name]
