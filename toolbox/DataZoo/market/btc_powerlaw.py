@@ -90,6 +90,71 @@ def fit_power_law(days_arr, values):
     return b, lnA, sigma
 
 
+# --- Fixed-b (Kiefer-Vogelsang) critical values, simulated ---
+# The fixed-b t-limit for the slope, partialling out the design
+# F = (1, ln-days)', is G(1) / sqrt(D_1) with G the partial-sum
+# process of the demeaned regressor against Brownian motion,
+# Gp its residual projection, and D_1 the Bartlett-kernel
+# double integral of dGp dGp at b = 1 — evaluated through the
+# kernel's window identity, D_1 = int_{-1}^{1} [Gp(min(u+1,1))
+# - Gp(max(u,0))]^2 du (evaluated in the split form
+# sum_i Gp_i^2 + sum_{j>=1} (Gp_m - Gp_j)^2 — the same terms,
+# no window gathers). The limit depends on the design only
+# through the regressor's limit function, here the empirical
+# quantile function of the fit's own ln-days, so the critical
+# value follows whatever design it is given (measured: 5.996
+# on the note's span design against its recorded 6.005 at
+# finer resolution — inside that study's own MC error; KV's
+# location-model table value 4.78 would under-cover on this
+# design even at rho = 0). Fixed seed and settings make the
+# value a deterministic constant per design; results are
+# cached per design, so repeat fits on one design pay the
+# simulation once (~7 s at the shipped settings).
+_FB_GRID = 2000        # limit-process grid resolution m
+_FB_REPS = 60000       # simulated |t| draws per design
+_FB_SEED = 20261115
+_FB_CV_CACHE = {}
+
+
+def _fb_t_draws(ln_d, m, reps, seed):
+    """Draws from the design-projected fixed-b t-limit (b = 1)."""
+    xs = np.sort(np.asarray(ln_d, dtype=float))
+    n = len(xs)
+    r = (np.arange(m) + 0.5) / m
+    idx = np.minimum(n - 1, (r * n).astype(int))
+    x = xs[idx]
+    f_mat = np.column_stack([np.ones(m), x])
+    q = x - x.mean()
+    minv = np.linalg.inv((f_mat.T @ f_mat) / m)
+    h_mat = np.cumsum(q[:, None] * f_mat, axis=0) / m
+    rng = np.random.default_rng(seed)
+    sq = math.sqrt(1.0 / m)
+    ts = np.empty(reps)
+    chunk = 1000
+    for s in range(0, reps, chunk):
+        p = min(chunk, reps - s)
+        dw = rng.standard_normal((p, m)) * sq
+        theta = (dw @ f_mat) @ minv.T
+        g = np.cumsum(q[None, :] * dw, axis=1)
+        gp = np.empty((p, m + 1))
+        gp[:, 0] = 0.0
+        gp[:, 1:] = g - (h_mat @ theta.T).T
+        d1 = ((gp * gp).sum(axis=1)
+              + ((gp[:, -1:] - gp) ** 2).sum(axis=1)
+              - gp[:, -1] ** 2) / m
+        ts[s:s + p] = g[:, -1] / np.sqrt(d1)
+    return ts
+
+
+def _fixed_b_cv(ln_d):
+    """The 95% fixed-b critical value for the design ln_d."""
+    key = np.asarray(ln_d, dtype=float).tobytes()
+    if key not in _FB_CV_CACHE:
+        draws = _fb_t_draws(ln_d, _FB_GRID, _FB_REPS, _FB_SEED)
+        _FB_CV_CACHE[key] = float(np.quantile(np.abs(draws), 0.95))
+    return _FB_CV_CACHE[key]
+
+
 def fit_power_law_full(days_arr, values):
     """The fit_power_law fit with slope uncertainty, as a dict.
 
@@ -98,7 +163,10 @@ def fit_power_law_full(days_arr, values):
     classical OLS standard errors b_se / lnA_se and interval
     b_ci95, and the Newey-West (HAC) counterparts b_se_nw /
     lnA_se_nw / b_ci95_nw with the bandwidth nw_bandwidth and
-    the recoloring coefficient nw_rho actually used.
+    the recoloring coefficient nw_rho actually used. The
+    fixed-b extension adds b_ci95_fb / lnA_ci95_fb with the
+    simulated critical value fb_cv at bandwidth fraction
+    fb_b = 1.0.
 
     Classical convention: s^2 = RSS/(n - 2) with t critical
     values at n - 2 dof, settled by Monte Carlo (2026-11-14;
@@ -183,6 +251,41 @@ def fit_power_law_full(days_arr, values):
     measured for the price fit: ratio_slope_se_nw carries
     no margin past the boundary, and its interval should
     be read as already at the edge of the degrading zone.
+
+    Fixed-b interval (shipped 2026-11-15; measured in
+    "Fixed-b Critical Values on the Power-Law Design" on
+    this same harness, 20,000 reps per cell): the
+    prewhitened statistic with its whitened-score Bartlett
+    bandwidth fixed at M = n - 1 (b = 1), judged against
+    fb_cv — the design-projected Kiefer-Vogelsang critical
+    value simulated for this fit's own ln-days design (see
+    _fixed_b_cv; the projection raises it ~26-28% above
+    KV's location-model table, so no table value is
+    hardcoded). Measured coverage of b_ci95_fb: 0.950 to
+    0.982 across the whole local-to-unity tail, including
+    0.950 at the random-walk boundary, where b_ci95_nw
+    covers 0.753. The pairing is a heuristic — plain
+    Bartlett fixed-b values on a prewhitened statistic,
+    with no prewhitened limit theory behind it — and
+    measured conservative (1.4-3.2pp of over-coverage
+    mid-tail; at the live cells the note interpolates
+    coverage ~0.98 for both fits, against ~0.92 / ~0.90
+    for b_ci95_nw). The premium is width: computed
+    directly on the live data (2026-11-15) the price
+    fit's fb half-width is 2.98 against the NW 1.76, and
+    the ratio fit's fb interval is [-2.97, 12.54] —
+    wider than the note's c-interpolated estimates (3.69
+    and [-0.61, 10.18]), which scaled the shipped
+    half-widths by the MC width ratios rather than
+    computing the fb SE on the live residuals; in the
+    tail the SE draw itself is dispersed, so the direct
+    and interpolated figures need not agree. Either way
+    the ratio interval includes a zero slope: at the
+    coverage that holds in the tail, the ratio's power
+    law is not distinguishable from flat. b_ci95_fb is
+    the interval to quote when coverage in the tail is
+    the question; b_ci95_nw remains the narrower,
+    boundary-limited one.
     """
     days_arr = np.asarray(days_arr, dtype=float)
     values = np.asarray(values, dtype=float)
@@ -224,6 +327,35 @@ def fit_power_law_full(days_arr, values):
     lnA_se_nw = math.sqrt(max(float(cov_nw[0, 0]), 0.0))
     b_se_nw = math.sqrt(max(float(cov_nw[1, 1]), 0.0))
     half_nw = float(_student_t.ppf(0.975, n - 2)) * b_se_nw
+
+    # --- Fixed-b (b = 1) on the prewhitened statistic ---
+    # The same whitened scores, recolor and sandwich as the
+    # NW block, with the Bartlett truncation fixed at
+    # M = nw_n (weights 1 - j/M) instead of the plug-in
+    # bandwidth, and the simulated design-projected fixed-b
+    # critical value instead of the t value. Autocovariances
+    # of the whitened scores via FFT (the direct-lag sums
+    # would run to lag nw_n - 2).
+    m_fb = nw_n
+    nfft = 1 << int(np.ceil(np.log2(2 * nw_n)))
+    fw1 = np.fft.rfft(white[:, 0], nfft)
+    fw2 = np.fft.rfft(white[:, 1], nfft)
+    c11 = np.fft.irfft(np.conj(fw1) * fw1, nfft)[:nw_n] / nw_n
+    c22 = np.fft.irfft(np.conj(fw2) * fw2, nfft)[:nw_n] / nw_n
+    c12 = np.fft.irfft(np.conj(fw1) * fw2, nfft)[:nw_n] / nw_n
+    c21 = np.fft.irfft(np.conj(fw2) * fw1, nfft)[:nw_n] / nw_n
+    jj = np.arange(1, m_fb)
+    w_fb = 1.0 - jj / m_fb
+    cross_fb = c12[0] + float(w_fb @ (c12[1:m_fb] + c21[1:m_fb]))
+    s_fb = np.array([
+        [c11[0] + 2.0 * float(w_fb @ c11[1:m_fb]), cross_fb],
+        [cross_fb, c22[0] + 2.0 * float(w_fb @ c22[1:m_fb])]])
+    cov_fb = nw_n * xtx_inv @ (s_fb / (1.0 - rho_t) ** 2) @ xtx_inv
+    lnA_se_fb = math.sqrt(max(float(cov_fb[0, 0]), 0.0))
+    b_se_fb = math.sqrt(max(float(cov_fb[1, 1]), 0.0))
+    fb_cv = _fixed_b_cv(ln_d)
+    half_b_fb = fb_cv * b_se_fb
+    half_a_fb = fb_cv * lnA_se_fb
     return {
         "b": float(b), "lnA": float(lnA), "sigma": sigma, "n": n,
         "b_se": b_se, "lnA_se": lnA_se,
@@ -231,6 +363,10 @@ def fit_power_law_full(days_arr, values):
         "b_se_nw": b_se_nw, "lnA_se_nw": lnA_se_nw,
         "b_ci95_nw": (float(b) - half_nw, float(b) + half_nw),
         "nw_bandwidth": nw_lag, "nw_rho": rho_t,
+        "b_ci95_fb": (float(b) - half_b_fb, float(b) + half_b_fb),
+        "lnA_ci95_fb": (float(lnA) - half_a_fb,
+                        float(lnA) + half_a_fb),
+        "fb_cv": fb_cv, "fb_b": 1.0,
     }
 
 
@@ -408,6 +544,8 @@ def fetch_powerlaw():
             "slope_se_nw": fit["b_se_nw"],
             "slope_ci_nw_lo": fit["b_ci95_nw"][0],
             "slope_ci_nw_hi": fit["b_ci95_nw"][1],
+            "slope_ci_fb_lo": fit["b_ci95_fb"][0],
+            "slope_ci_fb_hi": fit["b_ci95_fb"][1],
             "end2029": p2029,
             "btc_last": float(btc.iloc[-1]),
             "btc_date": _btc_display_date(btc.index[-1]),
@@ -416,6 +554,8 @@ def fetch_powerlaw():
             "ratio_slope": float(b_r),
             "ratio_slope_se": fit_r["b_se"],
             "ratio_slope_se_nw": fit_r["b_se_nw"],
+            "ratio_slope_ci_fb_lo": fit_r["b_ci95_fb"][0],
+            "ratio_slope_ci_fb_hi": fit_r["b_ci95_fb"][1],
             "flippening": (flip_date.isoformat()
                            if flip_date else None),
             "corr_gold": float(c_gold.iloc[-1]),

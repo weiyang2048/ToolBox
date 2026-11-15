@@ -204,6 +204,79 @@ def test_fit_power_law_full_nw_ar1_coverage_seeded():
     assert 0.8 < ratio < 1.9
 
 
+def test_fixed_b_cv_span_design_matches_note():
+    # Known-value pin against "Fixed-b Critical Values on the
+    # Power-Law Design": its span design (ln-days linear in r
+    # over [592, 6524], the BTC design's span) simulates to
+    # 6.005 at m = 4000 / 100,000 reps. A dense equally spaced
+    # sample's empirical quantiles trace that continuum
+    # design; the shipped settings (m = 2000, 60,000 reps,
+    # fixed seed) read 5.996 in pre-ship benchmarking. The
+    # 0.06 tolerance is ~2.4x the quantile MC se at 60,000
+    # draws — a wiring/scale pin, with the sharp value in the
+    # note. KV's location-model table (4.78) sits far outside
+    # the band: the design projection is doing real work.
+    days = np.linspace(592.0, 6524.0, 20001)
+    cv = bp._fixed_b_cv(np.log(days))
+    assert abs(cv - 6.005) < 0.06
+
+
+def test_fixed_b_cv_deterministic():
+    # Fixed seed + fixed settings: the simulated draws are
+    # bit-identical across calls, so the cached CV is a
+    # constant of the design, not a draw of the day.
+    x = np.log(np.geomspace(100, 5000, 60))
+    t1 = bp._fb_t_draws(x, m=500, reps=4000, seed=bp._FB_SEED)
+    t2 = bp._fb_t_draws(x, m=500, reps=4000, seed=bp._FB_SEED)
+    assert np.array_equal(t1, t2)
+    assert bp._fixed_b_cv(x) == bp._fixed_b_cv(x)
+    assert bp._fixed_b_cv(x) > 3.0
+
+
+def test_fixed_b_interval_contains_nw_interval():
+    # Seeded persistent fixture (AR(1) rho = 0.99, n = 400):
+    # the fixed bandwidth's SE runs ~0.8x the plug-in's, but
+    # the ~6x critical value dominates the t value's 1.96x,
+    # so the fb interval strictly contains the NW interval —
+    # the width premium the note measures at the live cells
+    # (2.10x / 2.45x), reproduced here at fixture scale.
+    rng = np.random.default_rng(7)
+    n = 400
+    days = np.geomspace(200, 9000, n)
+    x = np.log(days)
+    rho, sigma = 0.99, 0.69
+    u = rng.normal(0, sigma * np.sqrt(1 - rho ** 2), n)
+    e = np.empty(n)
+    e[0] = rng.normal(0, sigma)
+    for t in range(1, n):
+        e[t] = rho * e[t - 1] + u[t]
+    f = bp.fit_power_law_full(days, np.exp(-20.0 + 4.2 * x + e))
+    assert f["fb_b"] == 1.0 and f["fb_cv"] > 3.0
+    assert f["b_ci95_fb"][0] < f["b_ci95_nw"][0]
+    assert f["b_ci95_fb"][1] > f["b_ci95_nw"][1]
+    assert f["lnA_ci95_fb"][0] < f["lnA"] < f["lnA_ci95_fb"][1]
+
+
+def test_fixed_b_interval_iid_coverage_smoke():
+    # iid smoke (seeded, deterministic): the note's machinery
+    # validation at rho = 0 covers 0.951-0.953 at n = 1484 /
+    # 20,000 reps; at this smoke's n = 200 the fixed-b limit
+    # is cruder and the seeded run covers 0.935. 200 reps on
+    # one design (one cached CV simulation) pins the wiring;
+    # the band is ~+/-2.6 binomial sd around the observed
+    # rate. The sharp coverage claims live in the note.
+    rng = np.random.default_rng(99)
+    n = 200
+    days = np.geomspace(300, 6000, n)
+    x = np.log(days)
+    reps, hits = 200, 0
+    for _ in range(reps):
+        values = np.exp(-37.0 + 5.6 * x + rng.normal(0, 0.69, n))
+        f = bp.fit_power_law_full(days, values)
+        hits += f["b_ci95_fb"][0] <= 5.6 <= f["b_ci95_fb"][1]
+    assert 0.88 <= hits / reps <= 0.99
+
+
 def test_days_since_genesis():
     idx = pd.DatetimeIndex(["2009-01-03", "2009-01-13", "2010-01-03"])
     out = bp.days_since_genesis(idx)
@@ -396,6 +469,22 @@ def test_fetch_powerlaw_surfaces_nw_uncertainty(monkeypatch):
         legacy = dict(out)
         legacy["stats"] = {k: v for k, v in st.items() if k not in drop}
         assert bp.chart_png(legacy)[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_fetch_powerlaw_surfaces_fb_uncertainty(monkeypatch):
+    # The payload gains the fixed-b intervals for both fits
+    # alongside the NW figures; each brackets its own slope.
+    # chart_png does not read the new keys (its quoted figure
+    # remains the NW SE), so its output is untouched.
+    _powerlaw_fixture(monkeypatch)
+    _freeze_clock(monkeypatch, datetime.datetime(
+        2026, 11, 5, 12, 0, tzinfo=datetime.timezone.utc))
+    out = bp.fetch_powerlaw()
+    st = out["stats"]
+    assert st["slope_ci_fb_lo"] < st["slope"] < st["slope_ci_fb_hi"]
+    assert (st["ratio_slope_ci_fb_lo"] < st["ratio_slope"]
+            < st["ratio_slope_ci_fb_hi"])
+    assert bp.chart_png(out)[:8] == b"\x89PNG\r\n\x1a\n"
 
 
 def test_chart_png_does_not_call_tight_layout():
