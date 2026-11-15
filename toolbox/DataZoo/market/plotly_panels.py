@@ -110,11 +110,11 @@ def x_axis(dates):
         vals = [0.0, 0.5, 1.0]
         text = [d.strftime("%b %d")
                 for d in (x0, x0 + (x1 - x0) / 2, x1)]
-    axis = dict(range=[0.0, 1.0], tickmode="array",
-                tickvals=vals, ticktext=text,
-                tickfont=dict(color=_INK, size=10),
-                ticklabeloverflow="allow", showgrid=False,
-                automargin=False)
+    axis = {"range": [0.0, 1.0], "tickmode": "array",
+                "tickvals": vals, "ticktext": text,
+                "tickfont": {"color": _INK, "size": 10},
+                "ticklabeloverflow": "allow", "showgrid": False,
+                "automargin": False}
     return axis, _warp, warped
 
 
@@ -123,25 +123,25 @@ def panel_layout(height, xaxis):
     paper, unified hover, the under-plot legend), for
     panels built by hand on the same axis — e.g. an area
     panel whose traces the line builder does not cover."""
-    return dict(
-        height=height, margin=dict(l=10, r=26, t=10, b=10),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(color=_INK), hovermode="x unified",
-        legend=dict(orientation="h", x=0, y=-0.09,
-                    xanchor="left", yanchor="top",
-                    bgcolor="rgba(0,0,0,0)", borderwidth=0,
-                    font=dict(color=_INK, size=10.5)),
-        xaxis=xaxis)
+    return {
+        "height": height, "margin": {"l": 10, "r": 26, "t": 10, "b": 10},
+        "paper_bgcolor": "rgba(0,0,0,0)",
+        "plot_bgcolor": "rgba(0,0,0,0)",
+        "font": {"color": _INK}, "hovermode": "x unified",
+        "legend": {"orientation": "h", "x": 0, "y": -0.09,
+                    "xanchor": "left", "yanchor": "top",
+                    "bgcolor": "rgba(0,0,0,0)", "borderwidth": 0,
+                    "font": {"color": _INK, "size": 10.5}},
+        "xaxis": xaxis}
 
 
 def y_axis_dict(y_ticks, y_range):
-    return dict(range=list(y_range), tickvals=list(y_ticks),
-                showticklabels=False, zeroline=False,
-                showline=False, automargin=False,
-                tickfont=dict(color=_INK),
-                gridcolor="rgba(232,236,236,0.25)",
-                griddash="dash")
+    return {"range": list(y_range), "tickvals": list(y_ticks),
+                "showticklabels": False, "zeroline": False,
+                "showline": False, "automargin": False,
+                "tickfont": {"color": _INK},
+                "gridcolor": "rgba(232,236,236,0.25)",
+                "griddash": "dash"}
 
 
 def add_seam(fig, y_range, note_at_top=True):
@@ -150,8 +150,8 @@ def add_seam(fig, y_range, note_at_top=True):
     fig.add_shape(type="line", xref="x", yref="paper",
                   x0=1 - TAIL_SHARE, x1=1 - TAIL_SHARE,
                   y0=0, y1=1,
-                  line=dict(color="rgba(232,236,236,0.45)",
-                            width=1, dash="dot"))
+                  line={"color": "rgba(232,236,236,0.45)",
+                            "width": 1, "dash": "dot"})
     fig.add_annotation(
         x=1 - TAIL_SHARE,
         y=y_range[1] if note_at_top else y_range[0],
@@ -160,7 +160,7 @@ def add_seam(fig, y_range, note_at_top=True):
         xanchor="left",
         yanchor="top" if note_at_top else "bottom",
         xshift=4, yshift=-2 if note_at_top else 2,
-        font=dict(size=9.5, color=_PLOT_MUTE))
+        font={"size": 9.5, "color": _PLOT_MUTE})
 
 
 def add_y_chips(fig, y_ticks, fmt_y, x_at=0.0):
@@ -175,7 +175,7 @@ def add_y_chips(fig, y_ticks, fmt_y, x_at=0.0):
             x=x_at, y=v, xref="x", yref="y", text=fmt_y(v),
             showarrow=False, xanchor="left",
             yanchor="middle", xshift=4,
-            font=dict(size=10, color=_INK),
+            font={"size": 10, "color": _INK},
             bgcolor="rgba(11,17,24,0.72)", borderpad=2)
 
 
@@ -205,9 +205,9 @@ def warped_panel(dates, series, colors, full_names,
                if v is not None]
         kw = {}
         if fill_key == key:
-            kw = dict(fill="tozeroy", fillcolor=fillcolor)
-        line = dict(color=colors[key],
-                    width=2.2 if key in bold else 1.5)
+            kw = {"fill": "tozeroy", "fillcolor": fillcolor}
+        line = {"color": colors[key],
+                    "width": 2.2 if key in bold else 1.5}
         if key in dash:
             line["dash"] = "dash"
         fig.add_trace(go.Scatter(
@@ -224,8 +224,8 @@ def warped_panel(dates, series, colors, full_names,
     if ref is not None:
         fig.add_shape(type="line", xref="x", yref="y",
                       x0=0.0, x1=1.0, y0=ref, y1=ref,
-                      line=dict(color="rgba(232,236,236,0.5)",
-                                width=1, dash="dash"))
+                      line={"color": "rgba(232,236,236,0.5)",
+                                "width": 1, "dash": "dash"})
     if warped:
         add_seam(fig, y_range, note_at_top)
     ends = [(k, series[k][-1]) for k in end_labels
@@ -242,14 +242,14 @@ def warped_panel(dates, series, colors, full_names,
             fig.add_trace(go.Scatter(
                 x=[xw], y=[v], mode="markers",
                 showlegend=False, hoverinfo="skip",
-                marker=dict(color=colors[key], size=8,
-                            line=dict(color="white",
-                                      width=1))))
+                marker={"color": colors[key], "size": 8,
+                            "line": {"color": "white",
+                                      "width": 1}}))
             fig.add_annotation(
                 x=xw_lbl, y=ly, text=end_labels[key],
                 showarrow=False, xanchor="right",
                 yanchor="middle",
-                font=dict(size=11, color=colors[key]),
+                font={"size": 11, "color": colors[key]},
                 bgcolor=_BOX, bordercolor=colors[key],
                 borderwidth=1, borderpad=3)
     add_y_chips(fig, y_ticks, fmt_y)

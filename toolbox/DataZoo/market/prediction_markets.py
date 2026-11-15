@@ -352,12 +352,12 @@ def fed_fig(fed):
         fig.add_trace(go.Scatter(
             x=[d for d, _ in pts], y=[p * 100 for _, p in pts],
             mode="lines", name=label,
-            line=dict(color=color, width=2),
+            line={"color": color, "width": 2},
             hovertemplate="%{x|%b %d}: %{y:.0f}%<extra>"
             + label + "</extra>"))
     x0 = min(d for _, pts in series for d, _ in pts)
-    xaxis = dict(showgrid=False, automargin=False,
-                 tickfont=dict(color=_MUTE, size=10))
+    xaxis = {"showgrid": False, "automargin": False,
+                 "tickfont": {"color": _MUTE, "size": 10}}
     layout = panel_layout(300, xaxis)
     layout["yaxis"] = y_axis_dict([0, 50, 100], (0, 100))
     fig.update_layout(**layout)

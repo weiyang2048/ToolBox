@@ -273,11 +273,11 @@ def _add_bands(fig, mute):
         fig.add_shape(
             type="rect", xref="x", yref="y", x0=0.0, x1=1.0,
             y0=lo, y1=hi, fillcolor=color, opacity=0.14,
-            line=dict(width=0), layer="below")
+            line={"width": 0}, layer="below")
         fig.add_annotation(
             x=0.0, y=(lo + hi) / 2, text=label, showarrow=False,
             xanchor="left", yanchor="middle", xshift=4,
-            font=dict(size=9, color=mute))
+            font={"size": 9, "color": mute})
 
 
 
@@ -296,7 +296,7 @@ def _add_index_traces(fig, series, warp, specs):
         fig.add_trace(go.Scatter(
             x=warp(s.index), y=s.values, mode="lines",
             name=name, **extra,
-            line=dict(color=color, width=1.6),
+            line={"color": color, "width": 1.6},
             customdata=_dates(s.index),
             hovertemplate=f"%{{customdata}}<br>{name}: "
                           f"%{{y}}<extra></extra>"))
@@ -325,7 +325,7 @@ def _add_gold_trace(fig, g, geom, *, color, box):
         x=warp(g.index), y=gn.values, mode="lines",
         yaxis="y2",
         name="Gold futures (GC=F, $/oz)", opacity=0.95,
-        line=dict(color=color, width=1.6),
+        line={"color": color, "width": 1.6},
         customdata=[[d, v] for d, v in
                     zip(_dates(g.index), g.values, strict=True)],
         hovertemplate="%{customdata[0]}<br>"
@@ -335,14 +335,14 @@ def _add_gold_trace(fig, g, geom, *, color, box):
         x=[warp_one(g.index[-1])], y=[gn.iloc[-1]],
         mode="markers",
         yaxis="y2", showlegend=False, hoverinfo="skip",
-        marker=dict(color=color, size=9,
-                    line=dict(color="white", width=1))))
+        marker={"color": color, "size": 9,
+                    "line": {"color": "white", "width": 1}}))
     fig.add_annotation(
         x=warp_one(g.index[-1]), y=float(gn.iloc[-1]),
         yref="y2",
         text=f"${g.iloc[-1]:,.0f}/oz", showarrow=False,
         xanchor="right", yanchor="middle", ax=-8, ay=-14,
-        font=dict(size=11, color=color),
+        font={"size": 11, "color": color},
         bgcolor=box, bordercolor=color, borderwidth=1,
         borderpad=3)
 
@@ -370,14 +370,14 @@ def _add_endpoint_labels(fig, endpoints, warp_one, *, box):
             x=[warp_one(s.index[-1])], y=[v],
             mode="markers",
             showlegend=False, hoverinfo="skip",
-            marker=dict(color=color, size=9,
-                        line=dict(color="white", width=1))))
+            marker={"color": color, "size": 9,
+                        "line": {"color": "white", "width": 1}}))
         fig.add_annotation(
             x=warp_one(s.index[-1]
                         - pd.Timedelta(days=3)), y=label_y,
             text=f"{v:.0f} \u00b7 {zone(v)}", showarrow=False,
             xanchor="right", yanchor="middle",
-            font=dict(size=11, color=color),
+            font={"size": 11, "color": color},
             bgcolor=box, bordercolor=color, borderwidth=1,
             borderpad=3)
 
@@ -392,13 +392,13 @@ def _add_seam(fig, *, mute):
         type="line", xref="x", yref="paper",
         x0=1.0 - TAIL_SHARE, x1=1.0 - TAIL_SHARE,
         y0=0, y1=1,
-        line=dict(color="rgba(232,236,236,0.45)",
-                  width=1, dash="dot"))
+        line={"color": "rgba(232,236,236,0.45)",
+                  "width": 1, "dash": "dot"})
     fig.add_annotation(
         x=1.0 - TAIL_SHARE, y=103, xref="x", yref="y",
         text="last 30 days \u2192", showarrow=False,
         xanchor="left", yanchor="middle", xshift=4,
-        font=dict(size=9.5, color=mute))
+        font={"size": 9.5, "color": mute})
 
 
 
@@ -432,12 +432,12 @@ def _apply_layout(fig, series, axis, *, ink, gold):
     # price at that tick's height, the $ in gold. The
     # labels interleave with the band names (centers
     # 10..90) at the ticks (0, 20, ..., 100).
-    yaxis = dict(range=[0, 105],
-                 tickvals=[0, 20, 40, 60, 80, 100],
-                 showticklabels=False,
-                 tickfont=dict(color=ink), zeroline=False,
-                 gridcolor="rgba(232,236,236,0.25)",
-                 griddash="dash")
+    yaxis = {"range": [0, 105],
+                 "tickvals": [0, 20, 40, 60, 80, 100],
+                 "showticklabels": False,
+                 "tickfont": {"color": ink}, "zeroline": False,
+                 "gridcolor": "rgba(232,236,236,0.25)",
+                 "griddash": "dash"}
     # Plot space (user direction 2026-11-10, from the live
     # phone render): the legend runs horizontally UNDER the
     # plot — the Strategies charts' treatment (2026-11-04) —
@@ -471,33 +471,33 @@ def _apply_layout(fig, series, axis, *, ink, gold):
         tick_vals = [0.0, 0.5, 1.0]
         tick_text = [d.strftime("%b %d")
                      for d in (x0, mid, x1)]
-    xaxis = dict(range=[0.0, 1.0], tickmode="array",
-                 tickvals=tick_vals, ticktext=tick_text,
-                 tickfont=dict(color=ink, size=10),
-                 ticklabeloverflow="allow",
-                 showgrid=False)
-    layout = dict(
-        height=600, margin=dict(l=10, r=10, t=10, b=10),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(color=ink), hovermode="x unified",
-        legend=dict(orientation="h", x=0, y=-0.12,
-                    xanchor="left", yanchor="top",
-                    bgcolor="rgba(0,0,0,0)", borderwidth=0,
-                    font=dict(color=ink, size=10.5)),
-        xaxis=xaxis,
-        yaxis=yaxis)
+    xaxis = {"range": [0.0, 1.0], "tickmode": "array",
+                 "tickvals": tick_vals, "ticktext": tick_text,
+                 "tickfont": {"color": ink, "size": 10},
+                 "ticklabeloverflow": "allow",
+                 "showgrid": False}
+    layout = {
+        "height": 600, "margin": {"l": 10, "r": 10, "t": 10, "b": 10},
+        "paper_bgcolor": "rgba(0,0,0,0)",
+        "plot_bgcolor": "rgba(0,0,0,0)",
+        "font": {"color": ink}, "hovermode": "x unified",
+        "legend": {"orientation": "h", "x": 0, "y": -0.12,
+                    "xanchor": "left", "yanchor": "top",
+                    "bgcolor": "rgba(0,0,0,0)", "borderwidth": 0,
+                    "font": {"color": ink, "size": 10.5}},
+        "xaxis": xaxis,
+        "yaxis": yaxis}
     gold_range = None
     if "gold" in series:
         g = series["gold"]
         gmin, gmax = float(g.min()), float(g.max())
         gold_range = (gmin, gmax)
         fracs = (0, 0.25, 0.5, 0.75, 1.0)
-        layout["yaxis2"] = dict(
-            range=[0, 100], overlaying="y", side="right",
-            tickvals=[GOLD_PEAK * f for f in fracs],
-            showticklabels=False, showgrid=False,
-            zeroline=False)
+        layout["yaxis2"] = {
+            "range": [0, 100], "overlaying": "y", "side": "right",
+            "tickvals": [GOLD_PEAK * f for f in fracs],
+            "showticklabels": False, "showgrid": False,
+            "zeroline": False}
     for v in (0, 20, 40, 60, 80, 100):
         text = str(v)
         if gold_range is not None:
@@ -514,7 +514,7 @@ def _apply_layout(fig, series, axis, *, ink, gold):
             x=0.0, y=v, xref="x", yref="y",
             text=text, showarrow=False, xanchor="left",
             yanchor="middle", xshift=4,
-            font=dict(size=10, color=ink),
+            font={"size": 10, "color": ink},
             bgcolor="rgba(11,17,24,0.72)", borderpad=2)
     fig.update_layout(**layout)
 

@@ -288,12 +288,12 @@ def _panel_fig(path, *, title, overlay, overlay_start):
         x=list(days) + list(days)[::-1],
         y=list(q75) + list(q25)[::-1],
         fill="toself", fillcolor="rgba(255,176,102,0.16)",
-        line=dict(width=0), name="Middle half",
+        line={"width": 0}, name="Middle half",
         legendrank=2, hoverinfo="skip"))
     fig.add_trace(go.Scatter(
         x=list(days), y=list(mean), mode="lines",
         name="Average", legendrank=1,
-        line=dict(color=_ACCENT, width=2.2),
+        line={"color": _ACCENT, "width": 2.2},
         hovertemplate="Day %{x}: %{y:.1f}"
                       "<extra>Average</extra>"))
     if overlay:
@@ -302,47 +302,47 @@ def _panel_fig(path, *, title, overlay, overlay_start):
         fig.add_trace(go.Scatter(
             x=odays, y=list(overlay), mode="lines",
             name="2026", legendrank=3,
-            line=dict(color=_OVERLAY, width=1.8, dash="dash"),
+            line={"color": _OVERLAY, "width": 1.8, "dash": "dash"},
             hovertemplate="Day %{x}: %{y:.1f}"
                           "<extra>2026</extra>"))
-    xaxis = dict(
-        range=[-_DAYS, _DAYS],
-        tickvals=[-252, -126, 0, 126, 252],
-        ticktext=["-12m", "-6m", "Election day",
+    xaxis = {
+        "range": [-_DAYS, _DAYS],
+        "tickvals": [-252, -126, 0, 126, 252],
+        "ticktext": ["-12m", "-6m", "Election day",
                   "+6m", "+12m"],
-        tickfont=dict(color=_MUTE, size=10),
-        ticklabeloverflow="allow", showgrid=False,
-        zeroline=False, automargin=False)
+        "tickfont": {"color": _MUTE, "size": 10},
+        "ticklabeloverflow": "allow", "showgrid": False,
+        "zeroline": False, "automargin": False}
     layout = panel_layout(320, xaxis)
-    layout["margin"] = dict(l=10, r=10, t=26, b=10)
+    layout["margin"] = {"l": 10, "r": 10, "t": 26, "b": 10}
     layout["yaxis"] = y_axis_dict(ticks, (lo, hi))
     fig.update_layout(**layout)
     fig.add_shape(
         type="line", xref="x", yref="y",
         x0=-_DAYS, x1=_DAYS, y0=100, y1=100,
-        line=dict(color="#8A8378", width=1.1, dash="dash"))
+        line={"color": "#8A8378", "width": 1.1, "dash": "dash"})
     fig.add_shape(
         type="line", xref="x", yref="y",
         x0=0, x1=0, y0=lo, y1=hi,
-        line=dict(color="#8A8378", width=1.1, dash="dash"))
+        line={"color": "#8A8378", "width": 1.1, "dash": "dash"})
     add_y_chips(fig, ticks, lambda v: f"{v:g}",
                 x_at=-_DAYS)
     fig.add_annotation(
         x=0, y=1, xref="paper", yref="paper",
         text=f"<b>{title}</b>", showarrow=False,
         xanchor="left", yanchor="bottom", ay=-4,
-        font=dict(size=12.5, color="#FAFAFA"))
+        font={"size": 12.5, "color": "#FAFAFA"})
     fig.add_annotation(
         x=_DAYS, y=float(mean[-1]),
         text=f"<b>{mean[-1]:.1f}</b>", showarrow=False,
         xanchor="right", yanchor="middle", xshift=-10,
-        font=dict(size=11, color=_ACCENT))
+        font={"size": 11, "color": _ACCENT})
     if overlay:
         fig.add_annotation(
             x=end_day, y=ceil_v, text=olab,
             showarrow=False, xanchor="right",
             yanchor="bottom", xshift=-4, yshift=6,
-            font=dict(size=10.5, color=_OVERLAY),
+            font={"size": 10.5, "color": _OVERLAY},
             bgcolor="rgba(23,21,18,0.94)",
             bordercolor="#2E2A24", borderwidth=1,
             borderpad=3)

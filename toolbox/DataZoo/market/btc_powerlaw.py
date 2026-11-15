@@ -463,9 +463,9 @@ def chart_png(data):
                  xy=(_lp_x, _lp_y), xytext=(-8, -30),
                  textcoords="offset points", ha="right", va="top",
                  fontsize=8.5, color="#E08A70", fontweight="bold",
-                 bbox=dict(boxstyle="round,pad=0.3", facecolor="#0B1118",
-                           alpha=0.9, edgecolor="#E08A70", lw=0.7),
-                 arrowprops=dict(arrowstyle="-", color="#E08A70", lw=0.9))
+                 bbox={"boxstyle": "round,pad=0.3", "facecolor": "#0B1118",
+                           "alpha": 0.9, "edgecolor": "#E08A70", "lw": 0.7},
+                 arrowprops={"arrowstyle": "-", "color": "#E08A70", "lw": 0.9})
     ax1.axhline(300000, color="#4CAF6E", ls=":", lw=1.3)
     ax1.text(datetime.datetime(2030, 12, 31), 345000, "$300,000 ",
              color="#4CAF6E", fontsize=9, ha="right")
@@ -488,7 +488,7 @@ def chart_png(data):
              f"end-2029 \u2248 ${st['end2029']:,.0f}",
              transform=ax1.transAxes, fontsize=8, va="top", ha="left",
              color="#E8ECEC",
-             bbox=dict(boxstyle="round", facecolor="#0B1118", alpha=0.85))
+             bbox={"boxstyle": "round", "facecolor": "#0B1118", "alpha": 0.85})
     plt.setp(ax1.get_xticklabels(), visible=False)
     ax1.set_xlim(datetime.datetime(2010, 1, 1),
                  datetime.datetime(2030, 12, 31))
@@ -515,9 +515,9 @@ def chart_png(data):
                   xy=(_lr_x, _lr_y), xytext=(-8, 14),
                   textcoords="offset points", ha="right", va="bottom",
                   fontsize=8.5, color="#E08A70", fontweight="bold",
-                  bbox=dict(boxstyle="round,pad=0.3", facecolor="#0B1118",
-                            alpha=0.9, edgecolor="#E08A70", lw=0.7),
-                  arrowprops=dict(arrowstyle="-", color="#E08A70", lw=0.9))
+                  bbox={"boxstyle": "round,pad=0.3", "facecolor": "#0B1118",
+                            "alpha": 0.9, "edgecolor": "#E08A70", "lw": 0.7},
+                  arrowprops={"arrowstyle": "-", "color": "#E08A70", "lw": 0.9})
     # The marker line sits on the ratio's own last (sampled)
     # date and says "latest" — the shared `last` line used
     # before sat days away from the point and called it

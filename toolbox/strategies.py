@@ -1571,7 +1571,7 @@ def walk_forward_backtest(
         return None
     port: dict[str, list[float]] = {lab: [] for lab in labels}
     turnover: dict[str, list[float]] = {lab: [] for lab in labels}
-    drift: dict[str, np.ndarray | None] = {lab: None for lab in labels}
+    drift: dict[str, np.ndarray | None] = dict.fromkeys(labels)
     weights_history: list[dict] = []
     n_reb = 0
     reb_starts = list(range(seed, len(simple), hold))

@@ -187,19 +187,19 @@ def _spread_fig(p):
             hoverinfo="skip",
             fillcolor="rgba(27,158,87,0.40)" if pos
             else "rgba(192,57,43,0.30)",
-            line=dict(color="rgba(0,0,0,0)", width=0)))
+            line={"color": "rgba(0,0,0,0)", "width": 0}))
     fig.add_trace(go.Scatter(
         x=warp([q[0] for q in pts]),
         y=[q[1] for q in pts], mode="lines",
         name="Spread (pts)",
-        line=dict(color="#7FB3D5", width=1.5),
+        line={"color": "#7FB3D5", "width": 1.5},
         customdata=[q[0].strftime("%b %d, %Y") for q in pts],
         hovertemplate="%{customdata}<br>Spread (pts): "
                       "%{y:+.2f}<extra></extra>"))
     fig.add_shape(type="line", xref="x", yref="y",
                   x0=0.0, x1=1.0, y0=0, y1=0,
-                  line=dict(color="rgba(232,236,236,0.5)",
-                            width=1, dash="dash"))
+                  line={"color": "rgba(232,236,236,0.5)",
+                            "width": 1, "dash": "dash"})
     lo = min(0.0, min(v for _d, v in pts))
     hi = max(0.0, max(v for _d, v in pts))
     pad = (hi - lo) * 0.1 or 1.0
@@ -238,7 +238,7 @@ def chart_figs(p):
         x=0.42, y=100, xref="x", yref="y",
         text="level with the US", showarrow=False,
         xanchor="center", yanchor="bottom", yshift=3,
-        font=dict(size=9.5, color=_MUTE))
+        font={"size": 9.5, "color": _MUTE})
     both = {"ratio": f["ratio"], "dxy": f["dxy"]}
     allv = [v for vals in both.values() for v in vals
             if v is not None]
