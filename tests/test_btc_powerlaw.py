@@ -504,8 +504,9 @@ def test_fetch_powerlaw_surfaces_slope_uncertainty(monkeypatch,
 def test_fetch_powerlaw_surfaces_nw_uncertainty(monkeypatch, stub_fb_cv):
     # The payload gains the Newey-West SEs alongside the
     # classical ones, the NW interval brackets its slope, and
-    # the figure renders through every label fallback: NW
-    # present, classical only, and no SEs at all (hand-built
+    # the figure renders through the label fallbacks below
+    # the fixed-b headline: with the fb and NW keys dropped,
+    # classical only, and then no SEs at all (hand-built
     # payloads keep rendering exactly as before).
     _powerlaw_fixture(monkeypatch)
     _freeze_clock(monkeypatch, datetime.datetime(
@@ -516,9 +517,13 @@ def test_fetch_powerlaw_surfaces_nw_uncertainty(monkeypatch, stub_fb_cv):
     assert st["slope_ci_nw_lo"] < st["slope"] < st["slope_ci_nw_hi"]
     assert bp.chart_png(out)[:8] == b"\x89PNG\r\n\x1a\n"
     for drop in (["slope_se_nw", "slope_ci_nw_lo", "slope_ci_nw_hi",
-                  "ratio_slope_se_nw"],
+                  "ratio_slope_se_nw", "slope_ci_fb_lo",
+                  "slope_ci_fb_hi", "ratio_slope_ci_fb_lo",
+                  "ratio_slope_ci_fb_hi"],
                  ["slope_se_nw", "slope_ci_nw_lo", "slope_ci_nw_hi",
-                  "ratio_slope_se_nw", "slope_se", "slope_ci_lo",
+                  "ratio_slope_se_nw", "slope_ci_fb_lo",
+                  "slope_ci_fb_hi", "ratio_slope_ci_fb_lo",
+                  "ratio_slope_ci_fb_hi", "slope_se", "slope_ci_lo",
                   "slope_ci_hi", "ratio_slope_se"]):
         legacy = dict(out)
         legacy["stats"] = {k: v for k, v in st.items() if k not in drop}
@@ -528,8 +533,10 @@ def test_fetch_powerlaw_surfaces_nw_uncertainty(monkeypatch, stub_fb_cv):
 def test_fetch_powerlaw_surfaces_fb_uncertainty(monkeypatch, stub_fb_cv):
     # The payload gains the fixed-b intervals for both fits
     # alongside the NW figures; each brackets its own slope.
-    # chart_png does not read the new keys (its quoted figure
-    # remains the NW SE), so its output is untouched.
+    # chart_png headlines the fixed-b interval in its legend
+    # labels when the payload carries it — dropping the fb
+    # keys changes the render — and falls back to the NW
+    # labels when it doesn't.
     _powerlaw_fixture(monkeypatch)
     _freeze_clock(monkeypatch, datetime.datetime(
         2026, 11, 5, 12, 0, tzinfo=datetime.timezone.utc))
@@ -538,7 +545,14 @@ def test_fetch_powerlaw_surfaces_fb_uncertainty(monkeypatch, stub_fb_cv):
     assert st["slope_ci_fb_lo"] < st["slope"] < st["slope_ci_fb_hi"]
     assert (st["ratio_slope_ci_fb_lo"] < st["ratio_slope"]
             < st["ratio_slope_ci_fb_hi"])
-    assert bp.chart_png(out)[:8] == b"\x89PNG\r\n\x1a\n"
+    png = bp.chart_png(out)
+    assert png[:8] == b"\x89PNG\r\n\x1a\n"
+    legacy = dict(out)
+    legacy["stats"] = {k: v for k, v in st.items()
+                       if "ci_fb" not in k}
+    legacy_png = bp.chart_png(legacy)
+    assert legacy_png[:8] == png[:8]
+    assert legacy_png != png
 
 
 def test_chart_png_does_not_call_tight_layout():

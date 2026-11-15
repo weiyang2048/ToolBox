@@ -703,22 +703,45 @@ def chart_png(data):
                              data["eg"], data["es"])
     last, floor, st = data["last"], data["floor"], data["stats"]
     b, b_r = st["slope"], st["ratio_slope"]
-    # The legend quotes each slope with its +/-1 SE when the
-    # payload carries one (fetch_powerlaw always does; older/
-    # hand-built payloads render the bare slope as before).
-    # The Newey-West SE is the quoted figure when present: the
-    # residuals are strongly persistent (lag-1 autocorrelation
-    # 0.99), under which the classical SE understates the
-    # slope's sampling sd ~15x (see fit_power_law_full).
+    # The legend quotes each slope with its uncertainty when
+    # the payload carries it (fetch_powerlaw always does;
+    # older/hand-built payloads render the bare slope as
+    # before). The fixed-b 95% CI headlines on its own line
+    # when present — it is the interval whose coverage holds
+    # in the tail (see fit_power_law_full) — with the
+    # Newey-West SE after it as the secondary figure. Without
+    # it, the NW SE is the quoted figure: the residuals are
+    # strongly persistent (lag-1 autocorrelation 0.99), under
+    # which the classical SE understates the slope's sampling
+    # sd ~15x.
+    # When the payload carries the fixed-b interval it
+    # headlines the label on its own line, with the NW SE
+    # after it as the secondary figure; the fallbacks below
+    # are unchanged.
     slope_lab = f"power law (slope {b:.2f})"
-    if st.get("slope_se_nw"):
+    if st.get("slope_ci_fb_lo") is not None:
+        slope_lab = (f"power law (slope {b:.2f})\n"
+                     f"fixed-b 95% CI "
+                     f"[{st['slope_ci_fb_lo']:.2f}, "
+                     f"{st['slope_ci_fb_hi']:.2f}]")
+        if st.get("slope_se_nw"):
+            slope_lab += f"; NW SE \u00b1{st['slope_se_nw']:.2f}"
+    elif st.get("slope_se_nw"):
         slope_lab = (f"power law (slope {b:.2f} "
                      f"\u00b1 {st['slope_se_nw']:.2f} NW SE)")
     elif st.get("slope_se"):
         slope_lab = (f"power law (slope {b:.2f} "
                      f"\u00b1 {st['slope_se']:.2f})")
     ratio_lab = f"ratio power law (slope {b_r:.2f})"
-    if st.get("ratio_slope_se_nw"):
+    if st.get("ratio_slope_ci_fb_lo") is not None:
+        ratio_lab = (f"ratio power law (slope {b_r:.2f})\n"
+                     f"fixed-b 95% CI "
+                     f"[{st['ratio_slope_ci_fb_lo']:.2f}, "
+                     f"{st['ratio_slope_ci_fb_hi']:.2f}]")
+        if st.get("ratio_slope_se_nw"):
+            ratio_lab += (f"; NW SE "
+                          f"\u00b1{st['ratio_slope_se_nw']:.2f}")
+    elif st.get("ratio_slope_se_nw"):
         ratio_lab = (f"ratio power law (slope {b_r:.2f} "
                      f"\u00b1 {st['ratio_slope_se_nw']:.2f} NW SE)")
     elif st.get("ratio_slope_se"):
