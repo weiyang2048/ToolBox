@@ -14,7 +14,7 @@ from toolbox.DataZoo.market.indicators import (
     compute_momentum_universe,
 )
 
-PARAMS = dict(skip_days=21, lookback_days=252, min_lookback_days=30)
+PARAMS = {"skip_days": 21, "lookback_days": 252, "min_lookback_days": 30}
 
 
 def _growth(days=300, rate=0.01):

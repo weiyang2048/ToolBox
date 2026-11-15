@@ -345,8 +345,8 @@ def test_backtest_combo_strategies_run():
 def test_backtest_window_huge_equals_expanding():
     prices = _prices(n=400)
     names = ["Max Sharpe (BBP × BS)", "Min variance (raw)", "Average"]
-    kw = dict(strategies=names, cov_method="bbp",
-              mean_method="bayes_stein", seed=126, hold=21)
+    kw = {"strategies": names, "cov_method": "bbp",
+              "mean_method": "bayes_stein", "seed": 126, "hold": 21}
     exp = walk_forward_backtest(prices, **kw)
     huge = walk_forward_backtest(prices, window=10 ** 9, **kw)
     pd.testing.assert_frame_equal(exp["returns"], huge["returns"])
@@ -356,8 +356,8 @@ def test_backtest_window_huge_equals_expanding():
 def test_backtest_window_rolling_keeps_oos_span():
     prices = _prices(n=400)
     names = ["Max Sharpe (BBP × BS)", "Average"]
-    kw = dict(strategies=names, cov_method="bbp",
-              mean_method="bayes_stein", seed=126, hold=21)
+    kw = {"strategies": names, "cov_method": "bbp",
+              "mean_method": "bayes_stein", "seed": 126, "hold": 21}
     exp = walk_forward_backtest(prices, **kw)
     roll = walk_forward_backtest(prices, window=126, **kw)
     assert roll["oos_start"] == exp["oos_start"]
@@ -518,7 +518,7 @@ def test_spmo_variant_cap_times_score():
 
     R = _spmo_returns()
     scores = spmo_scores(R)
-    caps = pd.Series({t: 1.0 for t in R.columns})
+    caps = pd.Series(dict.fromkeys(R.columns, 1.0))
     caps["T8"] = 3.0
     w = spmo_variant_weights(R, caps=caps)
     # Same two selected names as the plain rule, reweighted
@@ -640,8 +640,8 @@ def test_snapshot_window_suffix_slices_per_strategy():
 
 def test_backtest_name_window_overrides_global():
     prices = _prices(n=400)
-    kw = dict(cov_method="bbp", mean_method="bayes_stein",
-              seed=126, hold=21)
+    kw = {"cov_method": "bbp", "mean_method": "bayes_stein",
+              "seed": 126, "hold": 21}
     suffixed = walk_forward_backtest(
         prices, strategies=["Min variance (raw) @ 126"], **kw)
     globaled = walk_forward_backtest(
@@ -682,7 +682,7 @@ def test_spmo_cap_score_named_strategy_is_the_variant():
 
     R = _spmo_returns()
     mu, S, _info = estimate_inputs(R, "ledoit_wolf", "sample", 0.0)
-    caps = pd.Series({t: 1.0 for t in R.columns})
+    caps = pd.Series(dict.fromkeys(R.columns, 1.0))
     caps["T8"] = 3.0
     w = strategy_weights(SPMO_CAP_SCORE_NAME, R, S, mu, 0.0,
                          caps=caps)

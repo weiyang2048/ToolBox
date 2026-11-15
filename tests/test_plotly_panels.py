@@ -55,9 +55,9 @@ def test_year_ticks_on_a_decade_window():
 
 
 def _panel_kwargs(**over):
-    kw = dict(height=321, y_ticks=[50.0, 100.0], y_range=[40.0, 120.0],
-              fmt_y=lambda v: f"{v:.0f}",
-              end_labels={"A": "A end", "B": "B end"})
+    kw = {"height": 321, "y_ticks": [50.0, 100.0], "y_range": [40.0, 120.0],
+              "fmt_y": lambda v: f"{v:.0f}",
+              "end_labels": {"A": "A end", "B": "B end"}}
     kw.update(over)
     return kw
 

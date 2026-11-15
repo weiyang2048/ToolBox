@@ -431,8 +431,8 @@ def test_oversold_up_gates_and_states():
           for i in range(300)]
     assert fb.oversold_up(up[:199]) is None     # EMA200 leg undefined
     assert fb.oversold_up(up) is False          # healthy uptrend
-    dipped = up[:280] + list(
-        up[279] * 0.99 ** k for k in range(1, 13))  # sharp late dip
+    dipped = up[:280] + [
+        up[279] * 0.99 ** k for k in range(1, 13)]  # sharp late dip
     assert fb.rsi14(dipped) < 35
     assert fb.oversold_up(dipped) is True       # still above EMA200
     falling = [100.0 * 0.9985 ** i * (1 + 0.003 * math.sin(i))
