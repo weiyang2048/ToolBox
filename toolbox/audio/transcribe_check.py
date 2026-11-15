@@ -62,6 +62,34 @@ def strip_speaker_labels(text):
     return re.sub(r"(?m)^[A-Z][A-Za-z ]{0,12}:\s*", "", text)
 
 
+def merge_spelled_letters(words):
+    """Join runs of single-letter words into one token.
+
+    Podcast scripts spell tickers letter by letter for the
+    synthesizer ("X L E"), but whisper transcribes the spoken
+    letters as the whole ticker ("xle"). Merging the runs lets a
+    comparison score the words that were actually said instead
+    of the spelling convention.
+    """
+    merged, run = [], []
+
+    def flush():
+        if len(run) >= 2:
+            merged.append("".join(run))
+        else:
+            merged.extend(run)
+        run.clear()
+
+    for word in words:
+        if len(word) == 1:
+            run.append(word)
+        else:
+            flush()
+            merged.append(word)
+    flush()
+    return merged
+
+
 def top_repetition(words):
     """The most repeated 4-gram and its count — a loop detector."""
     grams = Counter(tuple(words[i:i + 4]) for i in range(len(words) - 3))
@@ -75,12 +103,18 @@ def compare_to_script(words, script_text):
     match: whisper renders names/numbers its own way ("Vee" -> "v",
     "eleventh" -> "11"), so exact word equality on the edges
     false-fails good renders. Word-sequence similarity over the
-    first/last 12 words, threshold 0.65.
+    first/last 12 words, threshold 0.65. The closing edge first
+    merges spelled-out letter runs (see merge_spelled_letters):
+    an episode's sign-off names the next slot's tickers, which
+    the script spells letter by letter — without the merge, a
+    faithful sign-off scores ~0.50 and false-fails.
     """
     swords = norm_words(strip_speaker_labels(script_text))
     ratio = len(words) / max(len(swords), 1)
     open_sim = SequenceMatcher(None, words[:12], swords[:12]).ratio()
-    close_sim = SequenceMatcher(None, words[-12:], swords[-12:]).ratio()
+    close_sim = SequenceMatcher(
+        None, merge_spelled_letters(words)[-12:],
+        merge_spelled_letters(swords)[-12:]).ratio()
     open_ok = open_sim >= _EDGE_SIM_MIN
     close_ok = close_sim >= _EDGE_SIM_MIN
     line = (f"script words {len(swords)} ratio {ratio:.2f} "

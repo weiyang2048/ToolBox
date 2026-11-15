@@ -124,3 +124,33 @@ def test_cli_fail_on_wrong_script(tmp_path, monkeypatch, capsys):
     assert main() == 1
     out = capsys.readouterr().out
     assert "FAIL" in out
+
+
+# The Industrials episode (Markets rotation, 2026-11-15): the script
+# spells the sign-off tickers letter by letter ("X L E", "I X C") and
+# whisper transcribed them whole ("xle", "ixc"), so the closing match
+# scored 0.50 and failed a faithful render. The two passages are the
+# episode's actual script closing and transcript closing, verbatim.
+INDUSTRIALS_SCRIPT_CLOSING = 'Maya: Own X L I in industrials today, staged, with the caveat stated plainly: the third richest multiple in the market, full market beta, and a hike decision three weeks out. Reject E X I on fees, size, and dilution. And if only one stock may be held, make it R T X, the record backlog that raised its guide twice, priced, fairly or not, on a flattered quarter. Tomorrow, the rotation moves to energy, X L E against I X C. Thanks for listening.'
+INDUSTRIALS_TRANSCRIPT_CLOSING = 'Own XLI in industrials today, staged with the caveat stated plainly, the third richest multiple in the market, full market beta, and a hike decision three weeks out. Reject EXI on fees, size, and dilution. And if only one stock may be held, make it RTX, the record backlog that raised its guide twice, priced fairly or not, on a flattered quarter. Tomorrow, the rotation move to energy, XLE against IXC. Thanks for listening.'
+
+
+def test_compare_to_script_spelled_signoff_passes():
+    words = norm_words(INDUSTRIALS_TRANSCRIPT_CLOSING)
+    _line, fields, fails = compare_to_script(
+        words, INDUSTRIALS_SCRIPT_CLOSING)
+    assert fields["close_match"]
+    assert not any("closing" in f for f in fails)
+
+
+def test_compare_to_script_spelled_signoff_control_fails():
+    wrong = INDUSTRIALS_TRANSCRIPT_CLOSING.replace(
+        "Tomorrow, the rotation move to energy, XLE against IXC. "
+        "Thanks for listening.",
+        "That is all for today's show. Goodbye, and we will see "
+        "you next week.")
+    assert wrong != INDUSTRIALS_TRANSCRIPT_CLOSING
+    _line, fields, fails = compare_to_script(
+        norm_words(wrong), INDUSTRIALS_SCRIPT_CLOSING)
+    assert not fields["close_match"]
+    assert any("closing" in f for f in fails)
