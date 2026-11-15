@@ -3,8 +3,25 @@ import datetime
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from toolbox.DataZoo.market import btc_powerlaw as bp
+
+
+@pytest.fixture
+def stub_fb_cv(monkeypatch):
+    """Replace the fixed-b CV simulation with a constant 6.0.
+
+    The CV is a ~13 s simulation per design, pinned on its
+    own by test_fixed_b_cv_* (known value, determinism, cache
+    discipline). The fit/fetch tests using this fixture assert
+    classical/NW values, payload shape, or that the fb
+    interval brackets its slope — none of which depends on
+    the CV's value, only on it being a plausible ~6. Before
+    this fixture, ten designs' simulations were ~125 s of
+    this file's ~150 s runtime.
+    """
+    monkeypatch.setattr(bp, "_fixed_b_cv", lambda ln_d: 6.0)
 
 
 def test_fit_power_law_recovers_known_law():
@@ -16,7 +33,7 @@ def test_fit_power_law_recovers_known_law():
     assert sigma < 1e-8
 
 
-def test_fit_power_law_full_hand_computed_se():
+def test_fit_power_law_full_hand_computed_se(stub_fb_cv):
     # x = ln(days) = [0, 1, 2, 3], ln(values) = [0, 1, 1, 3].
     # By hand: xbar = 1.5, Sxx = 5, Sxy = 4.5 -> b = 0.9,
     # lnA = -0.1; residuals (0.1, 0.2, -0.7, 0.4), RSS = 0.70,
@@ -38,7 +55,7 @@ def test_fit_power_law_full_hand_computed_se():
     assert abs(f["b_ci95"][1] - (0.9 + half)) < 1e-9
 
 
-def test_fit_power_law_full_extends_tuple_api():
+def test_fit_power_law_full_extends_tuple_api(stub_fb_cv):
     # The dict's point estimates are the tuple API's values,
     # bit for bit (consumer-shape pin: nothing existing moves).
     rng = np.random.default_rng(3)
@@ -57,7 +74,7 @@ def test_fit_power_law_full_extends_tuple_api():
         bp.fit_power_law_full(days[:2], values[:2])
 
 
-def test_fit_power_law_full_ci_coverage_seeded():
+def test_fit_power_law_full_ci_coverage_seeded(stub_fb_cv):
     # Reduced-rep coverage pin (seeded, deterministic): the
     # sharp convention discrimination lives in the 20,000-rep
     # study recorded in fit_power_law_full's docstring; this
@@ -135,7 +152,7 @@ def _nw_independent(days, values):
     return math.sqrt(var_b), math.sqrt(var_a), lag, rho_t
 
 
-def test_fit_power_law_full_nw_hand_computed():
+def test_fit_power_law_full_nw_hand_computed(stub_fb_cv):
     # Same hand-computed dataset as the classical-SE test:
     # x = [0, 1, 2, 3], residuals (0.1, 0.2, -0.7, 0.4). By hand
     # the residuals' lag-1 OLS coefficient is
@@ -156,7 +173,7 @@ def test_fit_power_law_full_nw_hand_computed():
     assert f["b_ci95_nw"][0] < f["b"] < f["b_ci95_nw"][1]
 
 
-def test_fit_power_law_full_nw_iid_matches_classical():
+def test_fit_power_law_full_nw_iid_matches_classical(stub_fb_cv):
     # iid control (seeded): with no persistence to correct, the
     # NW SE tracks the classical one — the prewhitening must
     # not wreck the case that already worked. Across seeds the
@@ -172,7 +189,7 @@ def test_fit_power_law_full_nw_iid_matches_classical():
     assert 0.8 < float(np.mean(ratios)) < 1.25
 
 
-def test_fit_power_law_full_nw_ar1_coverage_seeded():
+def test_fit_power_law_full_nw_ar1_coverage_seeded(stub_fb_cv):
     # Seeded AR(1) coverage at the board's own scale (n = 1484,
     # rho = 0.99, sigma = 0.69 — the live fit's persistence).
     # The 20,000-rep study in fit_power_law_full's docstring
@@ -231,6 +248,41 @@ def test_fixed_b_cv_deterministic():
     assert np.array_equal(t1, t2)
     assert bp._fixed_b_cv(x) == bp._fixed_b_cv(x)
     assert bp._fixed_b_cv(x) > 3.0
+
+
+def test_fixed_b_cv_cache_tolerance_and_fallback(monkeypatch, tmp_path):
+    # The cache discipline, at reduced simulation settings
+    # (the value itself is pinned by the span-design test):
+    # a stored entry serves a one-observation successor
+    # design without re-simulating (tolerance match), and a
+    # corrupt store falls back to simulation instead of
+    # raising. The store path is redirected to tmp_path so
+    # the test never touches the real ~/.cache store.
+    monkeypatch.setattr(bp, "_FB_GRID", 200)
+    monkeypatch.setattr(bp, "_FB_REPS", 2000)
+    store = tmp_path / "fixed_b_cv.json"
+    monkeypatch.setattr(bp, "_fb_store_path", lambda: store)
+    monkeypatch.setattr(bp, "_FB_STORE", None)
+
+    days = np.geomspace(200, 9000, 400)
+    cv = bp._fixed_b_cv(np.log(days))
+    assert cv > 1.0 and store.exists()
+
+    real_draws = bp._fb_t_draws
+
+    def _no_sim(*args, **kwargs):
+        msg = "cache miss: the successor design re-simulated"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(bp, "_fb_t_draws", _no_sim)
+    nxt = np.append(days, days[-1] * 1.001)
+    assert bp._fixed_b_cv(np.log(nxt)) == cv
+
+    monkeypatch.setattr(bp, "_fb_t_draws", real_draws)
+    store.write_text("garbage{{{", encoding="utf-8")
+    monkeypatch.setattr(bp, "_FB_STORE", None)
+    other = np.log(np.geomspace(300, 6000, 200))
+    assert bp._fixed_b_cv(other) > 1.0
 
 
 def test_fixed_b_interval_contains_nw_interval():
@@ -385,7 +437,7 @@ def _freeze_clock(monkeypatch, when_utc):
     monkeypatch.setattr(bp, "_utcnow", lambda: when_utc)
 
 
-def test_fetch_powerlaw_dates_btc_in_eastern(monkeypatch):
+def test_fetch_powerlaw_dates_btc_in_eastern(monkeypatch, stub_fb_cv):
     # Yahoo stamps BTC-USD bars at 00:00 UTC: the fixture's last
     # bar is stamped 2026-11-02 but starts 2026-11-01 19:00 EST.
     # With the clock frozen three days past it, that bar is
@@ -407,7 +459,8 @@ def test_fetch_powerlaw_dates_btc_in_eastern(monkeypatch):
     assert out["asof"].endswith((" EST", " EDT"))
 
 
-def test_fetch_powerlaw_in_progress_bar_gets_et_today(monkeypatch):
+def test_fetch_powerlaw_in_progress_bar_gets_et_today(monkeypatch,
+                                                      stub_fb_cv):
     # The same fixture, but the clock frozen inside the last
     # bar's UTC day (2026-11-02 19:45 UTC = 14:45 EST): the bar
     # is still trading, so it carries today's Eastern date,
@@ -431,7 +484,8 @@ def test_fetch_powerlaw_in_progress_bar_gets_et_today(monkeypatch):
     assert live["stats"]["slope"] == done["stats"]["slope"]
 
 
-def test_fetch_powerlaw_surfaces_slope_uncertainty(monkeypatch):
+def test_fetch_powerlaw_surfaces_slope_uncertainty(monkeypatch,
+                                                   stub_fb_cv):
     # The stats payload gains the slopes' standard errors and
     # the price slope's CI alongside the pre-existing keys
     # (which keep their values — the SE is the same fit's).
@@ -447,7 +501,7 @@ def test_fetch_powerlaw_surfaces_slope_uncertainty(monkeypatch):
     assert png[:8] == b"\x89PNG\r\n\x1a\n"
 
 
-def test_fetch_powerlaw_surfaces_nw_uncertainty(monkeypatch):
+def test_fetch_powerlaw_surfaces_nw_uncertainty(monkeypatch, stub_fb_cv):
     # The payload gains the Newey-West SEs alongside the
     # classical ones, the NW interval brackets its slope, and
     # the figure renders through every label fallback: NW
@@ -471,7 +525,7 @@ def test_fetch_powerlaw_surfaces_nw_uncertainty(monkeypatch):
         assert bp.chart_png(legacy)[:8] == b"\x89PNG\r\n\x1a\n"
 
 
-def test_fetch_powerlaw_surfaces_fb_uncertainty(monkeypatch):
+def test_fetch_powerlaw_surfaces_fb_uncertainty(monkeypatch, stub_fb_cv):
     # The payload gains the fixed-b intervals for both fits
     # alongside the NW figures; each brackets its own slope.
     # chart_png does not read the new keys (its quoted figure

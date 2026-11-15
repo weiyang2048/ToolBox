@@ -25,8 +25,13 @@ surfaced in the stats payload and the figure's legend labels.
 """
 import datetime
 import io
+import json
 import math
+import os
+import tempfile
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import suppress
+from pathlib import Path
 
 import matplotlib
 
@@ -107,13 +112,15 @@ def fit_power_law(days_arr, values):
 # finer resolution — inside that study's own MC error; KV's
 # location-model table value 4.78 would under-cover on this
 # design even at rho = 0). Fixed seed and settings make the
-# value a deterministic constant per design; results are
-# cached per design, so repeat fits on one design pay the
-# simulation once (~7 s at the shipped settings).
+# value a deterministic constant per design; the simulation
+# costs ~13 s at the shipped settings, so results are
+# cached — in-process and on disk, matched by design
+# tolerance (see _fb_store_match) — and repeat fits, new
+# processes and one-observation design updates reuse the
+# stored value instead of paying it again.
 _FB_GRID = 2000        # limit-process grid resolution m
 _FB_REPS = 60000       # simulated |t| draws per design
 _FB_SEED = 20261115
-_FB_CV_CACHE = {}
 
 
 def _fb_t_draws(ln_d, m, reps, seed):
@@ -146,13 +153,122 @@ def _fb_t_draws(ln_d, m, reps, seed):
     return ts
 
 
+# --- CV cache: tolerance-matched, persistent ---
+# The cache this replaces keyed entries by the design's
+# exact bytes, so the daily case — the same design plus one
+# observation — missed completely and paid the ~13 s
+# simulation again for an identical value. Matching is by
+# tolerance instead: a stored entry serves any design whose
+# size is within _FB_KEY_N_TOL and whose ln-quantile
+# function (at _FB_KEY_POINTS probability points) is
+# everywhere within _FB_KEY_Q_TOL ln-days. The tolerances
+# sit far inside the value's own uncertainty: appending one
+# observation moves a design's quantiles by ~0.0006 and its
+# freshly simulated CV by at most 0.002 (both live designs,
+# measured 2026-11-15), against ~0.01-0.02 of simulation
+# resolution noise — while a materially different design
+# still misses (the note's span design vs the live price
+# design: quantile functions up to 0.07 apart). Entries
+# persist as JSON under ~/.cache/toolbox/ (the
+# news_cloud_tone cache-dir precedent), written atomically
+# (temp file + rename, so a concurrent reader never sees a
+# torn file); a missing, corrupt or unwritable store falls
+# back to simulation — the store is a cache, never a
+# source of truth.
+_FB_KEY_POINTS = 41
+_FB_KEY_Q_TOL = 0.01
+_FB_KEY_N_TOL = 50
+_FB_STORE_MAX = 64
+_FB_STORE = None       # lazily loaded [{n, q, cv}, ...]
+
+
+def _fb_design_fingerprint(ln_d):
+    """(n, ln-quantiles at _FB_KEY_POINTS probability points)."""
+    xs = np.sort(np.asarray(ln_d, dtype=float))
+    qs = np.quantile(xs, np.linspace(0.0, 1.0, _FB_KEY_POINTS))
+    return len(xs), tuple(np.round(qs, 4).tolist())
+
+
+def _fb_store_path():
+    return Path.home() / ".cache" / "toolbox" / "fixed_b_cv.json"
+
+
+def _fb_store_load():
+    """The persisted CV entries; [] on any read problem."""
+    global _FB_STORE
+    if _FB_STORE is not None:
+        return _FB_STORE
+    entries = []
+    try:
+        raw = json.loads(_fb_store_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        raw = []
+    if isinstance(raw, list):
+        for item in raw:
+            try:
+                n = int(item["n"])
+                q = [float(v) for v in item["q"]]
+                cv = float(item["cv"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if (len(q) == _FB_KEY_POINTS and math.isfinite(cv)
+                    and 1.0 < cv < 20.0
+                    and all(math.isfinite(v) for v in q)):
+                entries.append({"n": n, "q": q, "cv": cv})
+    _FB_STORE = entries
+    return entries
+
+
+def _fb_store_save():
+    """Persist the entries atomically; failure is silent —
+    a lost write costs one re-simulation, never a value."""
+    tmp = None
+    try:
+        path = _fb_store_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=path.parent,
+                                   prefix=path.name + ".",
+                                   suffix=".tmp")
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(_FB_STORE, fh)
+        os.replace(tmp, path)
+        tmp = None
+    except OSError:
+        if tmp is not None:
+            with suppress(OSError):
+                os.unlink(tmp)
+
+
+def _fb_store_match(n, qs):
+    """The stored CV for a design within tolerance, or None."""
+    for entry in reversed(_fb_store_load()):
+        if abs(entry["n"] - n) > _FB_KEY_N_TOL:
+            continue
+        gap = max(abs(a - b) for a, b in zip(entry["q"], qs, strict=True))
+        if gap <= _FB_KEY_Q_TOL:
+            return entry["cv"]
+    return None
+
+
 def _fixed_b_cv(ln_d):
-    """The 95% fixed-b critical value for the design ln_d."""
-    key = np.asarray(ln_d, dtype=float).tobytes()
-    if key not in _FB_CV_CACHE:
-        draws = _fb_t_draws(ln_d, _FB_GRID, _FB_REPS, _FB_SEED)
-        _FB_CV_CACHE[key] = float(np.quantile(np.abs(draws), 0.95))
-    return _FB_CV_CACHE[key]
+    """The 95% fixed-b critical value for the design ln_d.
+
+    Deterministic per design (fixed seed and settings);
+    served from the tolerance-matched persistent cache
+    (see _fb_store_match) when a stored design is close
+    enough, simulated otherwise and then stored.
+    """
+    n, qs = _fb_design_fingerprint(ln_d)
+    cv = _fb_store_match(n, qs)
+    if cv is not None:
+        return cv
+    draws = _fb_t_draws(ln_d, _FB_GRID, _FB_REPS, _FB_SEED)
+    cv = float(np.quantile(np.abs(draws), 0.95))
+    entries = _fb_store_load()
+    entries.append({"n": n, "q": list(qs), "cv": cv})
+    del entries[:-_FB_STORE_MAX]     # keep the newest entries
+    _fb_store_save()
+    return cv
 
 
 def fit_power_law_full(days_arr, values):
