@@ -7,6 +7,7 @@ import math
 
 import pytest
 
+from toolbox.DataZoo.market import election_cycle
 from toolbox.DataZoo.market.election_cycle import (
     chart_figs,
     election_series,
@@ -239,3 +240,23 @@ def test_live_label_once_past_the_vote():
     for f in figs[2:]:
         assert not any("2026 (live)" in t
                        for t in _ann_texts(f))
+
+
+def test_current_cycle_paths_reports_each_leg(monkeypatch):
+    """Progress (2026-11-16): one report per completed market
+    leg — ^GSPC plus the five ex-US indices — and the paths
+    assemble as before."""
+    monkeypatch.setattr(
+        election_cycle, "_indexed",
+        lambda sym, p1: (0, [100.0] * 100))
+    reports = []
+    out = election_cycle.current_cycle_paths(
+        progress=lambda d, t, s: reports.append((d, t, s)))
+    syms = ("^GSPC",) + election_cycle._XUS
+    assert reports[0] == (0, 6, "")
+    assert [r[0] for r in reports[1:]] == [1, 2, 3, 4, 5, 6]
+    assert {r[2] for r in reports[1:]} == set(syms)
+    assert out["us"] == [100.0] * 100
+    assert out["xus"] == [100.0] * 100
+    assert out["us_start"] == 0
+    assert out["xus_start"] == 0

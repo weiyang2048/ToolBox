@@ -96,3 +96,25 @@ def test_fetch_survives_a_transient_429_on_one_leg(monkeypatch):
     assert calls["EURUSD=X"] == 2
     assert all(b["1Y"] == 10.0 for b in p["bars"])
     assert p["breadth"] == 11
+
+
+def test_fetch_reports_each_leg(monkeypatch):
+    """Progress (2026-11-16): one report per completed leg —
+    the 11 spot currencies plus DXY — details naming the
+    symbols; the payload is the plain fetch's."""
+    g = 1.10 ** (1 / 252)
+
+    def fake(sym, p1=0, **kw):
+        if sym == "DX-Y.NYB":
+            return pd.Series(100.0, index=IDX)
+        return pd.Series(0.5 * g ** np.arange(N), index=IDX)
+
+    monkeypatch.setattr(the_dollar, "yahoo_daily", fake)
+    reports = []
+    p = the_dollar.fetch_the_dollar(
+        progress=lambda d, t, s: reports.append((d, t, s)))
+    syms = [s for s, _n in the_dollar.FX] + ["DX-Y.NYB"]
+    assert reports[0] == (0, 12, "")
+    assert [r[0] for r in reports[1:]] == list(range(1, 13))
+    assert {r[2] for r in reports[1:]} == set(syms)
+    assert p["breadth"] == 11

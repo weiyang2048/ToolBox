@@ -222,12 +222,29 @@ def _history(token):
             if "t" in p and "p" in p]
 
 
-def fetch_payload():
+def fetch_payload(progress=None):
     """The live page payload: the featured next Fed
     decision (with price history for its top three
     outcomes), the most-traded board, and one board per
-    category. Every piece degrades on its own."""
+    category. Every piece degrades on its own.
+    ``progress(done, total, detail)`` (2026-11-16) reports
+    each of the seven sequential pieces as it lands — the
+    most-traded board, the five category boards, and the
+    Fed history (the last only when a Fed feature exists
+    to carry one); None keeps today's behaviour."""
+    total = 2 + len(CATEGORIES)
+    done = 0
+
+    def tick(detail):
+        nonlocal done
+        done += 1
+        if progress is not None:
+            progress(done, total, detail)
+
+    if progress is not None:
+        progress(0, total, "")
     top = _rows(_events(limit=60), 10)
+    tick("most-traded board")
     cats = {}
     fed = None
     for tag, name in CATEGORIES:
@@ -235,10 +252,12 @@ def fetch_payload():
         cats[name] = _rows(evs, 6)
         if tag == "economy":
             fed = _fed_feature(evs)
+        tick(name)
     if fed is not None:
         fed["hist"] = {
             label: _history(token)
             for label, _, _, token in fed["outcomes"][:3]}
+        tick("Fed decision price history")
     return {"fed": fed, "top": top, "cats": cats}
 
 

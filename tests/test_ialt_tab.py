@@ -141,3 +141,20 @@ def test_fetch_names_a_failing_leg(monkeypatch):
     monkeypatch.setattr(ialt_tab, "yahoo_daily", dead)
     with pytest.raises(RuntimeError, match="boom"):
         fetch_ialt_tab()
+
+
+def test_fetch_reports_each_leg(monkeypatch):
+    """Progress (2026-11-16): one report per completed leg,
+    details naming the symbols; the payload is the plain
+    fetch's."""
+    frame = _frame()
+    monkeypatch.setattr(
+        ialt_tab, "yahoo_daily",
+        lambda sym, p1=0, **kw: frame[sym])
+    reports = []
+    p = fetch_ialt_tab(
+        progress=lambda d, t, s: reports.append((d, t, s)))
+    assert reports[0] == (0, 11, "")
+    assert [r[0] for r in reports[1:]] == list(range(1, 12))
+    assert {r[2] for r in reports[1:]} == set(ialt_tab._SYMS)
+    assert p["ret"]["ialt"] > 0

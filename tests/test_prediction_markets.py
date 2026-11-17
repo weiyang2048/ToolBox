@@ -6,6 +6,7 @@ blocks. Offline: fixtures only, no API calls."""
 import json
 from datetime import datetime, timedelta, timezone
 
+from toolbox.DataZoo.market import prediction_markets
 from toolbox.DataZoo.market.prediction_markets import (
     _fed_feature,
     _leading,
@@ -132,3 +133,29 @@ def test_blocks_without_fed_have_no_figure():
     html = "".join(v for _, v in blocks)
     assert "Fed decision —" not in html
     assert "Most traded — ex-sports" in html
+
+
+def test_fetch_payload_reports_each_piece(monkeypatch):
+    """Progress (2026-11-16): the seven sequential pieces
+    report in order — the most-traded board, the five
+    category boards, the Fed history."""
+    monkeypatch.setattr(prediction_markets, "_events",
+                        lambda **kw: [])
+    monkeypatch.setattr(prediction_markets, "_rows",
+                        lambda evs, n: [])
+    monkeypatch.setattr(
+        prediction_markets, "_fed_feature",
+        lambda evs: {"outcomes": [("Hold", 0.5, 0.0, "tok")]})
+    monkeypatch.setattr(prediction_markets, "_history",
+                        lambda token: [])
+    reports = []
+    out = prediction_markets.fetch_payload(
+        progress=lambda d, t, s: reports.append((d, t, s)))
+    assert reports[0] == (0, 7, "")
+    assert [r[0] for r in reports[1:]] == [1, 2, 3, 4, 5, 6, 7]
+    assert [r[2] for r in reports[1:]] == [
+        "most-traded board", "Politics", "Economy & the Fed",
+        "Crypto", "Geopolitics", "AI & tech",
+        "Fed decision price history"]
+    assert out["fed"]["hist"] == {"Hold": []}
+    assert out["top"] == []

@@ -25,7 +25,7 @@ agreeing to a tenth is a standing consistency check.
 """
 import html
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from toolbox.DataZoo.market.eastern import format_day
 from toolbox.DataZoo.market.yahoo_prices import with_retry, yahoo_daily
@@ -47,11 +47,13 @@ FX = [("EURUSD=X", "Euro"), ("GBPUSD=X", "British pound"),
 from toolbox.DataZoo.market.plotly_panels import nice_ticks, warped_panel
 
 
-def fetch_the_dollar():
+def fetch_the_dollar(progress=None):
     """The dollar payload. Each leg retries transient HTTP
     errors with backoff (the shared with_retry, as in the
     power law); a final failure raises a RuntimeError naming
-    the leg."""
+    the leg. ``progress(done, total, detail)`` (2026-11-16)
+    reports each leg as it completes — the futures board's
+    _fetch_all idiom; None keeps today's behaviour."""
     import pandas as pd
 
     p1 = int(time.time()) - (10 * 365 + 320) * 86400
@@ -62,7 +64,15 @@ def fetch_the_dollar():
             lambda: yahoo_daily(sym, p1=p1), "yahoo " + sym)
 
     with ThreadPoolExecutor(max_workers=6) as pool:
-        got = dict(pool.map(get, syms))
+        if progress is not None:
+            progress(0, len(syms), "")
+        futs = {pool.submit(get, sym): sym for sym in syms}
+        got = {}
+        for fut in as_completed(futs):
+            sym, series = fut.result()
+            got[sym] = series
+            if progress is not None:
+                progress(len(got), len(futs), sym)
     usd = pd.DataFrame({name: got[sym] for sym, name in FX}
                        ).dropna()
     return _compute(got["DX-Y.NYB"].dropna(), usd)

@@ -115,3 +115,22 @@ def test_fetch_survives_a_transient_429_on_one_leg(monkeypatch):
     assert calls["EEM"] == 2
     assert p["ret1y"]["SPY"] == 10.0
     assert p["spread_now"] == -4.0
+
+
+def test_fetch_reports_each_leg(monkeypatch):
+    """Progress (2026-11-16): one report per completed leg,
+    details naming the symbols; the payload is the plain
+    fetch's."""
+    annual = {"SPY": 0.10, "EFA": 0.05, "EEM": 0.0,
+              "ACWX": 0.06, "DX-Y.NYB": 0.02}
+    monkeypatch.setattr(
+        us_xus, "yahoo_daily",
+        lambda sym, p1=0, **kw: series(annual[sym]))
+    reports = []
+    p = us_xus.fetch_us_xus(
+        progress=lambda d, t, s: reports.append((d, t, s)))
+    assert reports[0] == (0, 5, "")
+    assert [r[0] for r in reports[1:]] == [1, 2, 3, 4, 5]
+    assert {r[2] for r in reports[1:]} == set(annual)
+    assert p["ret1y"]["SPY"] == 10.0
+    assert p["spread_now"] == -4.0

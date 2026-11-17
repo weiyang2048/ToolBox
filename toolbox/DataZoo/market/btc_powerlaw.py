@@ -29,7 +29,7 @@ import json
 import math
 import os
 import tempfile
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import suppress
 from pathlib import Path
 
@@ -271,7 +271,7 @@ def _fixed_b_cv(ln_d):
     return cv
 
 
-def fit_power_law_full(days_arr, values):
+def fit_power_law_full(days_arr, values, stage=None):
     """The fit_power_law fit with slope uncertainty, as a dict.
 
     Keys: b, lnA, sigma — the identical values fit_power_law
@@ -368,6 +368,13 @@ def fit_power_law_full(days_arr, values):
     no margin past the boundary, and its interval should
     be read as already at the edge of the degrading zone.
 
+    ``stage`` (2026-11-16) is an optional progress hook:
+    when given, it is called once with a label just before
+    the fixed-b block below — the fit's one opaque,
+    potentially slow step (the simulated critical value) —
+    so a caller's progress bar can name it instead of
+    sitting silent. It changes no value.
+
     Fixed-b interval (shipped 2026-11-15; measured in
     "Fixed-b Critical Values on the Power-Law Design" on
     this same harness, 20,000 reps per cell): the
@@ -444,6 +451,9 @@ def fit_power_law_full(days_arr, values):
     b_se_nw = math.sqrt(max(float(cov_nw[1, 1]), 0.0))
     half_nw = float(_student_t.ppf(0.975, n - 2)) * b_se_nw
 
+    if stage is not None:
+        stage("fixed-b interval (simulated critical value; "
+              "the cold wait's dominant cost)")
     # --- Fixed-b (b = 1) on the prewhitened statistic ---
     # The same whitened scores, recolor and sandwich as the
     # NW block, with the Bartlett truncation fixed at
@@ -542,13 +552,24 @@ def _btc_display_date(last_stamp):
         pd.DatetimeIndex([last_stamp]))[0].date().isoformat()
 
 
-def fetch_powerlaw():
+def fetch_powerlaw(progress=None, stage=None):
     """Fetch all six sources and compute the chart payload + stats.
 
     Returns a dict consumed by chart_png() and by the page's stats
     chips. Each leg retries transient HTTP errors with backoff;
     a final failure raises a RuntimeError naming the leg — the
     caller isolates it.
+
+    Progress (2026-11-16, the dashboard's progress standard):
+    ``progress(done, total, detail)`` reports each source leg
+    as it completes (the futures board's _fetch_all idiom),
+    then re-baselines to the fit phase's three opaque units —
+    the price fit, the ratio fit, and a third the caller
+    completes (the chart draw). ``stage(label)`` names the
+    opaque steps as they start: the price fit's classical +
+    Newey-West pass, its fixed-b step (via fit_power_law_full's
+    own hook), and the ratio fit. Both hooks default to None —
+    today's behaviour, byte-identical outputs.
     """
     p2 = int(_utcnow().timestamp())
     # BTC trades 24/7: keep Yahoo's in-progress UTC-day bar
@@ -565,8 +586,18 @@ def fetch_powerlaw():
     with ThreadPoolExecutor(max_workers=6) as pool:
         jobs = [pool.submit(_with_retry, fn, leg)
                 for leg, fn in legs]
-        btc, gld, spy, gold_oz, bdf, bmc = [f.result()
-                                            for f in jobs]
+        if progress is not None:
+            progress(0, len(jobs), "")
+        results = [None] * len(jobs)
+        by_fut = {f: i for i, f in enumerate(jobs)}
+        done = 0
+        for fut in as_completed(jobs):
+            i = by_fut[fut]
+            results[i] = fut.result()
+            done += 1
+            if progress is not None:
+                progress(done, len(jobs), legs[i][0])
+        btc, gld, spy, gold_oz, bdf, bmc = results
 
     # Dating (user directions 2026-11-01 and 2026-11-02:
     # everything in the app in Eastern): Yahoo stamps BTC-USD
@@ -588,10 +619,27 @@ def fetch_powerlaw():
     # exactly as served.
 
     # --- extended fit on 2010+ history ---
+    # The fit phase re-baselines the bar to its three opaque
+    # units (price fit, ratio fit, the caller's chart draw);
+    # three is below the bar's ETA floor, so the phase reads
+    # elapsed-only rather than carrying a fabricated to-go.
+    if progress is not None:
+        progress(0, 3, "")
+    if stage is not None:
+        stage("Fitting the price power law — classical "
+              "+ Newey–West…")
     t = days_since_genesis(bdf.index)
-    fit = fit_power_law_full(t, bdf["p"].values)
+    fit = fit_power_law_full(
+        t, bdf["p"].values,
+        stage=(lambda label: stage(
+            "Fitting the price power law — " + label + "…"))
+        if stage is not None else None)
     b, lnA, sigma = fit["b"], fit["lnA"], fit["sigma"]
     n_fit = fit["n"]
+    if progress is not None:
+        progress(1, 3, f"price fit — slope {b:.2f}, fixed-b CI "
+                       f"[{fit['b_ci95_fb'][0]:.2f}, "
+                       f"{fit['b_ci95_fb'][1]:.2f}]")
     end = datetime.date(2030, 12, 31)
     days = pd.date_range("2010-01-01", end, freq="D")
     trend, lo, hi = trend_envelope(
@@ -632,8 +680,12 @@ def fetch_powerlaw():
     ratio = ratio[ratio > 0]
     ratio_now = float(ratio.iloc[-1])
     rt = days_since_genesis(ratio.index)
+    if stage is not None:
+        stage("Fitting the BTC ÷ gold-cap ratio…")
     fit_r = fit_power_law_full(rt, ratio.values)
     b_r, lnA_r, sigma_r = fit_r["b"], fit_r["lnA"], fit_r["sigma"]
+    if progress is not None:
+        progress(2, 3, f"ratio fit — slope {b_r:.2f}")
     r_days = pd.date_range("2013-01-01", end, freq="D")
     r_trend, r_lo, r_hi = trend_envelope(
         lnA_r, b_r, sigma_r, days_since_genesis(r_days))

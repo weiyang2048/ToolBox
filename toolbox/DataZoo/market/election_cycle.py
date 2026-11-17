@@ -41,7 +41,7 @@ the future side of the panel).
 
 import datetime
 import os
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from toolbox.DataZoo.market.yahoo_prices import with_retry, yahoo_daily
 
@@ -173,7 +173,7 @@ def _composite(legs):
     return start, comp
 
 
-def current_cycle_paths():
+def current_cycle_paths(progress=None):
     """The 2026 midterm cycle's path, live from Yahoo via
     the canonical yahoo_prices helpers: ^GSPC for the
     US, and the five ex-US indices (^N225, ^HSI, ^FTSE,
@@ -189,13 +189,23 @@ def current_cycle_paths():
     for whichever sides fetched. Any failure degrades:
     a missing side is simply absent, and a total
     failure returns {} rather than raising, so the tab
-    falls back to the historical series alone."""
+    falls back to the historical series alone.
+    ``progress(done, total, detail)`` (2026-11-16) reports
+    each market leg as it completes — the futures board's
+    _fetch_all idiom; None keeps today's behaviour."""
     try:
         p1 = _FETCH_P1  # anchored to the vote, see above
         syms = ("^GSPC",) + _XUS
         with ThreadPoolExecutor(max_workers=6) as pool:
-            got = dict(zip(syms, pool.map(
-                lambda s: _indexed(s, p1), syms), strict=True))
+            if progress is not None:
+                progress(0, len(syms), "")
+            futs = {pool.submit(_indexed, s, p1): s
+                    for s in syms}
+            got = {}
+            for fut in as_completed(futs):
+                got[futs[fut]] = fut.result()
+                if progress is not None:
+                    progress(len(got), len(futs), futs[fut])
         out = {}
 
         def put(key, leg):

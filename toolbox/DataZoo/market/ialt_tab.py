@@ -26,7 +26,7 @@ drawdown, correlations) with the short window named.
 # every Markets tab. TAIL_SHARE is re-exported — the tab's
 # tests name it from this module.
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from toolbox.DataZoo.market.eastern import (
     format_day,
@@ -49,13 +49,16 @@ _SYMS = ("IALT", "SPY", "AGG", "VOO") + PEERS
 
 
 
-def fetch_ialt_tab():
+def fetch_ialt_tab(progress=None):
     """The IALT payload. Each leg retries transient HTTP
     errors with backoff (the shared with_retry, as in the
     other tabs); a final failure raises a RuntimeError naming
     the leg. The frame starts at IALT's first bar; the other
     legs are cut to that window and forward-filled across
-    their own holidays."""
+    their own holidays. ``progress(done, total, detail)``
+    (2026-11-16) reports each leg as it completes — the
+    futures board's _fetch_all idiom; None keeps today's
+    behaviour."""
     import pandas as pd
 
     p1 = int(time.time()) - (3 * 365 + 90) * 86400
@@ -65,7 +68,15 @@ def fetch_ialt_tab():
             lambda: yahoo_daily(sym, p1=p1), "yahoo " + sym)
 
     with ThreadPoolExecutor(max_workers=6) as pool:
-        got = dict(pool.map(get, _SYMS))
+        if progress is not None:
+            progress(0, len(_SYMS), "")
+        futs = {pool.submit(get, sym): sym for sym in _SYMS}
+        got = {}
+        for fut in as_completed(futs):
+            sym, series = fut.result()
+            got[sym] = series
+            if progress is not None:
+                progress(len(got), len(futs), sym)
     df = pd.DataFrame(got).dropna(subset=["IALT"])
     df = df[df.index >= df.index[0]].ffill().dropna()
     return _compute(df)

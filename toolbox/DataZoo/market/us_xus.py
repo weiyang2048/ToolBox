@@ -23,7 +23,7 @@ never hard-coded.
 """
 import html
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from toolbox.DataZoo.market.eastern import format_day
 from toolbox.DataZoo.market.plotly_panels import (
@@ -45,11 +45,13 @@ _BLOCS = (("dev", "EFA", "Developed ex-US", "#2E8B57"),
           ("xus", "ACWX", "All ex-US", "#90EE90"))
 
 
-def fetch_us_xus():
+def fetch_us_xus(progress=None):
     """The shift payload. Each leg retries transient HTTP
     errors with backoff (the shared with_retry, as in the
     power law); a final failure raises a RuntimeError naming
-    the leg."""
+    the leg. ``progress(done, total, detail)`` (2026-11-16)
+    reports each leg as it completes — the futures board's
+    _fetch_all idiom; None keeps today's behaviour."""
     import pandas as pd
 
     p1 = int(time.time()) - (6 * 365 + 320) * 86400
@@ -59,7 +61,15 @@ def fetch_us_xus():
             lambda: yahoo_daily(sym, p1=p1), "yahoo " + sym)
 
     with ThreadPoolExecutor(max_workers=5) as pool:
-        got = dict(pool.map(get, _SYMS))
+        if progress is not None:
+            progress(0, len(_SYMS), "")
+        futs = {pool.submit(get, sym): sym for sym in _SYMS}
+        got = {}
+        for fut in as_completed(futs):
+            sym, series = fut.result()
+            got[sym] = series
+            if progress is not None:
+                progress(len(got), len(futs), sym)
     return _compute(pd.DataFrame(got).dropna())
 
 

@@ -565,3 +565,52 @@ def test_chart_png_does_not_call_tight_layout():
     import inspect
 
     assert "tight_layout(" not in inspect.getsource(bp.chart_png)
+
+
+def test_fit_power_law_full_stage_hook_names_fixed_b(stub_fb_cv):
+    """The stage hook (2026-11-16) fires exactly once, naming
+    the fixed-b step, and changes no value."""
+    rng = np.random.default_rng(7)
+    days = np.exp(np.linspace(6.0, 8.5, 80))
+    values = np.exp(1.0 + 2.0 * np.log(days)
+                    + rng.normal(0, 0.05, len(days)))
+    seen = []
+    f = bp.fit_power_law_full(days, values, stage=seen.append)
+    assert len(seen) == 1
+    assert "fixed-b" in seen[0]
+    assert f == bp.fit_power_law_full(days, values)
+
+
+def test_fetch_powerlaw_reports_legs_fits_and_stages(
+        monkeypatch, stub_fb_cv):
+    """Progress (2026-11-16): the six legs report as they
+    complete; the bar then re-baselines to the fit phase's
+    three units (price fit, ratio fit, the caller's chart
+    draw), and the stage labels name the opaque steps in
+    order. The payload is the plain fetch's."""
+    _powerlaw_fixture(monkeypatch)
+    _freeze_clock(monkeypatch, datetime.datetime(
+        2026, 11, 5, 12, 0, tzinfo=datetime.timezone.utc))
+    reports, stages = [], []
+    out = bp.fetch_powerlaw(
+        progress=lambda d, t, s: reports.append((d, t, s)),
+        stage=stages.append)
+    assert out["stats"] == bp.fetch_powerlaw()["stats"]
+    assert reports[0] == (0, 6, "")
+    legs = reports[1:7]
+    assert [r[0] for r in legs] == [1, 2, 3, 4, 5, 6]
+    assert {r[2] for r in legs} == {
+        "yahoo BTC-USD", "yahoo GLD", "yahoo SPY", "yahoo GC=F",
+        "blockchain.info market-price",
+        "blockchain.info market-cap"}
+    assert reports[7] == (0, 3, "")
+    assert reports[8][:2] == (1, 3)
+    assert reports[8][2].startswith("price fit — slope")
+    assert reports[9][:2] == (2, 3)
+    assert reports[9][2].startswith("ratio fit — slope")
+    assert len(reports) == 10
+    assert stages[0].startswith(
+        "Fitting the price power law — classical")
+    assert "fixed-b" in stages[1]
+    assert stages[2].startswith("Fitting the BTC ÷ gold-cap ratio")
+    assert len(stages) == 3
