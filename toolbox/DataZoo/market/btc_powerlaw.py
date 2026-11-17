@@ -809,7 +809,7 @@ def fetch_powerlaw(progress=None, stage=None):
     }
 
 
-def _slope_label(name, b, fb_lo, fb_hi, se_nw, se):
+def _slope_label(name, *, b, fb_lo, fb_hi, se_nw, se):
     """One fit's legend label, quoting the slope's uncertainty.
 
     The fixed-b 95% CI headlines on its own line when the
@@ -835,7 +835,7 @@ def _slope_label(name, b, fb_lo, fb_hi, se_nw, se):
     return lab
 
 
-def _price_panel(ax1, btc, early, days, trend, lo, hi, st, last,
+def _price_panel(ax1, *, btc, early, days, trend, lo, hi, st, last,
                  slope_lab):
     """The top-left panel: BTC price against its power law."""
     ax1.fill_between(days, lo, hi, color="#e4dcc9", alpha=0.22, zorder=1)
@@ -891,7 +891,7 @@ def _price_panel(ax1, btc, early, days, trend, lo, hi, st, last,
                  datetime.datetime(2030, 12, 31))  # noqa: DTZ001 - chart axis coordinate; module dates are naive by construction
 
 
-def _ratio_panel(ax1r, ratio, r_days, r_trend, r_lo, r_hi, st,
+def _ratio_panel(ax1r, *, ratio, r_days, r_trend, r_lo, r_hi, st,
                  ratio_lab):
     """The top-right panel: the BTC/gold ratio's power law."""
     ax1r.fill_between(r_days, r_lo * 100, r_hi * 100, color="#e8d9a8",
@@ -944,7 +944,7 @@ def _ratio_panel(ax1r, ratio, r_days, r_trend, r_lo, r_hi, st,
     plt.setp(ax1r.get_xticklabels(), visible=False)
 
 
-def _corr_panel(ax2, eg, c_gold, es, c_spx, st, floor):
+def _corr_panel(ax2, *, eg, c_gold, es, c_spx, st, floor):
     """The bottom panel: the two 63-day correlations, full width."""
     ax2.plot(eg.index, eg, color="#E3B341", lw=1.0, alpha=0.65)
     ax2.plot(c_gold.index, c_gold, color="#E3B341", lw=1.5,
@@ -1007,13 +1007,14 @@ def chart_png(data):
     # after it as the secondary figure; the fallbacks below
     # are unchanged.
     slope_lab = _slope_label(
-        "power law", b, st.get("slope_ci_fb_lo"),
-        st.get("slope_ci_fb_hi"), st.get("slope_se_nw"),
-        st.get("slope_se"))
+        "power law", b=b, fb_lo=st.get("slope_ci_fb_lo"),
+        fb_hi=st.get("slope_ci_fb_hi"), se_nw=st.get("slope_se_nw"),
+        se=st.get("slope_se"))
     ratio_lab = _slope_label(
-        "ratio power law", b_r, st.get("ratio_slope_ci_fb_lo"),
-        st.get("ratio_slope_ci_fb_hi"),
-        st.get("ratio_slope_se_nw"), st.get("ratio_slope_se"))
+        "ratio power law", b=b_r,
+        fb_lo=st.get("ratio_slope_ci_fb_lo"),
+        fb_hi=st.get("ratio_slope_ci_fb_hi"),
+        se_nw=st.get("ratio_slope_se_nw"), se=st.get("ratio_slope_se"))
 
     fig = plt.figure(figsize=(11, 7.4))
     gs = gridspec.GridSpec(2, 2, height_ratios=[1.6, 1],
@@ -1022,14 +1023,15 @@ def chart_png(data):
     ax1r = fig.add_subplot(gs[0, 1], sharex=ax1)
     ax2 = fig.add_subplot(gs[1, :], sharex=ax1)
 
-    _price_panel(ax1, btc, early, days, trend, lo, hi, st, last,
-                 slope_lab)
-    _ratio_panel(ax1r, ratio, r_days, r_trend, r_lo, r_hi, st,
-                 ratio_lab)
+    _price_panel(ax1, btc=btc, early=early, days=days, trend=trend,
+                 lo=lo, hi=hi, st=st, last=last, slope_lab=slope_lab)
+    _ratio_panel(ax1r, ratio=ratio, r_days=r_days, r_trend=r_trend,
+                 r_lo=r_lo, r_hi=r_hi, st=st, ratio_lab=ratio_lab)
     fig.suptitle("Bitcoin power law and 63-day BTC\u00d7gold / "
                  "BTC\u00d7SPX correlations", fontsize=11, y=0.98,
                  color="#E8ECEC")
-    _corr_panel(ax2, eg, c_gold, es, c_spx, st, floor)
+    _corr_panel(ax2, eg=eg, c_gold=c_gold, es=es, c_spx=c_spx, st=st,
+                floor=floor)
     # Geometry is pinned by the explicit subplots_adjust
     # below, never tight_layout: the figure's twin axes are
     # incompatible with tight_layout, which bailed out to
