@@ -143,8 +143,14 @@ target-version = "py310"
 # regression nets, starting from zero violations. After this,
 # every prefix in ruff 0.17.3 is enforced, dossiered,
 # rejected-with-counts, or proven inapplicable.
+# PLR0915 added 2026-11-17 (user-approved burn item): the week's
+# three extractions — fit_power_law_full (ca255e2), chart_png
+# (6a93ed1) and fetch_powerlaw (0d5f626), all in btc_powerlaw.py —
+# took the last PLR0915 sites to zero, so, like PLR0124, it is
+# enforced purely as a regression net, starting from zero
+# violations.
 [tool.ruff.lint]
-select = ["F401", "F841", "I001", "UP006", "UP035", "UP045", "UP031", "UP032", "PLW1510", "BLE001", "E722", "B", "EM", "C4", "PLR0124", "DTZ", "TRY003", "TRY300", "PLR5501", "PLR0402", "PLE", "RSE", "ASYNC", "LOG", "SLOT", "FA", "YTT", "TID", "F"]
+select = ["F401", "F841", "I001", "UP006", "UP035", "UP045", "UP031", "UP032", "PLW1510", "BLE001", "E722", "B", "EM", "C4", "PLR0124", "DTZ", "TRY003", "TRY300", "PLR5501", "PLR0402", "PLR0915", "PLE", "RSE", "ASYNC", "LOG", "SLOT", "FA", "YTT", "TID", "F"]
 
 [tool.ruff.lint.per-file-ignores]
 # Intentional public re-exports (the energy package's API surface).
