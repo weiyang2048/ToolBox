@@ -751,81 +751,35 @@ def fetch_powerlaw(progress=None, stage=None):
     }
 
 
-def chart_png(data):
-    """Render the three-panel power-law figure to PNG bytes.
+def _slope_label(name, b, fb_lo, fb_hi, se_nw, se):
+    """One fit's legend label, quoting the slope's uncertainty.
 
-    Layout (user request 2026-10-23, from the brief era): top-left
-    the log-scale price with its power law and ±1σ band, top-right
-    the BTC÷gold market-cap ratio with its own fit and the
-    flippening line, bottom the two 63-day correlations full width.
-
-    Rendered transparent with a dark-page palette (user
-    direction 2026-11-04): snow ink, brightened series
-    hues, dark glass label boxes — the figure blends into
-    the app's themed page.
+    The fixed-b 95% CI headlines on its own line when the
+    payload carries it — it is the interval whose coverage
+    holds in the tail (see fit_power_law_full) — with the
+    Newey-West SE after it as the secondary figure. Without
+    it, the NW SE is the quoted figure: the residuals are
+    strongly persistent (lag-1 autocorrelation 0.99), under
+    which the classical SE understates the slope's sampling
+    sd ~15x. With neither, the classical SE; with no
+    uncertainty keys at all, the bare slope.
     """
-    btc, early = data["btc"], data["early"]
-    days, trend, lo, hi = (data["days"], data["trend"],
-                           data["lo"], data["hi"])
-    ratio, r_days = data["ratio"], data["r_days"]
-    r_trend, r_lo, r_hi = data["r_trend"], data["r_lo"], data["r_hi"]
-    c_gold, c_spx, eg, es = (data["c_gold"], data["c_spx"],
-                             data["eg"], data["es"])
-    last, floor, st = data["last"], data["floor"], data["stats"]
-    b, b_r = st["slope"], st["ratio_slope"]
-    # The legend quotes each slope with its uncertainty when
-    # the payload carries it (fetch_powerlaw always does;
-    # older/hand-built payloads render the bare slope as
-    # before). The fixed-b 95% CI headlines on its own line
-    # when present — it is the interval whose coverage holds
-    # in the tail (see fit_power_law_full) — with the
-    # Newey-West SE after it as the secondary figure. Without
-    # it, the NW SE is the quoted figure: the residuals are
-    # strongly persistent (lag-1 autocorrelation 0.99), under
-    # which the classical SE understates the slope's sampling
-    # sd ~15x.
-    # When the payload carries the fixed-b interval it
-    # headlines the label on its own line, with the NW SE
-    # after it as the secondary figure; the fallbacks below
-    # are unchanged.
-    slope_lab = f"power law (slope {b:.2f})"
-    if st.get("slope_ci_fb_lo") is not None:
-        slope_lab = (f"power law (slope {b:.2f})\n"
-                     f"fixed-b 95% CI "
-                     f"[{st['slope_ci_fb_lo']:.2f}, "
-                     f"{st['slope_ci_fb_hi']:.2f}]")
-        if st.get("slope_se_nw"):
-            slope_lab += f"; NW SE \u00b1{st['slope_se_nw']:.2f}"
-    elif st.get("slope_se_nw"):
-        slope_lab = (f"power law (slope {b:.2f} "
-                     f"\u00b1 {st['slope_se_nw']:.2f} NW SE)")
-    elif st.get("slope_se"):
-        slope_lab = (f"power law (slope {b:.2f} "
-                     f"\u00b1 {st['slope_se']:.2f})")
-    ratio_lab = f"ratio power law (slope {b_r:.2f})"
-    if st.get("ratio_slope_ci_fb_lo") is not None:
-        ratio_lab = (f"ratio power law (slope {b_r:.2f})\n"
-                     f"fixed-b 95% CI "
-                     f"[{st['ratio_slope_ci_fb_lo']:.2f}, "
-                     f"{st['ratio_slope_ci_fb_hi']:.2f}]")
-        if st.get("ratio_slope_se_nw"):
-            ratio_lab += (f"; NW SE "
-                          f"\u00b1{st['ratio_slope_se_nw']:.2f}")
-    elif st.get("ratio_slope_se_nw"):
-        ratio_lab = (f"ratio power law (slope {b_r:.2f} "
-                     f"\u00b1 {st['ratio_slope_se_nw']:.2f} NW SE)")
-    elif st.get("ratio_slope_se"):
-        ratio_lab = (f"ratio power law (slope {b_r:.2f} "
-                     f"\u00b1 {st['ratio_slope_se']:.2f})")
+    lab = f"{name} (slope {b:.2f})"
+    if fb_lo is not None:
+        lab = (f"{name} (slope {b:.2f})\n"
+               f"fixed-b 95% CI [{fb_lo:.2f}, {fb_hi:.2f}]")
+        if se_nw:
+            lab += f"; NW SE \u00b1{se_nw:.2f}"
+    elif se_nw:
+        lab = f"{name} (slope {b:.2f} \u00b1 {se_nw:.2f} NW SE)"
+    elif se:
+        lab = f"{name} (slope {b:.2f} \u00b1 {se:.2f})"
+    return lab
 
-    fig = plt.figure(figsize=(11, 7.4))
-    gs = gridspec.GridSpec(2, 2, height_ratios=[1.6, 1],
-                           hspace=0.08, wspace=0.22)
-    ax1 = fig.add_subplot(gs[0, 0])
-    ax1r = fig.add_subplot(gs[0, 1], sharex=ax1)
-    ax2 = fig.add_subplot(gs[1, :], sharex=ax1)
 
-    # --- Top-left: BTC price power law only ---
+def _price_panel(ax1, btc, early, days, trend, lo, hi, st, last,
+                 slope_lab):
+    """The top-left panel: BTC price against its power law."""
     ax1.fill_between(days, lo, hi, color="#e4dcc9", alpha=0.22, zorder=1)
     ax1.semilogy(days, trend, color="#7FA8D9", lw=1.4, alpha=0.85,
                  zorder=3, label=slope_lab)
@@ -878,7 +832,10 @@ def chart_png(data):
     ax1.set_xlim(datetime.datetime(2010, 1, 1),  # noqa: DTZ001 - chart axis coordinate; module dates are naive by construction
                  datetime.datetime(2030, 12, 31))  # noqa: DTZ001 - chart axis coordinate; module dates are naive by construction
 
-    # --- Top-right: BTC/gold market-cap ratio power law only ---
+
+def _ratio_panel(ax1r, ratio, r_days, r_trend, r_lo, r_hi, st,
+                 ratio_lab):
+    """The top-right panel: the BTC/gold ratio's power law."""
     ax1r.fill_between(r_days, r_lo * 100, r_hi * 100, color="#e8d9a8",
                       alpha=0.22, zorder=1)
     ax1r.axhline(100, color="#4CAF6E", ls=":", lw=1.3, zorder=2)
@@ -928,11 +885,9 @@ def chart_png(data):
     ax1r.grid(True, which="major", alpha=0.25)
     plt.setp(ax1r.get_xticklabels(), visible=False)
 
-    fig.suptitle("Bitcoin power law and 63-day BTC\u00d7gold / "
-                 "BTC\u00d7SPX correlations", fontsize=11, y=0.98,
-                 color="#E8ECEC")
 
-    # --- Bottom row: correlations, spanning both columns ---
+def _corr_panel(ax2, eg, c_gold, es, c_spx, st, floor):
+    """The bottom panel: the two 63-day correlations, full width."""
     ax2.plot(eg.index, eg, color="#E3B341", lw=1.0, alpha=0.65)
     ax2.plot(c_gold.index, c_gold, color="#E3B341", lw=1.5,
              label=f"BTC \u00d7 gold (latest {st['corr_gold']:+.2f})")
@@ -954,6 +909,69 @@ def chart_png(data):
                  datetime.datetime(2030, 12, 31))  # noqa: DTZ001 - chart axis coordinate; module dates are naive by construction
     ax2.xaxis.set_major_locator(mdates.YearLocator(2))
     ax2.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
+
+
+def chart_png(data):
+    """Render the three-panel power-law figure to PNG bytes.
+
+    Layout (user request 2026-10-23, from the brief era): top-left
+    the log-scale price with its power law and ±1σ band, top-right
+    the BTC÷gold market-cap ratio with its own fit and the
+    flippening line, bottom the two 63-day correlations full width.
+
+    Rendered transparent with a dark-page palette (user
+    direction 2026-11-04): snow ink, brightened series
+    hues, dark glass label boxes — the figure blends into
+    the app's themed page.
+    """
+    btc, early = data["btc"], data["early"]
+    days, trend, lo, hi = (data["days"], data["trend"],
+                           data["lo"], data["hi"])
+    ratio, r_days = data["ratio"], data["r_days"]
+    r_trend, r_lo, r_hi = data["r_trend"], data["r_lo"], data["r_hi"]
+    c_gold, c_spx, eg, es = (data["c_gold"], data["c_spx"],
+                             data["eg"], data["es"])
+    last, floor, st = data["last"], data["floor"], data["stats"]
+    b, b_r = st["slope"], st["ratio_slope"]
+    # The legend quotes each slope with its uncertainty when
+    # the payload carries it (fetch_powerlaw always does;
+    # older/hand-built payloads render the bare slope as
+    # before). The fixed-b 95% CI headlines on its own line
+    # when present — it is the interval whose coverage holds
+    # in the tail (see fit_power_law_full) — with the
+    # Newey-West SE after it as the secondary figure. Without
+    # it, the NW SE is the quoted figure: the residuals are
+    # strongly persistent (lag-1 autocorrelation 0.99), under
+    # which the classical SE understates the slope's sampling
+    # sd ~15x.
+    # When the payload carries the fixed-b interval it
+    # headlines the label on its own line, with the NW SE
+    # after it as the secondary figure; the fallbacks below
+    # are unchanged.
+    slope_lab = _slope_label(
+        "power law", b, st.get("slope_ci_fb_lo"),
+        st.get("slope_ci_fb_hi"), st.get("slope_se_nw"),
+        st.get("slope_se"))
+    ratio_lab = _slope_label(
+        "ratio power law", b_r, st.get("ratio_slope_ci_fb_lo"),
+        st.get("ratio_slope_ci_fb_hi"),
+        st.get("ratio_slope_se_nw"), st.get("ratio_slope_se"))
+
+    fig = plt.figure(figsize=(11, 7.4))
+    gs = gridspec.GridSpec(2, 2, height_ratios=[1.6, 1],
+                           hspace=0.08, wspace=0.22)
+    ax1 = fig.add_subplot(gs[0, 0])
+    ax1r = fig.add_subplot(gs[0, 1], sharex=ax1)
+    ax2 = fig.add_subplot(gs[1, :], sharex=ax1)
+
+    _price_panel(ax1, btc, early, days, trend, lo, hi, st, last,
+                 slope_lab)
+    _ratio_panel(ax1r, ratio, r_days, r_trend, r_lo, r_hi, st,
+                 ratio_lab)
+    fig.suptitle("Bitcoin power law and 63-day BTC\u00d7gold / "
+                 "BTC\u00d7SPX correlations", fontsize=11, y=0.98,
+                 color="#E8ECEC")
+    _corr_panel(ax2, eg, c_gold, es, c_spx, st, floor)
     # Geometry is pinned by the explicit subplots_adjust
     # below, never tight_layout: the figure's twin axes are
     # incompatible with tight_layout, which bailed out to
