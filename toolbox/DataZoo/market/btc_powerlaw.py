@@ -570,24 +570,16 @@ def _btc_display_date(last_stamp):
         pd.DatetimeIndex([last_stamp]))[0].date().isoformat()
 
 
-def fetch_powerlaw(progress=None, stage=None):
-    """Fetch all six sources and compute the chart payload + stats.
+def _fetch_sources(progress):
+    """Run fetch_powerlaw's six source legs concurrently.
 
-    Returns a dict consumed by chart_png() and by the page's stats
-    chips. Each leg retries transient HTTP errors with backoff;
-    a final failure raises a RuntimeError naming the leg — the
-    caller isolates it.
-
-    Progress (2026-11-16, the dashboard's progress standard):
-    ``progress(done, total, detail)`` reports each source leg
-    as it completes (the futures board's _fetch_all idiom),
-    then re-baselines to the fit phase's three opaque units —
-    the price fit, the ratio fit, and a third the caller
-    completes (the chart draw). ``stage(label)`` names the
-    opaque steps as they start: the price fit's classical +
-    Newey-West pass, its fixed-b step (via fit_power_law_full's
-    own hook), and the ratio fit. Both hooks default to None —
-    today's behaviour, byte-identical outputs.
+    Each leg retries transient HTTP errors with backoff; a
+    final failure raises a RuntimeError naming the leg — the
+    caller isolates it. ``progress(done, total, detail)``
+    reports each leg as it completes (the futures board's
+    _fetch_all idiom). Returns (btc, gld, spy, gold_oz, bdf,
+    bmc): the Yahoo BTC/GLD/SPY closes, the GC=F gold price,
+    and blockchain.info's price and market-cap frames.
     """
     p2 = int(_utcnow().timestamp())
     # BTC trades 24/7: keep Yahoo's in-progress UTC-day bar
@@ -616,6 +608,135 @@ def fetch_powerlaw(progress=None, stage=None):
             if progress is not None:
                 progress(done, len(jobs), legs[i][0])
         btc, gld, spy, gold_oz, bdf, bmc = results
+    return btc, gld, spy, gold_oz, bdf, bmc
+
+
+def _price_fit(bdf, progress, stage):
+    """The extended power-law fit on blockchain.info's 2010+
+    history, with its trend envelope and end-2029 projection.
+
+    The fit phase re-baselines the progress bar to its three
+    opaque units (price fit, ratio fit, the caller's chart
+    draw); three is below the bar's ETA floor, so the phase
+    reads elapsed-only rather than carrying a fabricated
+    to-go. ``stage`` names the fit's steps as they start (its
+    fixed-b step arrives via fit_power_law_full's own hook).
+    Returns (fit, days, trend, lo, hi, p2029, early): the
+    full fit dict, the 2010–2030 daily grid with its ±σ
+    envelope, the projected 2029 year-end price, and the
+    pre-Yahoo (before 2014-09-17) slice of the price frame.
+    """
+    if progress is not None:
+        progress(0, 3, "")
+    if stage is not None:
+        stage("Fitting the price power law — classical "
+              "+ Newey–West…")
+    t = days_since_genesis(bdf.index)
+    fit = fit_power_law_full(
+        t, bdf["p"].values,
+        stage=(lambda label: stage(
+            "Fitting the price power law — " + label + "…"))
+        if stage is not None else None)
+    b, lnA, sigma = fit["b"], fit["lnA"], fit["sigma"]
+    if progress is not None:
+        progress(1, 3, f"price fit — slope {b:.2f}, fixed-b CI "
+                       f"[{fit['b_ci95_fb'][0]:.2f}, "
+                       f"{fit['b_ci95_fb'][1]:.2f}]")
+    end = datetime.date(2030, 12, 31)
+    days = pd.date_range("2010-01-01", end, freq="D")
+    trend, lo, hi = trend_envelope(
+        lnA, b, sigma, days_since_genesis(days))
+    p2029 = float(np.exp(
+        lnA + b * math.log((datetime.date(2029, 12, 31) - GENESIS).days)))
+    early = bdf[bdf.index < pd.Timestamp("2014-09-17")]
+    return fit, days, trend, lo, hi, p2029, early
+
+
+def _correlations(btc, gld, spy, bdf):
+    """The 63-day rolling BTC×gold and BTC×SPX log-return
+    correlations: the Yahoo era (2014-09-17+) on daily
+    closes, and the pre-2014 extension on the sparse
+    blockchain.info series (63-calendar-day windows).
+    Returns (c_gold, c_spx, eg, es)."""
+    rets = pd.DataFrame({"BTC": np.log(btc).diff(),
+                         "GOLD": np.log(gld).diff(),
+                         "SPX": np.log(spy).diff()}).dropna()
+    c_gold = rets["BTC"].rolling(63).corr(rets["GOLD"]).dropna()
+    c_spx = rets["BTC"].rolling(63).corr(rets["SPX"]).dropna()
+    bdf = bdf.copy()
+    bdf["lr"] = np.log(bdf["p"]).diff()
+    slr = pd.DataFrame({"BTC": bdf["lr"]})
+    slr["GOLD"] = np.log(gld).diff().reindex(
+        slr.index, method="ffill").values
+    slr["SPX"] = np.log(spy).diff().reindex(
+        slr.index, method="ffill").values
+    slr = slr.dropna()
+    pre = slr[slr.index < pd.Timestamp("2014-09-17")]
+    eg = roll_corr(pre["BTC"], pre["GOLD"])
+    es = roll_corr(pre["BTC"], pre["SPX"])
+    return c_gold, c_spx, eg, es
+
+
+def _ratio_fit(bmc, gold_oz, progress, stage):
+    """The BTC-to-gold market-cap ratio and its power-law
+    fit. The series is the sampled cap exactly as served and
+    is dated by its last sample (user direction 2026-11-01:
+    keep the date honest — no synthetic extension wearing a
+    measured date). Gold's cap is GC=F × the WGC
+    above-ground stock walked from its end-2024 anchor.
+    Returns (ratio, fit_r, ratio_now, r_days, r_trend,
+    r_lo, r_hi, flip_date): the ratio series, its full fit
+    dict, its latest value, the 2013–2030 daily grid with
+    its ±σ envelope, and the model-implied flippening date
+    (None when the fitted slope is not positive)."""
+    cap = bmc["mc"]
+    g_on_b = gold_oz.reindex(cap.index, method="ffill")
+    gold_days = days_since_genesis(cap.index)
+    gold_mc = g_on_b * (216265.0 + (gold_days - _ANCHOR_DAYS)
+                        / 365.25 * 3738.0) * OZT_PER_TONNE
+    ratio = (cap / gold_mc).replace(
+        [np.inf, -np.inf], np.nan).dropna()
+    ratio = ratio[ratio > 0]
+    ratio_now = float(ratio.iloc[-1])
+    rt = days_since_genesis(ratio.index)
+    if stage is not None:
+        stage("Fitting the BTC ÷ gold-cap ratio…")
+    fit_r = fit_power_law_full(rt, ratio.values)
+    b_r, lnA_r, sigma_r = fit_r["b"], fit_r["lnA"], fit_r["sigma"]
+    if progress is not None:
+        progress(2, 3, f"ratio fit — slope {b_r:.2f}")
+    end = datetime.date(2030, 12, 31)
+    r_days = pd.date_range("2013-01-01", end, freq="D")
+    r_trend, r_lo, r_hi = trend_envelope(
+        lnA_r, b_r, sigma_r, days_since_genesis(r_days))
+    flip_date = None
+    if b_r > 0:
+        t_flip = math.exp(-lnA_r / b_r)
+        flip_date = GENESIS + datetime.timedelta(days=t_flip)
+    return (ratio, fit_r, ratio_now, r_days, r_trend, r_lo,
+            r_hi, flip_date)
+
+
+def fetch_powerlaw(progress=None, stage=None):
+    """Fetch all six sources and compute the chart payload + stats.
+
+    Returns a dict consumed by chart_png() and by the page's stats
+    chips. Each leg retries transient HTTP errors with backoff;
+    a final failure raises a RuntimeError naming the leg — the
+    caller isolates it.
+
+    Progress (2026-11-16, the dashboard's progress standard):
+    ``progress(done, total, detail)`` reports each source leg
+    as it completes (the futures board's _fetch_all idiom),
+    then re-baselines to the fit phase's three opaque units —
+    the price fit, the ratio fit, and a third the caller
+    completes (the chart draw). ``stage(label)`` names the
+    opaque steps as they start: the price fit's classical +
+    Newey-West pass, its fixed-b step (via fit_power_law_full's
+    own hook), and the ratio fit. Both hooks default to None —
+    today's behaviour, byte-identical outputs.
+    """
+    btc, gld, spy, gold_oz, bdf, bmc = _fetch_sources(progress)
 
     # Dating (user directions 2026-11-01 and 2026-11-02:
     # everything in the app in Eastern): Yahoo stamps BTC-USD
@@ -637,80 +758,17 @@ def fetch_powerlaw(progress=None, stage=None):
     # exactly as served.
 
     # --- extended fit on 2010+ history ---
-    # The fit phase re-baselines the bar to its three opaque
-    # units (price fit, ratio fit, the caller's chart draw);
-    # three is below the bar's ETA floor, so the phase reads
-    # elapsed-only rather than carrying a fabricated to-go.
-    if progress is not None:
-        progress(0, 3, "")
-    if stage is not None:
-        stage("Fitting the price power law — classical "
-              "+ Newey–West…")
-    t = days_since_genesis(bdf.index)
-    fit = fit_power_law_full(
-        t, bdf["p"].values,
-        stage=(lambda label: stage(
-            "Fitting the price power law — " + label + "…"))
-        if stage is not None else None)
-    b, lnA, sigma = fit["b"], fit["lnA"], fit["sigma"]
-    n_fit = fit["n"]
-    if progress is not None:
-        progress(1, 3, f"price fit — slope {b:.2f}, fixed-b CI "
-                       f"[{fit['b_ci95_fb'][0]:.2f}, "
-                       f"{fit['b_ci95_fb'][1]:.2f}]")
-    end = datetime.date(2030, 12, 31)
-    days = pd.date_range("2010-01-01", end, freq="D")
-    trend, lo, hi = trend_envelope(
-        lnA, b, sigma, days_since_genesis(days))
-    p2029 = float(np.exp(
-        lnA + b * math.log((datetime.date(2029, 12, 31) - GENESIS).days)))
-    early = bdf[bdf.index < pd.Timestamp("2014-09-17")]
+    fit, days, trend, lo, hi, p2029, early = _price_fit(
+        bdf, progress, stage)
+    b, sigma, n_fit = fit["b"], fit["sigma"], fit["n"]
 
     # --- correlations ---
-    rets = pd.DataFrame({"BTC": np.log(btc).diff(),
-                         "GOLD": np.log(gld).diff(),
-                         "SPX": np.log(spy).diff()}).dropna()
-    c_gold = rets["BTC"].rolling(63).corr(rets["GOLD"]).dropna()
-    c_spx = rets["BTC"].rolling(63).corr(rets["SPX"]).dropna()
-    bdf = bdf.copy()
-    bdf["lr"] = np.log(bdf["p"]).diff()
-    slr = pd.DataFrame({"BTC": bdf["lr"]})
-    slr["GOLD"] = np.log(gld).diff().reindex(
-        slr.index, method="ffill").values
-    slr["SPX"] = np.log(spy).diff().reindex(
-        slr.index, method="ffill").values
-    slr = slr.dropna()
-    pre = slr[slr.index < pd.Timestamp("2014-09-17")]
-    eg = roll_corr(pre["BTC"], pre["GOLD"])
-    es = roll_corr(pre["BTC"], pre["SPX"])
+    c_gold, c_spx, eg, es = _correlations(btc, gld, spy, bdf)
 
-    # --- BTC-to-gold market-cap ratio. The series is the
-    # sampled cap exactly as served and is dated by its last
-    # sample (user direction 2026-11-01: keep the date honest
-    # — no synthetic extension wearing a measured date). ---
-    cap = bmc["mc"]
-    g_on_b = gold_oz.reindex(cap.index, method="ffill")
-    gold_days = days_since_genesis(cap.index)
-    gold_mc = g_on_b * (216265.0 + (gold_days - _ANCHOR_DAYS)
-                        / 365.25 * 3738.0) * OZT_PER_TONNE
-    ratio = (cap / gold_mc).replace(
-        [np.inf, -np.inf], np.nan).dropna()
-    ratio = ratio[ratio > 0]
-    ratio_now = float(ratio.iloc[-1])
-    rt = days_since_genesis(ratio.index)
-    if stage is not None:
-        stage("Fitting the BTC ÷ gold-cap ratio…")
-    fit_r = fit_power_law_full(rt, ratio.values)
-    b_r, lnA_r, sigma_r = fit_r["b"], fit_r["lnA"], fit_r["sigma"]
-    if progress is not None:
-        progress(2, 3, f"ratio fit — slope {b_r:.2f}")
-    r_days = pd.date_range("2013-01-01", end, freq="D")
-    r_trend, r_lo, r_hi = trend_envelope(
-        lnA_r, b_r, sigma_r, days_since_genesis(r_days))
-    flip_date = None
-    if b_r > 0:
-        t_flip = math.exp(-lnA_r / b_r)
-        flip_date = GENESIS + datetime.timedelta(days=t_flip)
+    # --- BTC-to-gold market-cap ratio ---
+    (ratio, fit_r, ratio_now, r_days, r_trend, r_lo, r_hi,
+     flip_date) = _ratio_fit(bmc, gold_oz, progress, stage)
+    b_r = fit_r["b"]
 
     last = c_gold.index[-1]
     floor = math.floor(
