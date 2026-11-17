@@ -38,7 +38,7 @@ def _heads(pairs):
              "published": None} for src, title in pairs]
 
 
-def _topic(term, weight, example, group, canon, surfaces,
+def _topic(term, *, weight, example, group, canon, surfaces,
            members):
     return {"term": term, "weight": weight,
             "example_headline": example, "link": "",
@@ -72,14 +72,15 @@ S1 = _heads([
     ("Wire A", "Zelensky signs new defense decree"),
     ("Wire B", "Zelensky warns of a hard winter ahead"),
 ])
-S1_FED = _topic("Federal Reserve", 4,
-                "Federal Reserve holds rates steady", "macro",
-                ("federal", "reserve"), {"Federal Reserve": 4},
-                {0, 1, 2, 3})
-S1_ZEL = _topic("Zelensky", 4,
-                "Zelensky addresses parliament in Kyiv",
-                "neutral", ("zelensky",), {"Zelensky": 4},
-                {4, 5, 6, 7})
+S1_FED = _topic("Federal Reserve", weight=4,
+                example="Federal Reserve holds rates steady",
+                group="macro", canon=("federal", "reserve"),
+                surfaces={"Federal Reserve": 4},
+                members={0, 1, 2, 3})
+S1_ZEL = _topic("Zelensky", weight=4,
+                example="Zelensky addresses parliament in Kyiv",
+                group="neutral", canon=("zelensky",),
+                surfaces={"Zelensky": 4}, members={4, 5, 6, 7})
 
 # S2 — the edge-strip rule applied to a name. EDGE_STRIP
 # contains "new", and _candidate_spans strips the SPAN
@@ -95,10 +96,10 @@ S2 = _heads([
     ("Wire A", "New York City reports record tourism"),
     ("Wire B", "New York City opens new shelters"),
 ])
-S2_TOPIC = _topic("York City", 4,
-                  "New York City approves housing plan",
-                  "neutral", ("york", "city"),
-                  {"York City": 4}, {0, 1, 2, 3})
+S2_TOPIC = _topic("York City", weight=4,
+                  example="New York City approves housing plan",
+                  group="neutral", canon=("york", "city"),
+                  surfaces={"York City": 4}, members={0, 1, 2, 3})
 
 # S2B — containment dedup. "Bank of America" is an ORG span
 # in all four titles (its noun chunks fragment into [Bank]
@@ -117,10 +118,12 @@ S2B = _heads([
     ("Wire A", "Bank of America reports earnings"),
     ("Wire B", "Bank of America warns investors"),
 ])
-S2B_TOPIC = _topic("Bank of America", 4,
-                   "Bank of America lifts forecast", "neutral",
-                   ("bank", "of", "america"),
-                   {"Bank of America": 4}, {0, 1, 2, 3})
+S2B_TOPIC = _topic("Bank of America", weight=4,
+                   example="Bank of America lifts forecast",
+                   group="neutral",
+                   canon=("bank", "of", "america"),
+                   surfaces={"Bank of America": 4},
+                   members={0, 1, 2, 3})
 
 # S3 — theme clustering. ("interest", "rate") pools 4
 # stories, ("rate", "hike") pools 3, disjoint headline
@@ -144,11 +147,11 @@ S3 = _heads([
     ("Wire A", "Rate hikes split economists"),
     ("Wire B", "Rate hikes cool demand"),
 ])
-S3_TOPIC = _topic("Interest rates", 7,
-                  "Interest rates hold steady", "macro",
-                  ("interest", "rate"),
-                  {"Interest rates": 4, "Rate hikes": 3},
-                  {0, 1, 2, 3, 4, 5, 6})
+S3_TOPIC = _topic("Interest rates", weight=7,
+                  example="Interest rates hold steady",
+                  group="macro", canon=("interest", "rate"),
+                  surfaces={"Interest rates": 4, "Rate hikes": 3},
+                  members={0, 1, 2, 3, 4, 5, 6})
 
 # C1 — the combined extractor. Two themes contribute
 # disjoint topics, and each pins a different rule.
@@ -189,22 +192,24 @@ C1 = _heads([
     ("Wire B", "Investors keep buying Bitcoin despite the dip"),
     ("Wire A", "Traders watch Bitcoin before the open"),
 ])
-C1_ZEL_SPACY = _topic("Zelensky", 5,
-                      "Zelensky addresses parliament in Kyiv",
-                      "neutral", ("zelensky",),
-                      {"Zelensky": 5}, {0, 1, 2, 3, 4})
-C1_ZEL_COMBINED = _topic("Zelensky", 4,
-                         "Zelensky addresses parliament in Kyiv",
-                         "neutral", ("zelensky",),
-                         {"Zelensky": 5}, {0, 1, 2, 3, 4})
-C1_BTC_SPACY = _topic("Bitcoin", 3,
-                      "Bitcoin surged past $90,000 in heavy trading",
-                      "crypto", ("bitcoin",), {"Bitcoin": 3},
-                      {8, 9, 10})
-C1_BTC_COMBINED = _topic("Bitcoin", 3,
-                         "Bitcoin surged past $90,000 in heavy trading",
-                         "crypto", ("bitcoin",), {"Bitcoin": 6},
-                         {8, 9, 10})
+C1_ZEL_SPACY = _topic("Zelensky", weight=5,
+                      example="Zelensky addresses parliament in Kyiv",
+                      group="neutral", canon=("zelensky",),
+                      surfaces={"Zelensky": 5},
+                      members={0, 1, 2, 3, 4})
+C1_ZEL_COMBINED = _topic("Zelensky", weight=4,
+                         example="Zelensky addresses parliament in Kyiv",
+                         group="neutral", canon=("zelensky",),
+                         surfaces={"Zelensky": 5},
+                         members={0, 1, 2, 3, 4})
+C1_BTC_SPACY = _topic("Bitcoin", weight=3,
+                      example="Bitcoin surged past $90,000 in heavy trading",
+                      group="crypto", canon=("bitcoin",),
+                      surfaces={"Bitcoin": 3}, members={8, 9, 10})
+C1_BTC_COMBINED = _topic("Bitcoin", weight=3,
+                         example="Bitcoin surged past $90,000 in heavy trading",
+                         group="crypto", canon=("bitcoin",),
+                         surfaces={"Bitcoin": 6}, members={8, 9, 10})
 
 # Pools where nothing can survive: E2's only repeated
 # chunk key is ("it",) in 2 stories (< MIN_STORIES 3);
@@ -282,10 +287,10 @@ def test_combined_topics_min_weight_drops_lexicon_source():
     # the Bitcoin theme survives on its spaCy candidate
     # alone: same label (the capitalized display surface),
     # but surfaces no longer pool the lexicon's 3.
-    bitcoin = _topic("Bitcoin", 3,
-                     "Bitcoin surged past $90,000 in heavy trading",
-                     "crypto", ("bitcoin",), {"Bitcoin": 3},
-                     {8, 9, 10})
+    bitcoin = _topic("Bitcoin", weight=3,
+                     example="Bitcoin surged past $90,000 in heavy trading",
+                     group="crypto", canon=("bitcoin",),
+                     surfaces={"Bitcoin": 3}, members={8, 9, 10})
     assert combined_topics(C1, min_weight=4) == [
         C1_ZEL_COMBINED, bitcoin]
 
