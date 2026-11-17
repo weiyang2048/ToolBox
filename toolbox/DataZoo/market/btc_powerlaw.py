@@ -271,6 +271,53 @@ def _fixed_b_cv(ln_d):
     return cv
 
 
+def _fixed_b_interval(white, xtx_inv, rho_t, nw_n, ln_d, b, lnA):
+    """The fixed-b (b = 1) interval fields for one fit.
+
+    Takes the Newey-West block's products — the whitened
+    scores, the design sandwich factor xtx_inv, the
+    recoloring coefficient rho_t and the whitened count
+    nw_n — plus the fit's ln-days design ln_d (which the
+    simulated critical value is projected from) and the
+    point estimates b / lnA, and returns the four fixed-b
+    fields of fit_power_law_full's dict: b_ci95_fb and
+    lnA_ci95_fb judged against fb_cv, with fb_b = 1.0.
+    """
+    # The same whitened scores, recolor and sandwich as the
+    # NW block, with the Bartlett truncation fixed at
+    # M = nw_n (weights 1 - j/M) instead of the plug-in
+    # bandwidth, and the simulated design-projected fixed-b
+    # critical value instead of the t value. Autocovariances
+    # of the whitened scores via FFT (the direct-lag sums
+    # would run to lag nw_n - 2).
+    m_fb = nw_n
+    nfft = 1 << int(np.ceil(np.log2(2 * nw_n)))
+    fw1 = np.fft.rfft(white[:, 0], nfft)
+    fw2 = np.fft.rfft(white[:, 1], nfft)
+    c11 = np.fft.irfft(np.conj(fw1) * fw1, nfft)[:nw_n] / nw_n
+    c22 = np.fft.irfft(np.conj(fw2) * fw2, nfft)[:nw_n] / nw_n
+    c12 = np.fft.irfft(np.conj(fw1) * fw2, nfft)[:nw_n] / nw_n
+    c21 = np.fft.irfft(np.conj(fw2) * fw1, nfft)[:nw_n] / nw_n
+    jj = np.arange(1, m_fb)
+    w_fb = 1.0 - jj / m_fb
+    cross_fb = c12[0] + float(w_fb @ (c12[1:m_fb] + c21[1:m_fb]))
+    s_fb = np.array([
+        [c11[0] + 2.0 * float(w_fb @ c11[1:m_fb]), cross_fb],
+        [cross_fb, c22[0] + 2.0 * float(w_fb @ c22[1:m_fb])]])
+    cov_fb = nw_n * xtx_inv @ (s_fb / (1.0 - rho_t) ** 2) @ xtx_inv
+    lnA_se_fb = math.sqrt(max(float(cov_fb[0, 0]), 0.0))
+    b_se_fb = math.sqrt(max(float(cov_fb[1, 1]), 0.0))
+    fb_cv = _fixed_b_cv(ln_d)
+    half_b_fb = fb_cv * b_se_fb
+    half_a_fb = fb_cv * lnA_se_fb
+    return {
+        "b_ci95_fb": (float(b) - half_b_fb, float(b) + half_b_fb),
+        "lnA_ci95_fb": (float(lnA) - half_a_fb,
+                        float(lnA) + half_a_fb),
+        "fb_cv": fb_cv, "fb_b": 1.0,
+    }
+
+
 def fit_power_law_full(days_arr, values, stage=None):
     """The fit_power_law fit with slope uncertainty, as a dict.
 
@@ -455,33 +502,7 @@ def fit_power_law_full(days_arr, values, stage=None):
         stage("fixed-b interval (simulated critical value; "
               "the cold wait's dominant cost)")
     # --- Fixed-b (b = 1) on the prewhitened statistic ---
-    # The same whitened scores, recolor and sandwich as the
-    # NW block, with the Bartlett truncation fixed at
-    # M = nw_n (weights 1 - j/M) instead of the plug-in
-    # bandwidth, and the simulated design-projected fixed-b
-    # critical value instead of the t value. Autocovariances
-    # of the whitened scores via FFT (the direct-lag sums
-    # would run to lag nw_n - 2).
-    m_fb = nw_n
-    nfft = 1 << int(np.ceil(np.log2(2 * nw_n)))
-    fw1 = np.fft.rfft(white[:, 0], nfft)
-    fw2 = np.fft.rfft(white[:, 1], nfft)
-    c11 = np.fft.irfft(np.conj(fw1) * fw1, nfft)[:nw_n] / nw_n
-    c22 = np.fft.irfft(np.conj(fw2) * fw2, nfft)[:nw_n] / nw_n
-    c12 = np.fft.irfft(np.conj(fw1) * fw2, nfft)[:nw_n] / nw_n
-    c21 = np.fft.irfft(np.conj(fw2) * fw1, nfft)[:nw_n] / nw_n
-    jj = np.arange(1, m_fb)
-    w_fb = 1.0 - jj / m_fb
-    cross_fb = c12[0] + float(w_fb @ (c12[1:m_fb] + c21[1:m_fb]))
-    s_fb = np.array([
-        [c11[0] + 2.0 * float(w_fb @ c11[1:m_fb]), cross_fb],
-        [cross_fb, c22[0] + 2.0 * float(w_fb @ c22[1:m_fb])]])
-    cov_fb = nw_n * xtx_inv @ (s_fb / (1.0 - rho_t) ** 2) @ xtx_inv
-    lnA_se_fb = math.sqrt(max(float(cov_fb[0, 0]), 0.0))
-    b_se_fb = math.sqrt(max(float(cov_fb[1, 1]), 0.0))
-    fb_cv = _fixed_b_cv(ln_d)
-    half_b_fb = fb_cv * b_se_fb
-    half_a_fb = fb_cv * lnA_se_fb
+    fb = _fixed_b_interval(white, xtx_inv, rho_t, nw_n, ln_d, b, lnA)
     return {
         "b": float(b), "lnA": float(lnA), "sigma": sigma, "n": n,
         "b_se": b_se, "lnA_se": lnA_se,
@@ -489,10 +510,7 @@ def fit_power_law_full(days_arr, values, stage=None):
         "b_se_nw": b_se_nw, "lnA_se_nw": lnA_se_nw,
         "b_ci95_nw": (float(b) - half_nw, float(b) + half_nw),
         "nw_bandwidth": nw_lag, "nw_rho": rho_t,
-        "b_ci95_fb": (float(b) - half_b_fb, float(b) + half_b_fb),
-        "lnA_ci95_fb": (float(lnA) - half_a_fb,
-                        float(lnA) + half_a_fb),
-        "fb_cv": fb_cv, "fb_b": 1.0,
+        **fb,
     }
 
 
