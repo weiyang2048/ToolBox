@@ -271,7 +271,7 @@ def _fixed_b_cv(ln_d):
     return cv
 
 
-def _fixed_b_interval(white, xtx_inv, rho_t, nw_n, ln_d, b, lnA):
+def _fixed_b_interval(white, *, xtx_inv, rho_t, nw_n, ln_d, b, lnA):
     """The fixed-b (b = 1) interval fields for one fit.
 
     Takes the Newey-West block's products — the whitened
@@ -502,7 +502,8 @@ def fit_power_law_full(days_arr, values, stage=None):
         stage("fixed-b interval (simulated critical value; "
               "the cold wait's dominant cost)")
     # --- Fixed-b (b = 1) on the prewhitened statistic ---
-    fb = _fixed_b_interval(white, xtx_inv, rho_t, nw_n, ln_d, b, lnA)
+    fb = _fixed_b_interval(white, xtx_inv=xtx_inv, rho_t=rho_t,
+                           nw_n=nw_n, ln_d=ln_d, b=b, lnA=lnA)
     return {
         "b": float(b), "lnA": float(lnA), "sigma": sigma, "n": n,
         "b_se": b_se, "lnA_se": lnA_se,
