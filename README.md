@@ -135,9 +135,21 @@ Open `notebooks/Stock_Indices_Walkthrough.ipynb` after installing with the `note
 
 ## Tests
 
+The full suite is defined by a pinned extra set — "green" must mean the
+same thing in every environment:
+
 ```bash
-uv run pytest
+uv run --extra dev --extra quantstats --extra audio -m pytest
+uv run --extra dev --extra quantstats --extra audio python -m unittest discover -s energy_optimization_challenge/tests -t.
 ```
+
+or simply `make test-full`. The extras are not optional garnish: pytest
+itself comes from `dev`, the QuantStats indicator tests fail collection
+without `quantstats`, and the audio tests need `audio` — a bare
+environment does not run the same suite. Verified 2026-11-21: **444
+passed, 5 skipped** (the skips are the torch-gated vision tests, which
+the dedicated CI job runs for real with the `vision` extra) and the
+energy suite **18 tests, OK**.
 
 `pyproject.toml`'s `testpaths` covers two suites: `tests/` (core `toolbox`
 packages — `fourier`, pure numpy/scipy; `DataZoo`, whose network sources
