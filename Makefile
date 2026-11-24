@@ -10,3 +10,11 @@ UV_EXTRAS := --extra dev --extra quantstats --extra audio
 test-full:
 	uv run $(UV_EXTRAS) -m pytest
 	uv run $(UV_EXTRAS) python -m unittest discover -s energy_optimization_challenge/tests -t.
+
+# Lint with the pinned ruff: the version is locked in the `dev` extra
+# (ruff==0.17.3 in pyproject.toml, the same pin CI installs) and the
+# enforced rule set is pyproject's [tool.ruff.lint]. Mirrors CI's bare
+# `ruff check` at the repo root.
+.PHONY: lint
+lint:
+	uv run --extra dev ruff check

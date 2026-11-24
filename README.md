@@ -143,7 +143,9 @@ uv run --extra dev --extra quantstats --extra audio -m pytest
 uv run --extra dev --extra quantstats --extra audio python -m unittest discover -s energy_optimization_challenge/tests -t.
 ```
 
-or simply `make test-full`. The extras are not optional garnish: pytest
+or simply `make test-full`. Lint is `make lint` — the pinned ruff
+(`ruff==0.17.3` from the `dev` extra, the same pin CI installs) running
+the enforced rule set in `pyproject.toml`. The extras are not optional garnish: pytest
 itself comes from `dev`, the QuantStats indicator tests fail collection
 without `quantstats`, and the audio tests need `audio` — a bare
 environment does not run the same suite. Verified 2026-11-21: **444
