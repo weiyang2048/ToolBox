@@ -138,7 +138,11 @@ def _bars_fig(p):
     USD (weakest at top), bars from the zero line, green
     for up / red for down, the bold value and the muted
     1M/3M detail right of the zero line for negative bars
-    and right of the bar end for positives."""
+    and right of the bar end for positives. Value and
+    detail form ONE annotation per row (the value as a
+    colored bold span): two annotations at a fixed
+    data-unit offset collided at phone widths, where the
+    offset is only a few pixels (fixed 2026-11-25)."""
     import plotly.graph_objects as go
 
     # Display order top-to-bottom is the SVG panel's: the
@@ -163,15 +167,12 @@ def _bars_fig(p):
         anchor = b["1Y"] if b["1Y"] >= 0 else 0.0
         ann.append({
             "x": anchor + 0.3, "y": i, "xref": "x", "yref": "y",
-            "text": "<b>%+.1f%%</b>" % b["1Y"], "showarrow": False,
-            "xanchor": "left", "yanchor": "middle",
-            "font": {"size": 11, "color": c}})
-        ann.append({
-            "x": anchor + 1.5, "y": i, "xref": "x", "yref": "y",
-            "text": "1M %+.1f · 3M %+.1f" % (b["1M"], b["3M"]),
+            "text": ("<b><span style=\"color:%s\">%+.1f%%</span></b>"
+                     "  <span style=\"color:%s\">1M %+.1f · 3M %+.1f"
+                     "</span>" % (c, b["1Y"], _MUTE, b["1M"], b["3M"])),
             "showarrow": False, "xanchor": "left",
             "yanchor": "middle",
-            "font": {"size": 10.5, "color": _MUTE}})
+            "font": {"size": 11, "color": _MUTE}})
     fig.add_vline(x=0, line_color="#8A8378", line_width=1.1)
     fig.update_layout(
         height=330, showlegend=False,
