@@ -1,33 +1,51 @@
-"""Model tone for the news cloud: FinBERT (ProsusAI/finbert,
-a BERT fine-tuned on financial text) run through its ONNX
-export with onnxruntime — no torch anywhere in the stack.
+"""Model tone for the news cloud: Twitter-RoBERTa
+(cardiffnlp/twitter-roberta-base-sentiment-latest, a RoBERTa
+fine-tuned on general social/news text) run through its
+ONNX export with onnxruntime — no torch anywhere in the
+stack.
 
 `model_headline_tones(titles)` returns P(positive) -
-P(negative) per headline, in [-1, 1], or None when the model
-is unavailable (deps missing, download failed, inference
-error): the caller falls back to the lexicon scorer, so the
-cloud's colors never depend on the model being reachable.
+P(negative) per headline, in [-1, 1], or None when the
+model is unavailable (deps missing, download failed,
+inference error): the caller falls back to the lexicon
+scorer, so the cloud's colors never depend on the model
+being reachable.
 
 The weights are the int8-quantized ONNX export from the
-Xenova/finbert mirror of ProsusAI/finbert (~110 MB),
-downloaded once into ~/.cache/toolbox/finbert/. Set
+Xenova/twitter-roberta-base-sentiment-latest mirror
+(~126 MB), downloaded once into
+~/.cache/toolbox/twitter-roberta-sentiment/ — the same
+cache the briefs' news_sentiment adapter shares, so the
+weights exist on disk exactly once. Set
 NEWS_CLOUD_TONE_MODEL=off to disable the model entirely.
-Labels follow the FinBERT config: 0 positive, 1 negative,
-2 neutral.
+Labels follow this model's config: 0 negative, 1 neutral,
+2 positive. (FinBERT's order — 0 positive, 1 negative,
+2 neutral — is DIFFERENT; the indices below are this
+model's own.)
+
+History: until 2026-11-24 the scorer was FinBERT
+(ProsusAI/finbert, financial text). A 2026-11-24 benchmark
+on 39 brief-style items scored Twitter-RoBERTa 84.6%
+against FinBERT's 69.2% (it caught all 17 negative
+stories; FinBERT let four fade into the neutral band),
+and the user directed the swap the same day — first for
+the briefs' News map, then here: "Use this new model in
+the streamlit app too."
 """
 import os
 import re
 import urllib.request
 from pathlib import Path
 
-_BASE = "https://huggingface.co/Xenova/finbert/resolve/main/"
+_BASE = ("https://huggingface.co/Xenova/"
+         "twitter-roberta-base-sentiment-latest/resolve/main/")
 _FILES = {"tokenizer.json": "tokenizer.json",
-          "finbert_int8.onnx": "onnx/model_int8.onnx"}
+          "twitter_roberta_int8.onnx": "onnx/model_int8.onnx"}
 _BATCH = 32
 _state = None  # None = untried, False = unavailable
 
 # Process-wide tone cache (speed pass 2026-11-05): a
-# headline's FinBERT tone never changes, and consecutive
+# headline's model tone never changes, and consecutive
 # cloud builds overlap heavily — the same stories sit in
 # the feeds for hours — so scored tones are kept and only
 # new headlines reach the model. Keyed by the normalized
@@ -42,7 +60,7 @@ def _tone_key(title):
 
 
 def _cache_dir():
-    d = Path.home() / ".cache" / "toolbox" / "finbert"
+    d = Path.home() / ".cache" / "toolbox" / "twitter-roberta-sentiment"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -64,17 +82,26 @@ def _load():
                 tmp = dst.with_suffix(".part")
                 urllib.request.urlretrieve(_BASE + remote, tmp)
                 tmp.rename(dst)
-        sess = ort.InferenceSession(str(d / "finbert_int8.onnx"),
+        sess = ort.InferenceSession(str(d / "twitter_roberta_int8.onnx"),
                                     providers=["CPUExecutionProvider"])
-        _state = (sess, Tokenizer.from_file(str(d / "tokenizer.json")))
+        tok = Tokenizer.from_file(str(d / "tokenizer.json"))
+        # Headlines never approach the model's 512-token
+        # window, but the briefs' adapter passes headline +
+        # summary strings through this same function —
+        # truncation keeps an over-long one from erroring
+        # the whole call into the None fallback.
+        tok.enable_truncation(max_length=512)
+        _state = (sess, tok)
     except Exception:  # noqa: BLE001 - memoized unavailable-on-any-failure contract (native load/download failures are open-ended)
         _state = False
     return _state or None
 
 
 def model_headline_tones(titles, progress=None):
-    """FinBERT tone per headline: P(positive) - P(negative).
-    None when the model is disabled or unavailable.
+    """Model tone per headline: P(positive) - P(negative)
+    under Twitter-RoBERTa (labels 0 negative, 1 neutral,
+    2 positive). None when the model is disabled or
+    unavailable.
 
     ``progress`` (optional) is called as
     ``progress(done, total, label)`` — once with ``done == 0``
@@ -128,7 +155,7 @@ def model_headline_tones(titles, progress=None):
             p = np.exp(logits - logits.max(axis=1, keepdims=True))
             p /= p.sum(axis=1, keepdims=True)
             for i2, v in zip(batch_idx,
-                             (p[:, 0] - p[:, 1]).tolist(), strict=True):
+                             (p[:, 2] - p[:, 0]).tolist(), strict=True):
                 out[i2] = v
                 _TONE_CACHE[keys[i2]] = v
             resolved += len(batch_idx)

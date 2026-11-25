@@ -606,8 +606,9 @@ def _matches(pattern, text):
 # green-black-red gradient; "use a model" the same morning).
 # A topic's tone is the mean of its member headlines' tones;
 # the gradient runs black at 0 to full green / full red at
-# |tone| = TONE_CAP. Headline tones come from FinBERT
-# (news_cloud_tone: P(positive) - P(negative) per headline),
+# |tone| = TONE_CAP. Headline tones come from
+# Twitter-RoBERTa (news_cloud_tone: P(positive) -
+# P(negative) per headline),
 # with the lexicon below as the fail-soft fallback when the
 # model is unavailable — the lexicon scorer is crude (no
 # negation, no context), which is why it is the fallback and
@@ -637,11 +638,19 @@ TONE_NEGATIVE = frozenset(
     "uncertainty volatile warning warns warned war weak "
     "woes".split())
 TONE_CAP = 0.8
-# The model's topic means live on a compressed scale:
-# averaging dozens of mostly-neutral wire headlines dilutes
-# them (observed range on a live pool: |mean| <= ~0.31), so
-# the model path saturates the gradient at a lower cap.
-TONE_CAP_MODEL = 0.35
+# The model's topic means are NOT compressed the way
+# FinBERT's were (FinBERT, the scorer until 2026-11-24:
+# observed |mean| <= ~0.31 on a live pool, cap 0.35).
+# Twitter-RoBERTa spreads its per-headline tones across
+# nearly the full [-1, 1] range, so its topic means run
+# much wider: measured 2026-11-24 on the 329-headline
+# news-cloud demo pool (30 topics through the production
+# extraction), |mean| reached 0.73 — the extremes are
+# small 3–6-story topics (median |mean| 0.17). The cap
+# follows the same just-above-the-observed-max pattern
+# that set FinBERT's 0.35 and lands on the lexicon cap:
+# the two paths now saturate at the same point.
+TONE_CAP_MODEL = 0.8
 _TONE_GREEN = (26, 158, 74)
 _TONE_RED = (214, 40, 32)
 
@@ -675,7 +684,7 @@ def tone_gradient(score, cap=TONE_CAP):
 
 
 def _headline_scores(headlines, progress=None):
-    """(per-headline tones, from_model): FinBERT where
+    """(per-headline tones, from_model): the model where
     available (news_cloud_tone), the lexicon scorer
     otherwise. The flag picks the gradient cap — the two
     scorers' topic means live on different scales.
@@ -686,7 +695,7 @@ def _headline_scores(headlines, progress=None):
         from toolbox.DataZoo.market.news_cloud_tone import model_headline_tones
         scores = model_headline_tones(
             [h["title"] for h in headlines], progress=progress)
-    except Exception:  # noqa: BLE001 - optional FinBERT layer; any failure falls back to the lexicon scorer
+    except Exception:  # noqa: BLE001 - optional model layer; any failure falls back to the lexicon scorer
         scores = None
     if scores is not None:
         return scores, True

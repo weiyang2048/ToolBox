@@ -361,7 +361,7 @@ def build_linked_cloud_html(hours=24, progress=None):
     from fetch_headlines, a stage label at the full feed
     count before topic extraction (which names the headline
     count it works on), per-batch headline counts from the
-    tone scorer — re-labelled "scoring tone (FinBERT)"
+    tone scorer — re-labelled "scoring tone (Twitter-RoBERTa)"
     unless the scorer named the step itself (the model
     load) — and a closing stage label for the layout. The
     default ``None`` reports nothing."""
@@ -377,7 +377,7 @@ def build_linked_cloud_html(hours=24, progress=None):
     if topics:
         def _tone_progress(done, total, label):
             progress(done, total,
-                     label or "scoring tone (FinBERT)")
+                     label or "scoring tone (Twitter-RoBERTa)")
 
         topics = tone_colored(
             topics, headlines,

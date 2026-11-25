@@ -1,4 +1,4 @@
-"""FinBERT tone cache (speed pass 2026-11-05): scored tones
+"""Model tone cache (speed pass 2026-11-05): scored tones
 are kept process-wide; repeat and overlapping calls score
 only the headlines the cache has never seen."""
 import numpy as np
